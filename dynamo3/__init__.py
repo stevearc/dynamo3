@@ -503,19 +503,13 @@ class DynamoDBConnection(object):
     def update_table(self, tablename, throughput=None, global_indexes=None):
         kwargs = {}
         if throughput is not None:
-            kwargs['provisioned_throughput'] = {
-                'ReadCapacityUnits': throughput['read'],
-                'WriteCapacityUnits': throughput['write'],
-            }
+            kwargs['provisioned_throughput'] = throughput.schema()
         if global_indexes is not None:
             kwargs['global_secondary_index_updates'] = [
                 {
                     'Update': {
                         'IndexName': key,
-                        'ProvisionedThroughput': {
-                            'ReadCapacityUnits': value['read'],
-                            'WriteCapacityUnits':value['write'],
-                        },
+                        'ProvisionedThroughput': value.schema(),
                     }
                 }
                 for key, value in six.iteritems(global_indexes)
