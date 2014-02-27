@@ -38,3 +38,5 @@ nosetests.xml
 
 dynamo3_env
 _version.py
+*.db
+*.log

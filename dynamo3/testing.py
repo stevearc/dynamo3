@@ -72,6 +72,7 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
             self._dynamo_local = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                                   stderr=subprocess.STDOUT)
             session = botocore.session.get_session()
+            session.set_credentials('', '')
             self._dynamo = DynamoDBConnection.connect_to_host(port=self.port,
                                                               session=session)
         return self._dynamo
@@ -86,7 +87,7 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
         """ terminate the dynamo local service """
         if self._dynamo_local is not None:
             self._dynamo_local.terminate()
-            if not result.wasSuccessful(): # pragma: no cover
+            if not result.wasSuccessful():  # pragma: no cover
                 output = self._dynamo_local.stdout.read()
                 encoding = locale.getdefaultlocale()[1] or 'utf-8'
                 six.print_("DynamoDB Local output:")

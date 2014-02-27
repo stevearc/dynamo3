@@ -99,10 +99,7 @@ class BatchWriter(object):
             self.flush()
 
     def should_flush(self):
-        if len(self._to_put) + len(self._to_delete) == 25:
-            return True
-
-        return False
+        return len(self._to_put) + len(self._to_delete) == 25
 
     def flush(self):
         items = []
@@ -313,11 +310,7 @@ class DynamoDBConnection(object):
 
     @property
     def host(self):
-        self.endpoint.host.split(':')[0]
-
-    @property
-    def port(self):
-        int(self.endpoint.host.split(':')[-1])
+        return self.endpoint.host
 
     @property
     def region(self):
@@ -384,7 +377,7 @@ class DynamoDBConnection(object):
             else:
                 return Table.from_response(response)
         except DynamoDBError as e:
-            if e.kwargs['Code'] == 'Resource':
+            if e.kwargs['Code'] == 'ResourceNotFoundException':
                 return None
             else:
                 raise
@@ -426,7 +419,21 @@ class DynamoDBConnection(object):
                          **kwargs)
 
     def delete_table(self, tablename):
-        return self.call('DeleteTable', table_name=tablename)
+        try:
+            return self.call('DeleteTable', table_name=tablename)
+        except DynamoDBError as e:
+            if e.kwargs['Code'] == 'ResourceNotFoundException':
+                return False
+            else:
+                raise
+
+    def put_item(self, tablename, item, expected=None, returns='NONE'):
+        kwargs = {}
+        if expected is not None:
+            pass
+        item = self.dynamizer.encode_keys(item)
+        return self.call('PutItem', table_name=tablename, item=item,
+                         return_values=returns, **kwargs)
 
     def batch_write(self, tablename):
         return BatchWriter(self, tablename)
@@ -491,9 +498,8 @@ class DynamoDBConnection(object):
             keywords['limit'] = limit
         keywords['scan_index_forward'] = not desc
 
-        if kwargs:
-            keywords['key_conditions'] = encode_query_kwargs(self.dynamizer,
-                                                             kwargs)
+        keywords['key_conditions'] = encode_query_kwargs(self.dynamizer,
+                                                         kwargs)
         if count:
             keywords['select'] = 'COUNT'
             return self.call('Query', **keywords)['Count']
