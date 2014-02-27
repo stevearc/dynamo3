@@ -35,6 +35,18 @@ CONDITIONS = {
     'ncontains': 'NOT_CONTAINS',
 }
 
+NONE = 'NONE'
+
+# ReturnValues
+ALL_OLD = 'ALL_OLD'
+ALL_NEW = 'ALL_NEW'
+UPDATED_OLD = 'UPDATED_OLD'
+UPDATED_NEW = 'UPDATED_NEW'
+
+# ReturnConsumedCapacity
+INDEXES = 'INDEXES'
+TOTAL = 'TOTAL'
+
 
 def encode_query_kwargs(dynamizer, kwargs):
     ret = {}
@@ -58,11 +70,25 @@ def encode_query_kwargs(dynamizer, kwargs):
 
 
 class DynamoDBError(botocore.exceptions.BotoCoreError):
+    fmt = '{Code}: {Message}\nArgs: {args}'
 
-    def __init__(self, status_code, fmt='An unknown error occurred', **kwargs):
+    def __init__(self, status_code, **kwargs):
         self.status_code = status_code
-        self.fmt = fmt
         super(DynamoDBError, self).__init__(**kwargs)
+
+
+class ConditionalCheckFailedException(DynamoDBError):
+    fmt = '{Code}: {Message}'
+
+    def __init__(self, status_code, **kwargs):
+        super(ConditionalCheckFailedException, self).__init__(status_code,
+                                                              **kwargs)
+
+CheckFailed = ConditionalCheckFailedException
+
+EXC = {
+    'ConditionalCheckFailedException': ConditionalCheckFailedException,
+}
 
 
 class BatchWriter(object):
@@ -177,21 +203,34 @@ class ItemDelete(ItemWrite):
     def __init__(self, data):
         super(ItemDelete, self).__init__(data, 'DeleteRequest', 'Key')
 
+NO_ARG = object()
+
 
 class ItemUpdate(object):
     ADD = 'ADD'
     DELETE = 'DELETE'
     PUT = 'PUT'
 
-    def __init__(self, action, key, value=None, expected_value=None, expect_exists=None):
+    def __init__(self, action, key, value=None, expect_value=NO_ARG):
         if value is None and action != self.DELETE:
             raise ValueError(
                 "Update must set a value for non-delete operations!")
         self.action = action
         self.key = key
         self.value = value
-        self.expected_value = expected_value
-        self.expect_exists = expect_exists
+        self.expect_value = expect_value
+
+    @classmethod
+    def put(cls, *args, **kwargs):
+        return cls(cls.PUT, *args, **kwargs)
+
+    @classmethod
+    def add(cls, *args, **kwargs):
+        return cls(cls.ADD, *args, **kwargs)
+
+    @classmethod
+    def delete(cls, *args, **kwargs):
+        return cls(cls.DELETE, *args, **kwargs)
 
     def attrs(self, dynamizer):
         ret = {
@@ -204,14 +243,15 @@ class ItemUpdate(object):
         return ret
 
     def expected(self, dynamizer):
-        ret = {}
-        if self.expect_exists is not None:
-            ret['Exists'] = self.expect_exists
-        if self.expected_value is not None:
-            ret['Value'] = dynamizer.encode(self.expected_value)
-        if ret:
-            ret = {self.key: ret}
-        return ret
+        if self.expect_value is not NO_ARG:
+            ret = {}
+            if self.expect_value is None:
+                ret['Exists'] = False
+            else:
+                ret['Value'] = dynamizer.encode(self.expect_value)
+                ret['Exists'] = True
+            return {self.key: ret}
+        return {}
 
 
 class ResultSet(object):
@@ -297,8 +337,27 @@ class GetResultSet(ResultSet):
 class Result(dict):
 
     def __init__(self, dynamizer, response):
-        for k, v in six.iteritems(response['Attributes']):
+        super(Result, self).__init__()
+        # For UpdateItem and PutItem
+        for k, v in six.iteritems(response.get('Attributes', {})):
             self[k] = dynamizer.decode(v)
+        # For GetItem
+        for k, v in six.iteritems(response.get('Item', {})):
+            self[k] = dynamizer.decode(v)
+        cap = response.get('ConsumedCapacity', {})
+        self.capacity = cap.get('CapacityUnits', 0)
+        self.table_capacity = cap.get('Table', {}).get('CapacityUnits', 0)
+        self.indexes = dict((
+            (k, v['CapacityUnits']) for k, v in
+            six.iteritems(cap.get('LocalSecondaryIndexes', {}))
+        ))
+        self.global_indexes = dict((
+            (k, v['CapacityUnits']) for k, v in
+            six.iteritems(cap.get('GlobalSecondaryIndexes', {}))
+        ))
+
+    def __repr__(self):
+        return 'Result({0})'.format(super(Result, self).__repr__())
 
 
 class DynamoDBConnection(object):
@@ -360,8 +419,9 @@ class DynamoDBConnection(object):
         if 'Errors' in data:
             error = data['Errors'][0]
             error.setdefault('Message', '')
-            raise DynamoDBError(response.status_code,
-                                '{Code}: {Message}\nArgs: {args}', args=pformat(kwargs), **error)
+            err_class = EXC.get(error['Code'], DynamoDBError)
+            raise err_class(response.status_code, args=pformat(kwargs),
+                            **error)
         response.raise_for_status()
         return data
 
@@ -435,6 +495,21 @@ class DynamoDBConnection(object):
         return self.call('PutItem', table_name=tablename, item=item,
                          return_values=returns, **kwargs)
 
+    def get_item(self, tablename, key, attributes=None, consistent=False,
+                 return_capacity=NONE):
+        kwargs = {}
+        if attributes is not None:
+            kwargs['attributes_to_get'] = attributes
+        key = self.dynamizer.encode_keys(key)
+        return Result(self.dynamizer,
+                      self.call('GetItem', table_name=tablename,
+                                key=key,
+                                consistent_read=consistent,
+                                return_consumed_capacity=return_capacity,
+                                **kwargs
+                                )
+                      )
+
     def batch_write(self, tablename):
         return BatchWriter(self, tablename)
 
@@ -454,7 +529,8 @@ class DynamoDBConnection(object):
         return GetResultSet(self, tablename, keys,
                             consistent=consistent, attributes=attributes)
 
-    def update_item(self, tablename, key, updates, return_values='NONE'):
+    def update_item(self, tablename, key, updates, returns=NONE,
+                    return_capacity=NONE):
         key = self.dynamizer.encode_keys(key)
         attr_updates = {}
         expected = {}
@@ -464,9 +540,12 @@ class DynamoDBConnection(object):
         kwargs = {}
         if expected:
             kwargs['expected'] = expected
+
         result = self.call('UpdateItem', table_name=tablename, key=key,
                            attribute_updates=attr_updates,
-                           return_values=return_values, **kwargs)
+                           return_values=returns,
+                           return_consumed_capacity=return_capacity,
+                           **kwargs)
         if result:
             return Result(self.dynamizer, result)
 

@@ -1,8 +1,10 @@
+from __future__ import unicode_literals
 import six
 from dynamo3 import (STRING, NUMBER, BINARY, Binary, DynamoKey, AllIndex,
                      KeysOnlyIndex, IncludeIndex, GlobalAllIndex,
                      GlobalKeysOnlyIndex, GlobalIncludeIndex, Table,
-                     Throughput)
+                     Throughput, ItemUpdate, ALL_NEW, TOTAL,
+                     CheckFailed)
 
 try:
     import unittest2 as unittest  # pylint: disable=F0401
@@ -12,6 +14,9 @@ except ImportError:
 
 if six.PY3:
     unittest.TestCase.assertItemsEqual = unittest.TestCase.assertCountEqual
+
+def is_number(value):
+    return isinstance(value, float) or isinstance(value, six.integer_types)
 
 
 class BaseSystemTest(unittest.TestCase):
@@ -567,8 +572,87 @@ class TestScan(BaseSystemTest):
 
 
 class TestUpdateItem(BaseSystemTest):
-    # TODO: (stevearc 2014-02-27)
-    pass
+    def make_table(self):
+        hash_key = DynamoKey('id')
+        self.dynamo.create_table('foobar', hash_key=hash_key)
+
+    def test_update_field(self):
+        """ Update an item field """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        self.dynamo.update_item('foobar', {'id': 'a'},
+                                [ItemUpdate.put('foo', 'bar')])
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item, {'id': 'a', 'foo': 'bar'})
+
+    def test_atomic_add_num(self):
+        """ Update can atomically add to a number """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        self.dynamo.update_item('foobar', {'id': 'a'},
+                                [ItemUpdate.add('foo', 1)])
+        self.dynamo.update_item('foobar', {'id': 'a'},
+                                [ItemUpdate.add('foo', 2)])
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item, {'id': 'a', 'foo': 3})
+
+    def test_atomic_add_set(self):
+        """ Update can atomically add to a set """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        self.dynamo.update_item('foobar', {'id': 'a'},
+                                [ItemUpdate.add('foo', set([1]))])
+        self.dynamo.update_item('foobar', {'id': 'a'},
+                                [ItemUpdate.add('foo', set([1, 2]))])
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item, {'id': 'a', 'foo': set([1, 2])})
+
+    def test_delete_field(self):
+        """ Update can delete fields from an item """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'bar'})
+        self.dynamo.update_item('foobar', {'id': 'a'},
+                                [ItemUpdate.delete('foo')])
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item, {'id': 'a'})
+
+    def test_return_item(self):
+        """ Update can return the updated item """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        ret = self.dynamo.update_item('foobar', {'id': 'a'},
+                                      [ItemUpdate.put('foo', 'bar')],
+                                      returns=ALL_NEW)
+        self.assertEqual(ret, {'id': 'a', 'foo': 'bar'})
+
+    def test_return_metadata(self):
+        """ The Update return value contains capacity metadata """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        ret = self.dynamo.update_item('foobar', {'id': 'a'},
+                                      [ItemUpdate.put('foo', 'bar')],
+                                      returns=ALL_NEW,
+                                      return_capacity=TOTAL)
+        self.assertTrue(is_number(ret.capacity))
+        self.assertTrue(is_number(ret.table_capacity))
+        self.assertTrue(isinstance(ret.indexes, dict))
+        self.assertTrue(isinstance(ret.global_indexes, dict))
+
+    def test_expect_not_exists(self):
+        """ Update can expect a field to not exist """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'bar'})
+        update = ItemUpdate.put('foo', 'baz', expect_value=None)
+        with self.assertRaises(CheckFailed):
+            self.dynamo.update_item('foobar', {'id': 'a'}, [update])
+
+    def test_expect_field(self):
+        """ Update can expect a field to have a value """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'bar'})
+        update = ItemUpdate.put('foo', 'baz', expect_value='wat')
+        with self.assertRaises(CheckFailed):
+            self.dynamo.update_item('foobar', {'id': 'a'}, [update])
 
 
 class TestPutItem(BaseSystemTest):
@@ -582,6 +666,39 @@ class TestBatchGet(BaseSystemTest):
 
 
 class TestGetItem(BaseSystemTest):
+    def make_table(self):
+        hash_key = DynamoKey('id')
+        self.dynamo.create_table('foobar', hash_key=hash_key)
+
+    def test_get(self):
+        """ Can fetch an item by the primary key """
+        self.make_table()
+        item = {'id': 'a', 'foo': 'bar'}
+        self.dynamo.put_item('foobar', item)
+        ret = self.dynamo.get_item('foobar', {'id': 'a'})
+        self.assertEqual(ret, item)
+
+    def test_attribute(self):
+        """ Can fetch only certain attributes """
+        self.make_table()
+        item = {'id': 'a', 'foo': 'bar'}
+        self.dynamo.put_item('foobar', item)
+        ret = self.dynamo.get_item('foobar', {'id': 'a'}, attributes=['id'])
+        self.assertEqual(ret, {'id': 'a'})
+
+    def test_capacity(self):
+        """ Can return the consumed capacity as well """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        ret = self.dynamo.get_item('foobar', {'id': 'a'},
+                                   return_capacity=TOTAL)
+        self.assertTrue(is_number(ret.capacity))
+        self.assertTrue(is_number(ret.table_capacity))
+        self.assertTrue(isinstance(ret.indexes, dict))
+        self.assertTrue(isinstance(ret.global_indexes, dict))
+
+
+class TestDeleteItem(BaseSystemTest):
     # TODO: (stevearc 2014-02-27)
     pass
 
@@ -619,7 +736,7 @@ class TestDataTypes(BaseSystemTest):
         self.make_table()
         self.dynamo.put_item('foobar', {'id': 'a', 'data': Binary('abc')})
         item = list(self.dynamo.scan('foobar'))[0]
-        self.assertEqual(item['data'].value, 'abc')
+        self.assertEqual(item['data'].value, b'abc')
 
     def test_binary_bytes(self):
         """ Store and retrieve bytes as a binary """
@@ -671,7 +788,7 @@ class TestDataTypes(BaseSystemTest):
 
     def test_binary_converts_unicode(self):
         """ Binary will convert unicode to bytes """
-        b = Binary(u'a')
+        b = Binary('a')
         self.assertTrue(isinstance(b.value, six.binary_type))
 
     def test_binary_force_string(self):
