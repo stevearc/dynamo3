@@ -5,6 +5,8 @@ from six.moves import xrange as _xrange  # pylint: disable=F0401
 
 from . import BaseSystemTest, is_number
 from dynamo3 import STRING, NUMBER, DynamoKey, LocalIndex, GlobalIndex, TOTAL
+from dynamo3.result import Result, GetResultSet
+from mock import MagicMock, call
 
 
 class TestQuery(BaseSystemTest):
@@ -378,17 +380,57 @@ class TestBatchGet(BaseSystemTest):
                                          attributes=['id']))
         self.assertItemsEqual(ret, [{'id': 'a'}])
 
+    def test_handle_unprocessed(self):
+        """ Batch get retries unprocessed keys """
+        conn = MagicMock()
+        # Pass responses through dynamizer unchanged
+        conn.dynamizer.decode_keys.side_effect = lambda x: x
+        key1, key2 = object(), object()
+        unprocessed = [[key1], [key2], []]
+        conn.call.side_effect = lambda *_, **__: {
+            'UnprocessedKeys': {
+                'foo': {
+                    'Keys': unprocessed[0],
+                },
+            },
+            'Responses': {
+                'foo': unprocessed.pop(0),
+            },
+        }
+        rs = GetResultSet(conn, 'foo', [{'id': 'a'}])
+        results = list(rs)
+        self.assertEqual(results, [key1, key2])
+
     def test_capacity(self):
         """ Can return consumed capacity """
-        self.make_table()
-        keys = [{'id': 'a'}, {'id': 'b'}]
-        self.dynamo.put_item('foobar', keys[0])
-        self.dynamo.put_item('foobar', keys[1])
-        ret = self.dynamo.batch_get('foobar', keys, return_capacity=TOTAL)
-        self.assertTrue(is_number(ret.capacity))
-        self.assertTrue(is_number(ret.table_capacity))
-        self.assertTrue(isinstance(ret.indexes, dict))
-        self.assertTrue(isinstance(ret.global_indexes, dict))
+        conn = MagicMock()
+        conn.call.return_value = {
+            'Responses': {
+                'foo': [],
+            },
+            'ConsumedCapacity': {
+                'CapacityUnits': 3,
+                'Table': {
+                    'CapacityUnits': 1,
+                },
+                'LocalSecondaryIndexes': {
+                    'l-index': {
+                        'CapacityUnits': 1,
+                    },
+                },
+                'GlobalSecondaryIndexes': {
+                    'g-index': {
+                        'CapacityUnits': 1,
+                    },
+                },
+            },
+        }
+        rs = GetResultSet(conn, 'foo', [{'id': 'a'}])
+        list(rs)
+        self.assertEqual(rs.capacity, 3)
+        self.assertEqual(rs.table_capacity, 1)
+        self.assertEqual(rs.indexes, {'l-index': 1})
+        self.assertEqual(rs.global_indexes, {'g-index': 1})
 
 
 class TestGetItem(BaseSystemTest):
@@ -426,3 +468,10 @@ class TestGetItem(BaseSystemTest):
         self.assertTrue(is_number(ret.table_capacity))
         self.assertTrue(isinstance(ret.indexes, dict))
         self.assertTrue(isinstance(ret.global_indexes, dict))
+
+    def test_result_repr(self):
+        """ Result repr should not be the same as a dict """
+        d = {'a': 'b'}
+        response = {'Item': self.dynamo.dynamizer.encode_keys(d)}
+        result = Result(self.dynamo.dynamizer, response, 'Item')
+        self.assertNotEqual(repr(result), repr(d))

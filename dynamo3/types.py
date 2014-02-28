@@ -56,9 +56,6 @@ class Binary(object):
     def __repr__(self):
         return 'Binary(%s)' % self.value
 
-    def __str__(self):
-        return self.value
-
     def encode(self):
         """ Encode the binary string for Dynamo """
         return base64.b64encode(self.value).decode()

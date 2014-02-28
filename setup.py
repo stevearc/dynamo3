@@ -17,6 +17,7 @@ REQUIREMENTS = [
 
 TEST_REQUIREMENTS = [
     'nose',
+    'mock',
 ]
 
 if sys.version_info[:2] < (2, 7):

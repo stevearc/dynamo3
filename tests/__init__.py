@@ -1,11 +1,12 @@
 """ Tests for Dynamo3 """
 from __future__ import unicode_literals
 
+from decimal import Decimal
 import six
 from six.moves.urllib.parse import urlparse  # pylint: disable=F0401,E0611
 from six.moves.cPickle import dumps, loads  # pylint: disable=F0401,E0611
 
-from dynamo3 import Binary, DynamoKey
+from dynamo3 import DynamoDBConnection, Binary, DynamoKey, Dynamizer, STRING
 
 
 try:
@@ -52,6 +53,16 @@ class TestMisc(BaseSystemTest):
         """ Connection can access name of connected region """
         self.assertTrue(isinstance(self.dynamo.region, six.string_types))
 
+    def test_connect_to_region(self):
+        """ Can connect to a dynamo region """
+        conn = DynamoDBConnection.connect_to_region('us-west-1')
+        self.assertIsNotNone(conn.host)
+
+    def test_connect_to_host_without_session(self):
+        """ Can connect to a dynamo host without passing in a session """
+        conn = DynamoDBConnection.connect_to_host()
+        self.assertIsNotNone(conn.host)
+
     def test_describe_missing(self):
         """ Describing a missing table returns None """
         ret = self.dynamo.describe_table('foobar')
@@ -93,6 +104,13 @@ class TestDataTypes(BaseSystemTest):
         self.dynamo.put_item('foobar', {'id': 'a', 'num': 1.1})
         item = list(self.dynamo.scan('foobar'))[0]
         self.assertAlmostEqual(float(item['num']), 1.1)
+
+    def test_decimal(self):
+        """ Store and retrieve a Decimal """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'num': Decimal('1.1')})
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item['num'], Decimal('1.1'))
 
     def test_binary(self):
         """ Store and retrieve a binary """
@@ -147,6 +165,11 @@ class TestDataTypes(BaseSystemTest):
         """ Binary should eq other Binaries and also raw bytestrings """
         self.assertEqual(Binary('a'), Binary('a'))
         self.assertEqual(Binary('a'), b'a')
+        self.assertFalse(Binary('a') != Binary('a'))
+
+    def test_binary_repr(self):
+        """ Binary repr should wrap the contained value """
+        self.assertEqual(repr(Binary('a')), 'Binary(%s)' % b'a')
 
     def test_binary_converts_unicode(self):
         """ Binary will convert unicode to bytes """
@@ -157,3 +180,24 @@ class TestDataTypes(BaseSystemTest):
         """ Binary must wrap a string type """
         with self.assertRaises(TypeError):
             Binary(2)
+
+
+class TestDynamizer(unittest.TestCase):
+
+    """ Tests for the Dynamizer """
+
+    def test_register_encoder(self):
+        """ Can register a custom encoder """
+        from datetime import datetime
+        dynamizer = Dynamizer()
+        dynamizer.register_encoder(datetime, lambda d, v:
+                                   (STRING, v.isoformat()))
+        now = datetime.utcnow()
+        self.assertEqual(dynamizer.raw_encode(now), (STRING, now.isoformat()))
+
+    def test_encoder_missing(self):
+        """ If no encoder is found, raise ValueError """
+        from datetime import datetime
+        dynamizer = Dynamizer()
+        with self.assertRaises(ValueError):
+            dynamizer.encode(datetime.utcnow())

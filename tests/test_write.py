@@ -1,12 +1,14 @@
 """ Test the write functions of Dynamo """
 from __future__ import unicode_literals
 
+from mock import MagicMock, call
 from six.moves import xrange as _xrange  # pylint: disable=F0401
 
 from . import BaseSystemTest, is_number
 from dynamo3 import (STRING, NUMBER, DynamoKey, LocalIndex, GlobalIndex, Table,
                      Throughput, ItemUpdate, ALL_NEW, ALL_OLD, TOTAL,
                      CheckFailed)
+from dynamo3.batch import BatchWriter
 
 
 class TestCreate(BaseSystemTest):
@@ -213,6 +215,37 @@ class TestBatchWrite(BaseSystemTest):
         count = self.dynamo.scan('foobar', count=True)
         self.assertEqual(count, 0)
 
+    def test_write_converts_none(self):
+        """ Write operation converts None values to a DELETE """
+        hash_key = DynamoKey('id', data_type=STRING)
+        self.dynamo.create_table('foobar', hash_key=hash_key)
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'bar'})
+        with self.dynamo.batch_write('foobar') as batch:
+            batch.put({'id': 'a', 'foo': None})
+        ret = list(self.dynamo.scan('foobar'))
+        self.assertItemsEqual(ret, [{'id': 'a'}])
+
+    def test_handle_unprocessed(self):
+        """ Retry all unprocessed items """
+        conn = MagicMock()
+        writer = BatchWriter(conn, 'foo')
+        key1, key2 = object(), object()
+        unprocessed = [[key1], [key2], []]
+        conn.call.side_effect = lambda *_, **__: {
+            'UnprocessedItems': {
+                'foo': unprocessed.pop(0),
+            }
+        }
+        with writer:
+            writer.put({'id': 'a'})
+        # Should insert the first item, and then the two sets we marked as
+        # unprocessed
+        self.assertEqual(len(conn.call.mock_calls), 3)
+        self.assertEqual(conn.call.mock_calls[1],
+                         call('BatchWriteItem', request_items={'foo': [key1]}))
+        self.assertEqual(conn.call.mock_calls[2],
+                         call('BatchWriteItem', request_items={'foo': [key2]}))
+
 
 class TestUpdateItem(BaseSystemTest):
 
@@ -300,6 +333,21 @@ class TestUpdateItem(BaseSystemTest):
         update = ItemUpdate.put('foo', 'baz', expected='wat')
         with self.assertRaises(CheckFailed):
             self.dynamo.update_item('foobar', {'id': 'a'}, [update])
+
+    def test_write_converts_none(self):
+        """ Write operation converts None values to a DELETE """
+        hash_key = DynamoKey('id', data_type=STRING)
+        self.dynamo.create_table('foobar', hash_key=hash_key)
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'bar'})
+        update = ItemUpdate.put('foo', None)
+        self.dynamo.update_item('foobar', {'id': 'a'}, [update])
+        ret = list(self.dynamo.scan('foobar'))
+        self.assertItemsEqual(ret, [{'id': 'a'}])
+
+    def test_write_add_require_value(self):
+        """ Doing an ADD requires a non-null value """
+        with self.assertRaises(ValueError):
+            ItemUpdate.add('foo', None)
 
 
 class TestPutItem(BaseSystemTest):

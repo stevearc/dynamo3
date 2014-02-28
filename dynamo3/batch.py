@@ -87,6 +87,28 @@ class ItemUpdate(object):
         return {}
 
 
+def _encode_write(dynamizer, data, action, key):
+    """ Encode an item write command """
+    # Strip null values out of data
+    data = dict(((k, dynamizer.encode(v)) for k, v in six.iteritems(data) if
+                 not is_null(v)))
+    return {
+        action: {
+            key: data,
+        }
+    }
+
+
+def encode_put(dynamizer, data):
+    """ Encode an item put command """
+    return _encode_write(dynamizer, data, 'PutRequest', 'Item')
+
+
+def encode_delete(dynamizer, data):
+    """ Encode an item delete command """
+    return _encode_write(dynamizer, data, 'DeleteRequest', 'Key')
+
+
 class BatchWriter(object):
 
     """ Context manager for writing a large number of items to a table """
@@ -149,10 +171,10 @@ class BatchWriter(object):
         items = []
 
         for data in self._to_put:
-            items.append(ItemPut(data))
+            items.append(encode_put(self.connection.dynamizer, data))
 
         for data in self._to_delete:
-            items.append(ItemDelete(data))
+            items.append(encode_delete(self.connection.dynamizer, data))
 
         resp = self._batch_write_item(items)
         self._handle_unprocessed(resp)
@@ -189,45 +211,6 @@ class BatchWriter(object):
     def _batch_write_item(self, items):
         """ Make a BatchWriteItem call to Dynamo """
         data = {
-            self.tablename: [
-                item.encode(self.connection.dynamizer) for item in items
-            ]
+            self.tablename: items,
         }
         return self.connection.call('BatchWriteItem', request_items=data)
-
-
-class ItemWrite(object):
-
-    """ Base class for a single item write request """
-
-    def __init__(self, data, action, key):
-        self.data = data
-        self.action = action
-        self.key = key
-
-    def encode(self, dynamizer):
-        """ Encode the item write """
-        # Strip null values out of data
-        data = dict(((k, dynamizer.encode(v)) for k, v in
-                     six.iteritems(self.data) if not is_null(v)))
-        return {
-            self.action: {
-                self.key: data,
-            }
-        }
-
-
-class ItemPut(ItemWrite):
-
-    """ A write request that puts an item """
-
-    def __init__(self, data):
-        super(ItemPut, self).__init__(data, 'PutRequest', 'Item')
-
-
-class ItemDelete(ItemWrite):
-
-    """ A write request that deletes an item """
-
-    def __init__(self, data):
-        super(ItemDelete, self).__init__(data, 'DeleteRequest', 'Key')

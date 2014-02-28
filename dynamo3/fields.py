@@ -197,6 +197,10 @@ class GlobalIndex(BaseIndex):
         return cls(proj['ProjectionType'], response['IndexName'], hash_key,
                    range_key, proj.get('NonKeyAttributes'), throughput)
 
+    def __hash__(self):
+        return (hash(self.projection_type) + hash(self.name) +
+                hash(self.range_key))
+
     def __eq__(self, other):
         return (
             super(GlobalIndex, self).__eq__(other) and

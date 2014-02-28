@@ -204,7 +204,7 @@ class DynamoDBConnection(object):
         except DynamoDBError as e:
             if e.kwargs['Code'] == 'ResourceNotFoundException':
                 return None
-            else:
+            else:  # pragma: no cover
                 raise
 
     def create_table(self, tablename, hash_key, range_key=None,
@@ -282,7 +282,7 @@ class DynamoDBConnection(object):
         except DynamoDBError as e:
             if e.kwargs['Code'] == 'ResourceNotFoundException':
                 return False
-            else:
+            else:  # pragma: no cover
                 raise
 
     def put_item(self, tablename, item, expected=None, returns=NONE,
@@ -527,7 +527,7 @@ class DynamoDBConnection(object):
         else:
             return ResultSet(self, 'Items', 'Scan', **keywords)
 
-    def query(self, tablename, attributes=None, consistent=None, count=False,
+    def query(self, tablename, attributes=None, consistent=False, count=False,
               index=None, limit=None, desc=False, return_capacity=NONE,
               **kwargs):
         """
@@ -572,11 +572,10 @@ class DynamoDBConnection(object):
         keywords = {
             'table_name': tablename,
             'return_consumed_capacity': return_capacity,
+            'consistent_read': consistent,
         }
         if attributes is not None:
             keywords['attributes_to_get'] = attributes
-        if consistent is not None:
-            keywords['consistent_read'] = consistent
         if index is not None:
             keywords['index_name'] = index
         if limit is not None:

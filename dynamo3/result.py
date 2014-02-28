@@ -21,7 +21,7 @@ class PagedIterator(six.Iterator):
         """ Return True if more results can be fetched from the server """
         return True
 
-    def fetch(self):
+    def fetch(self):  # pragma: no cover
         """ Fetch additional results from the server and return an iterator """
         raise NotImplementedError
 
@@ -75,8 +75,8 @@ class ResultSet(PagedIterator):
         self.last_evaluated_key = data.get('LastEvaluatedKey')
         if self.last_evaluated_key is not None:
             self.kwargs['exclusive_start_key'] = self.last_evaluated_key
-        elif 'exclusive_start_key' in self.kwargs:
-            del self.kwargs['exclusive_start_key']
+        else:
+            self.kwargs.pop('exclusive_start_key', None)
         self._update_capacity(data)
         return iter(data[self.response_key])
 
@@ -93,8 +93,8 @@ class GetResultSet(PagedIterator):
 
     """ Iterator that pages the results of a BatchGetItem """
 
-    def __init__(self, connection, tablename, keys, consistent, attributes,
-                 return_capacity=NONE):
+    def __init__(self, connection, tablename, keys, consistent=False,
+                 attributes=None, return_capacity=NONE):
         super(GetResultSet, self).__init__()
         self.connection = connection
         self.tablename = tablename
@@ -139,7 +139,7 @@ class GetResultSet(PagedIterator):
             'return_consumed_capacity': self.return_capacity,
         }
         data = self.connection.call('BatchGetItem', **kwargs)
-        for items in six.itervalues(data['UnprocessedKeys']):
+        for items in six.itervalues(data.get('UnprocessedKeys', {})):
             self.unprocessed_keys.extend(items['Keys'])
         self._update_capacity(data)
         return iter(data['Responses'][self.tablename])
