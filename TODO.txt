@@ -1,0 +1,6 @@
+* Change the indexes to use factories
+* Clean up the iterator code
+* Result sets should contain consumed capacity
+* Try to catch the ProvisionedThroughputExceededException and retry
+* Reorganize tests
+* Reorganize dynamo3 code

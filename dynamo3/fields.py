@@ -1,37 +1,42 @@
+""" Objects for defining fields and indexes """
 from .types import STRING
 
 
 class DynamoKey(object):
+
+    """
+    A single field inside a Dynamo table
+
+    Parameters
+    ----------
+    name : str
+        The name of the field
+    data_type : {STRING, NUMBER, BINARY}
+        The Dynamo data type of the field
+
+    """
 
     def __init__(self, name, data_type=STRING):
         self.name = name
         self.data_type = data_type
 
     def definition(self):
-        """
-        Returns the attribute definition structure DynamoDB expects.
-
-        Example::
-
-            >>> field.definition()
-            {
-                'AttributeName': 'username',
-                'AttributeType': 'S',
-            }
-
-        """
+        """ Returns the attribute definition """
         return {
             'AttributeName': self.name,
             'AttributeType': self.data_type,
         }
 
     def hash_schema(self):
+        """ Get the schema definition with this field as a hash key """
         return self._schema('HASH')
 
     def range_schema(self):
+        """ Get the schema definition with this field as a range key """
         return self._schema('RANGE')
 
     def _schema(self, key_type):
+        """ Construct the schema definition for this table """
         return {
             'AttributeName': self.name,
             'KeyType': key_type,
@@ -49,12 +54,7 @@ class DynamoKey(object):
 
 class BaseIndexField(object):
 
-    """
-    An abstract class for defining schema indexes.
-
-    Contains most of the core functionality for the index. Subclasses must
-    define a ``projection_type`` to pass to DynamoDB.
-    """
+    """ An abstract class for defining local index schemas """
     projection_type = None
 
     def __init__(self, name, range_key):
@@ -63,23 +63,12 @@ class BaseIndexField(object):
 
     def schema(self, hash_key):
         """
-        Returns the schema structure DynamoDB expects.
+        Create the index schema
 
-        Example::
-
-            >>> index.schema()
-            {
-                'IndexName': 'LastNameIndex',
-                'KeySchema': [
-                    {
-                        'AttributeName': 'username',
-                        'KeyType': 'HASH',
-                    },
-                ],
-                'Projection': {
-                    'ProjectionType': 'KEYS_ONLY',
-                }
-            }
+        Parameters
+        ----------
+        hash_key : :class:`~.DynamoKey`
+            The hash key of the table
 
         """
         return {
@@ -95,6 +84,7 @@ class BaseIndexField(object):
 
     @classmethod
     def from_response(cls, response, attrs):
+        """ Create an index from returned Dynamo data """
         return cls(response['IndexName'],
                    attrs[response['KeySchema'][1]['AttributeName']])
 
@@ -115,49 +105,19 @@ class BaseIndexField(object):
 
 class AllIndex(BaseIndexField):
 
-    """
-    An index signifying all fields should be in the index.
-
-    Example::
-
-        >>> AllIndex('MostRecentlyJoined', parts=[
-        ...     HashKey('username'),
-        ...     RangeKey('date_joined')
-        ... ])
-
-    """
+    """ An index that contains all fields """
     projection_type = 'ALL'
 
 
 class KeysOnlyIndex(BaseIndexField):
 
-    """
-    An index signifying only key fields should be in the index.
-
-    Example::
-
-        >>> KeysOnlyIndex('MostRecentlyJoined', parts=[
-        ...     HashKey('username'),
-        ...     RangeKey('date_joined')
-        ... ])
-
-    """
+    """ An index that contains only key fields """
     projection_type = 'KEYS_ONLY'
 
 
 class IncludeIndex(BaseIndexField):
 
-    """
-    An index signifying only certain fields should be in the index.
-
-    Example::
-
-        >>> IncludeIndex('GenderIndex', parts=[
-        ...     HashKey('username'),
-        ...     RangeKey('date_joined')
-        ... ], includes=['gender'])
-
-    """
+    """ An index that contains only key fields plus others """
     projection_type = 'INCLUDE'
 
     def __init__(self, name, range_key, includes=None):
@@ -185,10 +145,19 @@ class IncludeIndex(BaseIndexField):
 class GlobalBaseIndexField(BaseIndexField):
 
     """
-    An abstract class for defining global indexes.
+    An abstract class for defining global indexes
 
-    Contains most of the core functionality for the index. Subclasses must
-    define a ``projection_type`` to pass to DynamoDB.
+    Parameters
+    ----------
+    name : str
+        The name of the index
+    hash_key : :class:`~.DynamoKey`
+        The hash key of the index
+    range_key : :class:`~.DynamoKey`, optional
+        The optional range key of the index
+    throughput : :class:`~.Throughput`, optional
+        The throughput of the index
+
     """
 
     def __init__(self, name, hash_key, range_key=None, throughput=None):
@@ -197,30 +166,7 @@ class GlobalBaseIndexField(BaseIndexField):
         self.throughput = throughput or Throughput()
 
     def schema(self):
-        """
-        Returns the schema structure DynamoDB expects.
-
-        Example::
-
-            >>> index.schema()
-            {
-                'IndexName': 'LastNameIndex',
-                'KeySchema': [
-                    {
-                        'AttributeName': 'username',
-                        'KeyType': 'HASH',
-                    },
-                ],
-                'Projection': {
-                    'ProjectionType': 'KEYS_ONLY',
-                },
-                'ProvisionedThroughput': {
-                    'ReadCapacityUnits': 5,
-                    'WriteCapacityUnits': 5
-                }
-            }
-
-        """
+        """ Construct the schema definition for this index """
         key_schema = [self.hash_key.hash_schema()]
         if self.range_key is not None:
             key_schema.append(self.range_key.range_schema())
@@ -252,65 +198,24 @@ class GlobalBaseIndexField(BaseIndexField):
 
 class GlobalAllIndex(GlobalBaseIndexField):
 
-    """
-    An index signifying all fields should be in the index.
-
-    Example::
-
-        >>> GlobalAllIndex('MostRecentlyJoined', parts=[
-        ...     HashKey('username'),
-        ...     RangeKey('date_joined')
-        ... ],
-        ... throughput={
-        ...     'read': 2,
-        ...     'write': 1,
-        ... })
-
-    """
+    """ A global index that contains all fields """
     projection_type = 'ALL'
 
 
 class GlobalKeysOnlyIndex(GlobalBaseIndexField):
 
-    """
-    An index signifying only key fields should be in the index.
-
-    Example::
-
-        >>> GlobalKeysOnlyIndex('MostRecentlyJoined', parts=[
-        ...     HashKey('username'),
-        ...     RangeKey('date_joined')
-        ... ],
-        ... throughput={
-        ...     'read': 2,
-        ...     'write': 1,
-        ... })
-
-    """
+    """ A global index that contains only key fields """
     projection_type = 'KEYS_ONLY'
 
 
 class GlobalIncludeIndex(GlobalBaseIndexField):
 
-    """
-    An index signifying only certain fields should be in the index.
+    """ A global index that contains only key fields plus others """
 
-    Example::
-
-        >>> GlobalIncludeIndex('GenderIndex', parts=[
-        ...     HashKey('username'),
-        ...     RangeKey('date_joined')
-        ... ],
-        ... includes=['gender'],
-        ... throughput={
-        ...     'read': 2,
-        ...     'write': 1,
-        ... })
-
-    """
     projection_type = 'INCLUDE'
 
-    def __init__(self, name, hash_key, range_key=None, throughput=None, includes=None):
+    def __init__(self, name, hash_key, range_key=None, throughput=None,
+                 includes=None):
         GlobalBaseIndexField.__init__(
             self, name, hash_key, range_key, throughput)
         self.includes_fields = includes
@@ -335,6 +240,18 @@ class GlobalIncludeIndex(GlobalBaseIndexField):
 
 class Throughput(object):
 
+    """
+    Representation of table or global index throughput
+
+    Parameters
+    ----------
+    read : int, optional
+        Read capacity throughput (default 5)
+    write : int, optional
+        Write capacity throughput (default 5)
+
+    """
+
     def __init__(self, read=5, write=5):
         self.read = read
         self.write = write
@@ -343,6 +260,7 @@ class Throughput(object):
         return 'Throughput({0}, {1})'.format(self.read, self.write)
 
     def schema(self):
+        """ Construct the schema definition for the throughput """
         return {
             'ReadCapacityUnits': self.read,
             'WriteCapacityUnits': self.write,
@@ -350,6 +268,7 @@ class Throughput(object):
 
     @classmethod
     def from_response(cls, response):
+        """ Create Throughput from returned Dynamo data """
         return cls(
             response['ReadCapacityUnits'],
             response['WriteCapacityUnits'],
@@ -371,6 +290,8 @@ class Throughput(object):
 
 class Table(object):
 
+    """ Representation of a DynamoDB table """
+
     def __init__(self, name, hash_key, range_key=None, indexes=None,
                  global_indexes=None, throughput=None, status=None, size=0,
                  item_count=0):
@@ -386,6 +307,7 @@ class Table(object):
 
     @classmethod
     def from_response(cls, response):
+        """ Create a Table from returned Dynamo data """
         attrs = dict(((d['AttributeName'],
                        DynamoKey(d['AttributeName'], d['AttributeType'])) for d
                       in response['AttributeDefinitions']))

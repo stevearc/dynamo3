@@ -7,7 +7,7 @@ import shutil
 import six
 import subprocess
 import tempfile
-from six.moves.urllib.request import urlretrieve
+from six.moves.urllib.request import urlretrieve  # pylint: disable=F0401,E0611
 
 import locale
 import os
@@ -15,6 +15,7 @@ from . import DynamoDBConnection
 
 
 DYNAMO_LOCAL = 'https://s3-us-west-2.amazonaws.com/dynamodb-local/dynamodb_local_2014-01-08.tar.gz'
+
 
 class DynamoLocalPlugin(nose.plugins.Plugin):
 
