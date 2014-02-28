@@ -1,4 +1,3 @@
-* Clean up the iterator code
 * Result sets should contain consumed capacity
 * Try to catch the ProvisionedThroughputExceededException and retry
 * 100% code coverage

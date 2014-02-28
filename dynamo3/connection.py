@@ -317,7 +317,7 @@ class DynamoDBConnection(object):
                         return_values=returns,
                         return_consumed_capacity=return_capacity, **kwargs)
         if ret:
-            return Result(self.dynamizer, ret)
+            return Result(self.dynamizer, ret, 'Attributes')
 
     def get_item(self, tablename, key, attributes=None, consistent=False,
                  return_capacity=NONE):
@@ -345,14 +345,10 @@ class DynamoDBConnection(object):
         if attributes is not None:
             kwargs['attributes_to_get'] = attributes
         key = self.dynamizer.encode_keys(key)
-        return Result(self.dynamizer,
-                      self.call('GetItem', table_name=tablename,
-                                key=key,
-                                consistent_read=consistent,
-                                return_consumed_capacity=return_capacity,
-                                **kwargs
-                                )
-                      )
+        data = self.call('GetItem', table_name=tablename, key=key,
+                         consistent_read=consistent,
+                         return_consumed_capacity=return_capacity, **kwargs)
+        return Result(self.dynamizer, data, 'Item')
 
     def delete_item(self, tablename, key, expected=None, returns=NONE,
                     return_capacity=NONE):
@@ -387,7 +383,7 @@ class DynamoDBConnection(object):
                         return_consumed_capacity=return_capacity,
                         **kwargs)
         if ret:
-            return Result(self.dynamizer, ret)
+            return Result(self.dynamizer, ret, 'Attributes')
 
     def batch_write(self, tablename):
         """
@@ -418,9 +414,9 @@ class DynamoDBConnection(object):
         ----------
         tablename : str
             Name of the table to fetch from
-        keys : list
-            List of primary key dicts that specify the hash key and the
-            optional range key of each item to fetch
+        keys : list or iterable
+            List or iterable of primary key dicts that specify the hash key and
+            the optional range key of each item to fetch
         attributes : list, optional
             If present, only fetch these attributes from the item
         consistent : bool, optional
@@ -477,7 +473,7 @@ class DynamoDBConnection(object):
                            return_consumed_capacity=return_capacity,
                            **kwargs)
         if result:
-            return Result(self.dynamizer, result)
+            return Result(self.dynamizer, result, 'Attributes')
 
     def scan(self, tablename, attributes=None, count=False, limit=None,
              **kwargs):
