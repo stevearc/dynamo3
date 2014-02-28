@@ -6,15 +6,18 @@ from .constants import NONE
 
 
 class PagedIterator(six.Iterator):
+    """ An iterator that iterates over paged results from Dynamo """
 
     def __init__(self):
         self.iterator = None
 
     @property
     def can_fetch_more(self):
+        """ Return True if more results can be fetched from the server """
         return True
 
     def fetch(self):
+        """ Fetch additional results from the server and return an iterator """
         raise NotImplementedError
 
     def __iter__(self):
