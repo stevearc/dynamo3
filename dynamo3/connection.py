@@ -1,5 +1,6 @@
 """ Connection class for DynamoDB """
 import time
+
 import botocore.session
 import six
 
@@ -43,7 +44,7 @@ def encode_query_kwargs(dynamizer, kwargs):
                 'ComparisonOperator': 'NULL' if v else 'NOT_NULL'
             }
             continue
-        elif condition_key != 'in' and not isinstance(v, (list, tuple)):
+        elif not isinstance(v, (list, tuple, set, frozenset)):
             v = (v,)
         ret[name] = {
             'AttributeValueList': [dynamizer.encode(value) for value in v],
@@ -117,7 +118,7 @@ class DynamoDBConnection(object):
         Parameters
         ----------
         region : str
-            Name of an AWS region or 'local'
+            Name of an AWS region
         session : :class:`~botocore.session.Session`, optional
             The Session object to use for the connection
         **kwargs : dict
@@ -186,7 +187,7 @@ class DynamoDBConnection(object):
                 break
             except ThroughputException:
                 attempt += 1
-                if attempt == self.request_retries:
+                if attempt > self.request_retries:
                     raise
                 self.exponential_sleep(attempt)
         return data

@@ -59,7 +59,7 @@ class BaseIndex(object):
     KEYS = 'KEYS_ONLY'
     INCLUDE = 'INCLUDE'
 
-    def __init__(self, projection_type, name, range_key=None, includes=None):
+    def __init__(self, projection_type, name, range_key, includes):
         self.projection_type = projection_type
         self.name = name
         self.range_key = range_key
@@ -198,8 +198,7 @@ class GlobalIndex(BaseIndex):
                    range_key, proj.get('NonKeyAttributes'), throughput)
 
     def __hash__(self):
-        return (hash(self.projection_type) + hash(self.name) +
-                hash(self.range_key))
+        return super(GlobalIndex, self).__hash__()
 
     def __eq__(self, other):
         return (

@@ -166,7 +166,7 @@ class BatchWriter(object):
 
         Parameters
         ----------
-        **kwargs : dict
+        kwargs : dict
             The primary key of the item to delete
 
         """
@@ -194,11 +194,10 @@ class BatchWriter(object):
 
         self._to_put = []
         self._to_delete = []
-        return True
 
     def _handle_unprocessed(self, resp):
         """ Requeue unprocessed items """
-        if len(resp.get('UnprocessedItems', [])):
+        if resp.get('UnprocessedItems'):
             unprocessed = resp['UnprocessedItems'].get(self.tablename, [])
 
             # Some items have not been processed. Stow them for now &
@@ -209,17 +208,15 @@ class BatchWriter(object):
 
     def resend_unprocessed(self):
         """ Resend all unprocessed items """
-        LOG.info("Re-sending %s unprocessed items.", len(self._unprocessed))
+        LOG.info("Re-sending %d unprocessed items.", len(self._unprocessed))
 
-        while len(self._unprocessed):
-            # Again, do 25 at a time.
+        while self._unprocessed:
             to_resend = self._unprocessed[:25]
-            # Remove them from the list.
             self._unprocessed = self._unprocessed[25:]
-            LOG.info("Sending %s items", len(to_resend))
+            LOG.info("Sending %d items", len(to_resend))
             resp = self._batch_write_item(to_resend)
             self._handle_unprocessed(resp)
-            LOG.info("%s unprocessed items left", len(self._unprocessed))
+            LOG.info("%d unprocessed items left", len(self._unprocessed))
 
     def _batch_write_item(self, items):
         """ Make a BatchWriteItem call to Dynamo """

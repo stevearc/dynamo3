@@ -82,7 +82,7 @@ class TestMisc(BaseSystemTest):
             with self.assertRaises(ThroughputException):
                 self.dynamo.call('Does not matter')
         self.assertEqual(len(time.sleep.mock_calls),
-                         self.dynamo.request_retries - 2)
+                         self.dynamo.request_retries - 1)
         self.assertTrue(time.sleep.called)
 
     def test_describe_missing(self):

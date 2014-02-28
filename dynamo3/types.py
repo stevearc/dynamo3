@@ -7,12 +7,11 @@ from .constants import (NUMBER, STRING, BINARY, NUMBER_SET, STRING_SET,
 from .util import is_null
 
 
-DECIMAL_CONTEXT = Context(
-    Emin=-128, Emax=126, rounding=None, prec=38,
-    traps=[Clamped, Overflow, Underflow])
+DECIMAL_CONTEXT = Context(Emin=-128, Emax=126, rounding=None, prec=38,
+                          traps=[Clamped, Overflow, Underflow])
 
 
-def float_to_decimal(f):  # pragma: no cover
+def float_to_decimal(f):
     """ Convert a float to a 38-precision Decimal """
     n, d = f.as_integer_ratio()
     numerator, denominator = Decimal(n), Decimal(d)
