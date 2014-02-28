@@ -196,7 +196,7 @@ class TestBatchWrite(BaseSystemTest):
             batch.put({'id': 'a'})
             batch.put({'id': 'b'})
         with self.dynamo.batch_write('foobar') as batch:
-            batch.delete(id='b')
+            batch.delete({'id': 'b'})
         ret = list(self.dynamo.scan('foobar'))
         self.assertItemsEqual(ret, [{'id': 'a'}])
 
@@ -211,7 +211,7 @@ class TestBatchWrite(BaseSystemTest):
         self.assertEqual(count, 50)
         with self.dynamo.batch_write('foobar') as batch:
             for i in _xrange(50):
-                batch.delete(id=str(i))
+                batch.delete({'id': str(i)})
         count = self.dynamo.scan('foobar', count=True)
         self.assertEqual(count, 0)
 
@@ -348,6 +348,13 @@ class TestUpdateItem(BaseSystemTest):
         """ Doing an ADD requires a non-null value """
         with self.assertRaises(ValueError):
             ItemUpdate.add('foo', None)
+
+    def test_item_update_eq(self):
+        """ ItemUpdates should be equal """
+        a, b = ItemUpdate.put('foo', 'bar'), ItemUpdate.put('foo', 'bar')
+        self.assertEqual(a, b)
+        self.assertEqual(hash(a), hash(b))
+        self.assertFalse(a != b)
 
 
 class TestPutItem(BaseSystemTest):

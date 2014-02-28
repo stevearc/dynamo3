@@ -4,6 +4,7 @@ import six
 from decimal import Decimal, Context, Clamped, Overflow, Underflow
 from .constants import (NUMBER, STRING, BINARY, NUMBER_SET, STRING_SET,
                         BINARY_SET)
+from .util import is_null
 
 
 DECIMAL_CONTEXT = Context(
@@ -85,9 +86,9 @@ class Dynamizer(object):
         for t in six.integer_types:
             self.register_encoder(t, lambda _, v: (NUMBER, v))
         self.register_encoder(
-            float, lambda _, v: (NUMBER, str(float_to_decimal(v))))
-        # TODO: (stevearc 2014-02-25) make sure decimal is 38 point precision
-        self.register_encoder(Decimal, lambda _, v: (NUMBER, str(v)))
+            float, lambda _, v: (NUMBER, six.text_type(float_to_decimal(v))))
+        self.register_encoder(Decimal, lambda _, v:
+                              (NUMBER, six.text_type(DECIMAL_CONTEXT.create_decimal(v))))
         self.register_encoder(set, encode_set)
         self.register_encoder(Binary, lambda _, v: (BINARY, v.encode()))
 
@@ -116,7 +117,8 @@ class Dynamizer(object):
 
     def encode_keys(self, keys):
         """ Run the encoder on a dict of values """
-        return dict(((k, self.encode(v)) for k, v in six.iteritems(keys)))
+        return dict(((k, self.encode(v)) for k, v in six.iteritems(keys) if not
+                     is_null(v)))
 
     def encode(self, value):
         """ Encode a value into the Dynamo dict format """

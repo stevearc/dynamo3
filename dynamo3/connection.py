@@ -14,6 +14,7 @@ from .util import is_null
 
 CONDITIONS = {
     'eq': 'EQ',
+    'ne': 'NE',
     'le': 'LE',
     'lte': 'LE',
     'lt': 'LT',

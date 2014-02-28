@@ -240,7 +240,15 @@ class TestScan(BaseSystemTest):
         self.make_table()
         self.dynamo.put_item('foobar', {'id': 'a'})
         self.dynamo.put_item('foobar', {'id': 'b'})
-        ret = self.dynamo.query('foobar', id__eq='a')
+        ret = self.dynamo.scan('foobar', id__eq='a')
+        self.assertItemsEqual(list(ret), [{'id': 'a'}])
+
+    def test_ne(self):
+        """ Can scan with NE constraint """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        self.dynamo.put_item('foobar', {'id': 'b'})
+        ret = self.dynamo.scan('foobar', id__ne='b')
         self.assertItemsEqual(list(ret), [{'id': 'a'}])
 
     def test_le(self):

@@ -86,6 +86,19 @@ class ItemUpdate(object):
             return {self.key: ret}
         return {}
 
+    def __hash__(self):
+        return hash(self.action) + hash(self.key)
+
+    def __eq__(self, other):
+        return (isinstance(other, ItemUpdate) and
+                self.action == other.action and
+                self.key == other.key and
+                self.value == other.value and
+                self._expected == other._expected)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
 
 def _encode_write(dynamizer, data, action, key):
     """ Encode an item write command """
@@ -147,7 +160,7 @@ class BatchWriter(object):
         if self.should_flush():
             self.flush()
 
-    def delete(self, **kwargs):
+    def delete(self, kwargs):
         """
         Delete an item
 
