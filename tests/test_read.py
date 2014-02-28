@@ -99,6 +99,17 @@ class TestQuery(BaseSystemTest):
         ret = self.dynamo.query('foobar', count=True, id__eq='a')
         self.assertEqual(ret, 3)
 
+    def test_capacity(self):
+        """ Can return consumed capacity """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'num': 1})
+        ret = self.dynamo.query('foobar', return_capacity=TOTAL, id__eq='a')
+        list(ret)
+        self.assertTrue(is_number(ret.capacity))
+        self.assertTrue(is_number(ret.table_capacity))
+        self.assertTrue(isinstance(ret.indexes, dict))
+        self.assertTrue(isinstance(ret.global_indexes, dict))
+
     def test_eq(self):
         """ Can query with EQ constraint """
         self.make_table()
@@ -210,6 +221,17 @@ class TestScan(BaseSystemTest):
                 batch.put({'id': str(i)})
         ret = self.dynamo.scan('foobar', count=True)
         self.assertEqual(ret, 3)
+
+    def test_capacity(self):
+        """ Can return consumed capacity """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        ret = self.dynamo.scan('foobar', return_capacity=TOTAL)
+        list(ret)
+        self.assertTrue(is_number(ret.capacity))
+        self.assertTrue(is_number(ret.table_capacity))
+        self.assertTrue(isinstance(ret.indexes, dict))
+        self.assertTrue(isinstance(ret.global_indexes, dict))
 
     def test_eq(self):
         """ Can scan with EQ constraint """

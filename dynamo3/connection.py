@@ -476,7 +476,7 @@ class DynamoDBConnection(object):
             return Result(self.dynamizer, result, 'Attributes')
 
     def scan(self, tablename, attributes=None, count=False, limit=None,
-             **kwargs):
+             return_capacity=NONE, **kwargs):
         """
         Perform a full-table scan
 
@@ -491,6 +491,10 @@ class DynamoDBConnection(object):
             themselves (default False)
         limit : int, optional
             Maximum number of items to return
+        return_capacity : {NONE, INDEXES, TOTAL}, optional
+            INDEXES will return the consumed capacity for indexes, TOTAL will
+            return the consumed capacity for the table and the indexes.
+            (default NONE)
         **kwargs : dict, optional
             Filter arguments (examples below)
 
@@ -506,7 +510,10 @@ class DynamoDBConnection(object):
             connection.scan('mytable', action__in=['wibble', 'wobble'])
 
         """
-        keywords = {'table_name': tablename}
+        keywords = {
+            'table_name': tablename,
+            'return_consumed_capacity': return_capacity,
+        }
         if attributes is not None:
             keywords['attributes_to_get'] = attributes
         if limit is not None:
@@ -521,7 +528,8 @@ class DynamoDBConnection(object):
             return ResultSet(self, 'Items', 'Scan', **keywords)
 
     def query(self, tablename, attributes=None, consistent=None, count=False,
-              index=None, limit=None, desc=False, **kwargs):
+              index=None, limit=None, desc=False, return_capacity=NONE,
+              **kwargs):
         """
         Perform an index query on a table
 
@@ -542,6 +550,10 @@ class DynamoDBConnection(object):
             Maximum number of items to return
         desc : bool, optional
             If True, return items in descending order (default False)
+        return_capacity : {NONE, INDEXES, TOTAL}, optional
+            INDEXES will return the consumed capacity for indexes, TOTAL will
+            return the consumed capacity for the table and the indexes.
+            (default NONE)
         **kwargs : dict, optional
             Query arguments (examples below)
 
@@ -557,7 +569,10 @@ class DynamoDBConnection(object):
             connection.query('mytable', foo__eq=5, bar__between=(1, 10))
 
         """
-        keywords = {'table_name': tablename}
+        keywords = {
+            'table_name': tablename,
+            'return_consumed_capacity': return_capacity,
+        }
         if attributes is not None:
             keywords['attributes_to_get'] = attributes
         if consistent is not None:

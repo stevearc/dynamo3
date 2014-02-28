@@ -6,10 +6,15 @@ from .constants import NONE
 
 
 class PagedIterator(six.Iterator):
+
     """ An iterator that iterates over paged results from Dynamo """
 
     def __init__(self):
         self.iterator = None
+        self.capacity = 0
+        self.table_capacity = 0
+        self.indexes = {}
+        self.global_indexes = {}
 
     @property
     def can_fetch_more(self):
@@ -19,6 +24,18 @@ class PagedIterator(six.Iterator):
     def fetch(self):
         """ Fetch additional results from the server and return an iterator """
         raise NotImplementedError
+
+    def _update_capacity(self, data):
+        """ Update the consumed capacity metrics """
+        cap = data.get('ConsumedCapacity', {})
+        self.capacity += cap.get('CapacityUnits', 0)
+        self.table_capacity += cap.get('Table', {}).get('CapacityUnits', 0)
+        for k, v in six.iteritems(cap.get('LocalSecondaryIndexes', {})):
+            self.indexes.setdefault(k, 0)
+            self.indexes[k] += v['CapacityUnits']
+        for k, v in six.iteritems(cap.get('GlobalSecondaryIndexes', {})):
+            self.global_indexes.setdefault(k, 0)
+            self.global_indexes[k] += v['CapacityUnits']
 
     def __iter__(self):
         return self
@@ -60,6 +77,7 @@ class ResultSet(PagedIterator):
             self.kwargs['exclusive_start_key'] = self.last_evaluated_key
         elif 'exclusive_start_key' in self.kwargs:
             del self.kwargs['exclusive_start_key']
+        self._update_capacity(data)
         return iter(data[self.response_key])
 
     def __next__(self):
@@ -86,10 +104,6 @@ class GetResultSet(PagedIterator):
         self.return_capacity = return_capacity
         self.page_size = 100
         self.unprocessed_keys = []
-        self.capacity = 0
-        self.table_capacity = 0
-        self.indexes = {}
-        self.global_indexes = {}
 
     def _get_next_keys(self):
         """ Get the next page of keys to fetch """
@@ -129,18 +143,6 @@ class GetResultSet(PagedIterator):
             self.unprocessed_keys.extend(items['Keys'])
         self._update_capacity(data)
         return iter(data['Responses'][self.tablename])
-
-    def _update_capacity(self, data):
-        """ Update the consumed capacity metrics """
-        cap = data.get('ConsumedCapacity', {})
-        self.capacity += cap.get('CapacityUnits', 0)
-        self.table_capacity += cap.get('Table', {}).get('CapacityUnits', 0)
-        for k, v in six.iteritems(cap.get('LocalSecondaryIndexes', {})):
-            self.indexes.setdefault(k, 0)
-            self.indexes[k] += v['CapacityUnits']
-        for k, v in six.iteritems(cap.get('GlobalSecondaryIndexes', {})):
-            self.global_indexes.setdefault(k, 0)
-            self.global_indexes[k] += v['CapacityUnits']
 
     def __next__(self):
         result = super(GetResultSet, self).__next__()
