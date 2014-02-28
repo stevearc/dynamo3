@@ -25,6 +25,7 @@ import six
 import subprocess
 import tarfile
 import tempfile
+from contextlib import closing
 from six.moves.urllib.request import urlretrieve  # pylint: disable=F0401,E0611
 
 import locale
@@ -93,7 +94,7 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
                 tmpdir = tempfile.gettempdir()
                 if not os.path.exists(self.path):
                     tarball = urlretrieve(self.link)[0]
-                    with tarfile.TarFile.open(tarball, 'r:gz') as archive:
+                    with closing(tarfile.open(tarball, 'r:gz')) as archive:
                         name = archive.getnames()[0]
                         container = name.split('/')[0]
                         archive.extractall(tmpdir)
