@@ -1,10 +1,11 @@
 """ Connection class for DynamoDB """
+import time
 import botocore.session
 import six
 
 from .batch import BatchWriter
 from .constants import NONE
-from .exception import raise_if_error, DynamoDBError
+from .exception import raise_if_error, DynamoDBError, ThroughputException
 from .fields import Throughput, Table
 from .result import ResultSet, GetResultSet, Result
 from .types import Dynamizer
@@ -83,12 +84,19 @@ class DynamoDBConnection(object):
     dynamizer : :class:`~dynamo3.types.Dynamizer`, optional
         The Dynamizer object to use for encoding/decoding values
 
+    Attributes
+    ----------
+    request_retries : int
+        Number of times to retry an API call if the throughput is exceeded
+        (default 10)
+
     """
 
     def __init__(self, service=None, endpoint=None, dynamizer=Dynamizer()):
         self.service = service
         self.endpoint = endpoint
         self.dynamizer = dynamizer
+        self.request_retries = 10
 
     @property
     def host(self):
@@ -152,6 +160,13 @@ class DynamoDBConnection(object):
         """
         Make a request to DynamoDB using the raw botocore API
 
+        Parameters
+        ----------
+        command : str
+            The name of the Dynamo command to execute
+        **kwargs : dict
+            The parameters to pass up in the request
+
         Raises
         ------
         exc : :class:`~.DynamoDBError`
@@ -162,9 +177,23 @@ class DynamoDBConnection(object):
 
         """
         op = self.service.get_operation(command)
-        response, data = op.call(self.endpoint, **kwargs)
-        raise_if_error(kwargs, response, data)
+        attempt = 0
+        while True:
+            response, data = op.call(self.endpoint, **kwargs)
+            try:
+                raise_if_error(kwargs, response, data)
+                break
+            except ThroughputException:
+                attempt += 1
+                if attempt == self.request_retries:
+                    raise
+                self.exponential_sleep(attempt)
         return data
+
+    def exponential_sleep(self, attempt):
+        """ Sleep with exponential backoff """
+        if attempt > 1:
+            time.sleep(0.1 * 2 ** attempt)
 
     def list_tables(self, limit=100):
         """

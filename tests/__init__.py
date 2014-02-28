@@ -2,11 +2,13 @@
 from __future__ import unicode_literals
 
 from decimal import Decimal
+from mock import patch, MagicMock
 import six
 from six.moves.urllib.parse import urlparse  # pylint: disable=F0401,E0611
 from six.moves.cPickle import dumps, loads  # pylint: disable=F0401,E0611
 
-from dynamo3 import DynamoDBConnection, Binary, DynamoKey, Dynamizer, STRING
+from dynamo3 import (DynamoDBConnection, Binary, DynamoKey, Dynamizer, STRING,
+                     ThroughputException)
 
 
 try:
@@ -62,6 +64,26 @@ class TestMisc(BaseSystemTest):
         """ Can connect to a dynamo host without passing in a session """
         conn = DynamoDBConnection.connect_to_host()
         self.assertIsNotNone(conn.host)
+
+    @patch('dynamo3.connection.time')
+    def test_retry_on_throughput_error(self, time):
+        """ Throughput exceptions trigger a retry of the request """
+        def call(*_, **__):
+            """ Dummy service call """
+            return MagicMock(), {
+                'Errors': [{
+                    'Code': 'ProvisionedThroughputExceededException',
+                }]
+            }
+
+        with patch.object(self.dynamo, 'service') as service:
+            op = service.get_operation()
+            op.call.side_effect = call
+            with self.assertRaises(ThroughputException):
+                self.dynamo.call('Does not matter')
+        self.assertEqual(len(time.sleep.mock_calls),
+                         self.dynamo.request_retries - 2)
+        self.assertTrue(time.sleep.called)
 
     def test_describe_missing(self):
         """ Describing a missing table returns None """

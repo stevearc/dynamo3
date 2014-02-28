@@ -19,14 +19,20 @@ class ConditionalCheckFailedException(DynamoDBError):
 
     fmt = '{Code}: {Message}'
 
-    def __init__(self, status_code, **kwargs):
-        super(ConditionalCheckFailedException, self).__init__(status_code,
-                                                              **kwargs)
-
 CheckFailed = ConditionalCheckFailedException
+
+
+class ProvisionedThroughputExceededException(DynamoDBError):
+
+    """ Raised when an item field value fails the expected value check """
+
+    fmt = '{Code}: {Message}'
+
+ThroughputException = ProvisionedThroughputExceededException
 
 EXC = {
     'ConditionalCheckFailedException': ConditionalCheckFailedException,
+    'ProvisionedThroughputExceededException': ThroughputException,
 }
 
 
