@@ -52,14 +52,16 @@ class DynamoKey(object):
         return not self.__eq__(other)
 
 
-class BaseIndexField(object):
+class BaseIndex(object):
+    ALL = 'ALL'
+    KEYS = 'KEYS_ONLY'
+    INCLUDE = 'INCLUDE'
 
-    """ An abstract class for defining local index schemas """
-    projection_type = None
-
-    def __init__(self, name, range_key):
+    def __init__(self, projection_type, name, range_key=None, includes=None):
+        self.projection_type = projection_type
         self.name = name
         self.range_key = range_key
+        self.include_fields = includes
 
     def schema(self, hash_key):
         """
@@ -71,170 +73,133 @@ class BaseIndexField(object):
             The hash key of the table
 
         """
-        return {
+        key_schema = [hash_key.hash_schema()]
+        if self.range_key is not None:
+            key_schema.append(self.range_key.range_schema())
+        schema_data = {
             'IndexName': self.name,
-            'KeySchema': [
-                hash_key.hash_schema(),
-                self.range_key.range_schema(),
-            ],
+            'KeySchema': key_schema,
             'Projection': {
                 'ProjectionType': self.projection_type,
             }
         }
-
-    @classmethod
-    def from_response(cls, response, attrs):
-        """ Create an index from returned Dynamo data """
-        return cls(response['IndexName'],
-                   attrs[response['KeySchema'][1]['AttributeName']])
+        if self.include_fields is not None:
+            schema_data['Projection']['NonKeyAttributes'] = self.include_fields
+        return schema_data
 
     def __hash__(self):
         return (hash(self.projection_type) + hash(self.name) +
                 hash(self.range_key))
 
     def __eq__(self, other):
-        return (isinstance(other, BaseIndexField) and
+        return (type(other) == type(self) and
                 self.projection_type == other.projection_type and
                 self.name == other.name and
-                self.range_key == other.range_key
+                self.range_key == other.range_key and
+                self.include_fields == other.include_fields
                 )
 
     def __ne__(self, other):
         return not self.__eq__(other)
 
 
-class AllIndex(BaseIndexField):
+class LocalIndex(BaseIndex):
 
-    """ An index that contains all fields """
-    projection_type = 'ALL'
+    """
+    A local secondary index for a table
+
+    You should generally use the factory methods :meth:`~.all`, :meth:`~.keys`,
+    and :meth:`~.include` instead of the constructor.
+
+    """
+
+    def __init__(self, projection_type, name, range_key, includes=None):
+        super(LocalIndex, self).__init__(projection_type, name, range_key,
+                                         includes)
+
+    @classmethod
+    def all(cls, name, range_key):
+        """ Create an index that projects all attributes """
+        return cls(cls.ALL, name, range_key)
+
+    @classmethod
+    def keys(cls, name, range_key):
+        """ Create an index that projects only key attributes """
+        return cls(cls.KEYS, name, range_key)
+
+    @classmethod
+    def include(cls, name, range_key, includes):
+        """ Create an index that projects key attributes plus some others """
+        return cls(cls.INCLUDE, name, range_key, includes)
+
+    @classmethod
+    def from_response(cls, response, attrs):
+        """ Create an index from returned Dynamo data """
+        proj = response['Projection']
+        return cls(proj['ProjectionType'], response['IndexName'],
+                   attrs[response['KeySchema'][1]['AttributeName']],
+                   proj.get('NonKeyAttributes'))
 
 
-class KeysOnlyIndex(BaseIndexField):
+class GlobalIndex(BaseIndex):
 
-    """ An index that contains only key fields """
-    projection_type = 'KEYS_ONLY'
+    """
+    A global secondary index for a table
 
+    You should generally use the factory methods :meth:`~.all`, :meth:`~.keys`,
+    and :meth:`~.include` instead of the constructor.
 
-class IncludeIndex(BaseIndexField):
+    """
 
-    """ An index that contains only key fields plus others """
-    projection_type = 'INCLUDE'
+    def __init__(self, projection_type, name, hash_key, range_key=None,
+                 includes=None, throughput=None):
+        super(GlobalIndex, self).__init__(projection_type, name, range_key,
+                                          includes)
+        self.hash_key = hash_key
+        self.throughput = throughput or Throughput()
 
-    def __init__(self, name, range_key, includes=None):
-        super(IncludeIndex, self).__init__(name, range_key)
-        self.includes_fields = includes or []
+    @classmethod
+    def all(cls, name, hash_key, range_key=None, throughput=None):
+        """ Create an index that projects all attributes """
+        return cls(cls.ALL, name, hash_key, range_key, throughput=throughput)
 
-    def schema(self, hash_key):
-        schema_data = super(IncludeIndex, self).schema(hash_key)
-        schema_data['Projection']['NonKeyAttributes'] = self.includes_fields
+    @classmethod
+    def keys(cls, name, hash_key, range_key=None, throughput=None):
+        """ Create an index that projects only key attributes """
+        return cls(cls.KEYS, name, hash_key, range_key,
+                   throughput=throughput)
+
+    @classmethod
+    def include(cls, name, hash_key, range_key=None, includes=None,
+                throughput=None):
+        """ Create an index that projects key attributes plus some others """
+        return cls(cls.INCLUDE, name, hash_key, range_key, includes,
+                   throughput=throughput)
+
+    def schema(self):
+        """ Construct the schema definition for this index """
+        schema_data = super(GlobalIndex, self).schema(self.hash_key)
+        schema_data['ProvisionedThroughput'] = self.throughput.schema()
         return schema_data
 
     @classmethod
     def from_response(cls, response, attrs):
-        idx = super(IncludeIndex, cls).from_response(response, attrs)
-        idx.includes_fields = response['Projection']['NonKeyAttributes']
-        return idx
-
-    def __eq__(self, other):
-        return (
-            super(IncludeIndex, self).__eq__(other) and
-            self.includes_fields == other.includes_fields
-        )
-
-
-class GlobalBaseIndexField(BaseIndexField):
-
-    """
-    An abstract class for defining global indexes
-
-    Parameters
-    ----------
-    name : str
-        The name of the index
-    hash_key : :class:`~.DynamoKey`
-        The hash key of the index
-    range_key : :class:`~.DynamoKey`, optional
-        The optional range key of the index
-    throughput : :class:`~.Throughput`, optional
-        The throughput of the index
-
-    """
-
-    def __init__(self, name, hash_key, range_key=None, throughput=None):
-        super(GlobalBaseIndexField, self).__init__(name, range_key)
-        self.hash_key = hash_key
-        self.throughput = throughput or Throughput()
-
-    def schema(self):
-        """ Construct the schema definition for this index """
-        key_schema = [self.hash_key.hash_schema()]
-        if self.range_key is not None:
-            key_schema.append(self.range_key.range_schema())
-        return {
-            'IndexName': self.name,
-            'KeySchema': key_schema,
-            'Projection': {
-                'ProjectionType': self.projection_type,
-            },
-            'ProvisionedThroughput': self.throughput.schema(),
-        }
-
-    @classmethod
-    def from_response(cls, response, attrs):
+        """ Create an index from returned Dynamo data """
+        proj = response['Projection']
         hash_key = attrs[response['KeySchema'][0]['AttributeName']]
         range_key = None
         if len(response['KeySchema']) > 1:
             range_key = attrs[response['KeySchema'][1]['AttributeName']]
         throughput = Throughput.from_response(
             response['ProvisionedThroughput'])
-        return cls(response['IndexName'], hash_key, range_key, throughput)
+        return cls(proj['ProjectionType'], response['IndexName'], hash_key,
+                   range_key, proj.get('NonKeyAttributes'), throughput)
 
     def __eq__(self, other):
         return (
-            super(GlobalBaseIndexField, self).__eq__(other) and
+            super(GlobalIndex, self).__eq__(other) and
+            self.hash_key == other.hash_key and
             self.throughput == other.throughput
-        )
-
-
-class GlobalAllIndex(GlobalBaseIndexField):
-
-    """ A global index that contains all fields """
-    projection_type = 'ALL'
-
-
-class GlobalKeysOnlyIndex(GlobalBaseIndexField):
-
-    """ A global index that contains only key fields """
-    projection_type = 'KEYS_ONLY'
-
-
-class GlobalIncludeIndex(GlobalBaseIndexField):
-
-    """ A global index that contains only key fields plus others """
-
-    projection_type = 'INCLUDE'
-
-    def __init__(self, name, hash_key, range_key=None, throughput=None,
-                 includes=None):
-        GlobalBaseIndexField.__init__(
-            self, name, hash_key, range_key, throughput)
-        self.includes_fields = includes
-
-    def schema(self):
-        schema_data = GlobalBaseIndexField.schema(self)
-        schema_data['Projection']['NonKeyAttributes'] = self.includes_fields
-        return schema_data
-
-    @classmethod
-    def from_response(cls, response, attrs):
-        idx = super(GlobalIncludeIndex, cls).from_response(response, attrs)
-        idx.includes_fields = response['Projection']['NonKeyAttributes']
-        return idx
-
-    def __eq__(self, other):
-        return (
-            super(GlobalIncludeIndex, self).__eq__(other) and
-            self.includes_fields == other.includes_fields
         )
 
 
@@ -317,23 +282,11 @@ class Table(object):
             range_key = attrs[response['KeySchema'][1]['AttributeName']]
 
         indexes = []
-        index_types = {
-            AllIndex.projection_type: AllIndex,
-            KeysOnlyIndex.projection_type: KeysOnlyIndex,
-            IncludeIndex.projection_type: IncludeIndex,
-        }
         for idx in response.get('LocalSecondaryIndexes', []):
-            idx_type = index_types[idx['Projection']['ProjectionType']]
-            indexes.append(idx_type.from_response(idx, attrs))
+            indexes.append(LocalIndex.from_response(idx, attrs))
         global_indexes = []
-        index_types = {
-            GlobalAllIndex.projection_type: GlobalAllIndex,
-            GlobalKeysOnlyIndex.projection_type: GlobalKeysOnlyIndex,
-            GlobalIncludeIndex.projection_type: GlobalIncludeIndex,
-        }
         for idx in response.get('GlobalSecondaryIndexes', []):
-            idx_type = index_types[idx['Projection']['ProjectionType']]
-            global_indexes.append(idx_type.from_response(idx, attrs))
+            global_indexes.append(GlobalIndex.from_response(idx, attrs))
 
         return cls(
             name=response['TableName'],

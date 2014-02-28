@@ -1,4 +1,4 @@
-dynamo3
+Dynamo3
 =======
 :Build: |build|_ |coverage|_
 :Source: https://github.com/stevearc/dynamo3

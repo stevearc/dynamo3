@@ -4,10 +4,9 @@ from __future__ import unicode_literals
 from six.moves import xrange as _xrange  # pylint: disable=F0401
 
 from . import BaseSystemTest, is_number
-from dynamo3 import (STRING, NUMBER, DynamoKey, AllIndex, KeysOnlyIndex,
-                     IncludeIndex, GlobalAllIndex, GlobalKeysOnlyIndex,
-                     GlobalIncludeIndex, Table, Throughput, ItemUpdate,
-                     ALL_NEW, ALL_OLD, TOTAL, CheckFailed)
+from dynamo3 import (STRING, NUMBER, DynamoKey, LocalIndex, GlobalIndex, Table,
+                     Throughput, ItemUpdate, ALL_NEW, ALL_OLD, TOTAL,
+                     CheckFailed)
 
 
 class TestCreate(BaseSystemTest):
@@ -36,7 +35,7 @@ class TestCreate(BaseSystemTest):
         hash_key = DynamoKey('id', data_type=STRING)
         range_key = DynamoKey('num', data_type=NUMBER)
         index_field = DynamoKey('name')
-        index = AllIndex('name-index', index_field)
+        index = LocalIndex.all('name-index', index_field)
         table = Table('foobar', hash_key, range_key, [index])
         self.dynamo.create_table(
             'foobar', hash_key, range_key, indexes=[index])
@@ -48,7 +47,7 @@ class TestCreate(BaseSystemTest):
         hash_key = DynamoKey('id', data_type=STRING)
         range_key = DynamoKey('num', data_type=NUMBER)
         index_field = DynamoKey('name')
-        index = KeysOnlyIndex('name-index', index_field)
+        index = LocalIndex.keys('name-index', index_field)
         table = Table('foobar', hash_key, range_key, [index])
         self.dynamo.create_table(
             'foobar', hash_key, range_key, indexes=[index])
@@ -60,8 +59,8 @@ class TestCreate(BaseSystemTest):
         hash_key = DynamoKey('id', data_type=STRING)
         range_key = DynamoKey('num', data_type=NUMBER)
         index_field = DynamoKey('name')
-        index = IncludeIndex('name-index', index_field,
-                             includes=['foo', 'bar'])
+        index = LocalIndex.include('name-index', index_field,
+                                   includes=['foo', 'bar'])
         table = Table('foobar', hash_key, range_key, [index])
         self.dynamo.create_table(
             'foobar', hash_key, range_key, indexes=[index])
@@ -72,7 +71,7 @@ class TestCreate(BaseSystemTest):
         """ Create a table with a global index """
         hash_key = DynamoKey('id', data_type=STRING)
         index_field = DynamoKey('name')
-        index = GlobalAllIndex('name-index', index_field)
+        index = GlobalIndex.all('name-index', index_field)
         table = Table('foobar', hash_key, global_indexes=[index])
         self.dynamo.create_table('foobar', hash_key, global_indexes=[index])
         desc = self.dynamo.describe_table('foobar')
@@ -82,7 +81,7 @@ class TestCreate(BaseSystemTest):
         """ Create a table with a global KeysOnly index """
         hash_key = DynamoKey('id', data_type=STRING)
         index_field = DynamoKey('name')
-        index = GlobalKeysOnlyIndex('name-index', index_field)
+        index = GlobalIndex.keys('name-index', index_field)
         table = Table('foobar', hash_key, global_indexes=[index])
         self.dynamo.create_table('foobar', hash_key, global_indexes=[index])
         desc = self.dynamo.describe_table('foobar')
@@ -92,7 +91,7 @@ class TestCreate(BaseSystemTest):
         """ Create a table with a global Includes index """
         hash_key = DynamoKey('id', data_type=STRING)
         index_field = DynamoKey('name')
-        index = GlobalIncludeIndex(
+        index = GlobalIndex.include(
             'name-index', index_field, includes=['foo', 'bar'])
         table = Table('foobar', hash_key, global_indexes=[index])
         self.dynamo.create_table('foobar', hash_key, global_indexes=[index])
@@ -104,7 +103,7 @@ class TestCreate(BaseSystemTest):
         hash_key = DynamoKey('id', data_type=STRING)
         index_hash = DynamoKey('foo')
         index_range = DynamoKey('bar')
-        index = GlobalAllIndex('foo-index', index_hash, index_range)
+        index = GlobalIndex.all('foo-index', index_hash, index_range)
         table = Table('foobar', hash_key, global_indexes=[index])
         self.dynamo.create_table('foobar', hash_key, global_indexes=[index])
         desc = self.dynamo.describe_table('foobar')
@@ -125,7 +124,7 @@ class TestCreate(BaseSystemTest):
         hash_key = DynamoKey('id', data_type=STRING)
         throughput = Throughput(8, 2)
         index_field = DynamoKey('name')
-        index = GlobalAllIndex(
+        index = GlobalIndex.all(
             'name-index', index_field, throughput=throughput)
         table = Table('foobar', hash_key, global_indexes=[index])
         self.dynamo.create_table(
@@ -151,7 +150,7 @@ class TestUpdateTable(BaseSystemTest):
         """ Update throughput on a global index """
         hash_key = DynamoKey('id', data_type=STRING)
         index_field = DynamoKey('name')
-        index = GlobalAllIndex('name-index', index_field)
+        index = GlobalIndex.all('name-index', index_field)
         self.dynamo.create_table(
             'foobar', hash_key=hash_key, global_indexes=[index])
         tp = Throughput(2, 1)
@@ -163,7 +162,7 @@ class TestUpdateTable(BaseSystemTest):
         """ Update table and global index throughputs """
         hash_key = DynamoKey('id', data_type=STRING)
         index_field = DynamoKey('name')
-        index = GlobalAllIndex('name-index', index_field)
+        index = GlobalIndex.all('name-index', index_field)
         self.dynamo.create_table(
             'foobar', hash_key=hash_key, global_indexes=[index])
         tp = Throughput(2, 1)

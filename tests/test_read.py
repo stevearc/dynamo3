@@ -4,8 +4,7 @@ from __future__ import unicode_literals
 from six.moves import xrange as _xrange  # pylint: disable=F0401
 
 from . import BaseSystemTest, is_number
-from dynamo3 import (STRING, NUMBER, DynamoKey, KeysOnlyIndex, GlobalAllIndex,
-                     TOTAL)
+from dynamo3 import STRING, NUMBER, DynamoKey, LocalIndex, GlobalIndex, TOTAL
 
 
 class TestQuery(BaseSystemTest):
@@ -32,7 +31,7 @@ class TestQuery(BaseSystemTest):
         hash_key = DynamoKey('id', data_type=STRING)
         range_key = DynamoKey('num', data_type=NUMBER)
         index_field = DynamoKey('name')
-        index = KeysOnlyIndex('name-index', index_field)
+        index = LocalIndex.keys('name-index', index_field)
         self.dynamo.create_table('foobar', hash_key, range_key,
                                  indexes=[index])
         item = {
@@ -49,7 +48,7 @@ class TestQuery(BaseSystemTest):
         """ Can query on a global index """
         hash_key = DynamoKey('id', data_type=STRING)
         index_field = DynamoKey('name')
-        index = GlobalAllIndex('name-index', index_field)
+        index = GlobalIndex.all('name-index', index_field)
         self.dynamo.create_table('foobar', hash_key, global_indexes=[index])
         item = {
             'id': 'a',

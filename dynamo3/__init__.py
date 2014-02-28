@@ -5,9 +5,7 @@ import six
 from pprint import pformat
 from six.moves import xrange as _xrange  # pylint: disable=F0401
 
-from .fields import (Throughput, Table, DynamoKey, AllIndex, KeysOnlyIndex,
-                     IncludeIndex, GlobalAllIndex, GlobalKeysOnlyIndex,
-                     GlobalIncludeIndex)
+from .fields import Throughput, Table, DynamoKey, LocalIndex, GlobalIndex
 from .types import (Dynamizer, Binary, STRING, NUMBER, BINARY, STRING_SET,
                     NUMBER_SET, BINARY_SET)
 
