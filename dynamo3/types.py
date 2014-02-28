@@ -2,6 +2,8 @@
 import base64
 import six
 from decimal import Decimal, Context, Clamped, Overflow, Underflow
+from .constants import (NUMBER, STRING, BINARY, NUMBER_SET, STRING_SET,
+                        BINARY_SET)
 
 
 DECIMAL_CONTEXT = Context(
@@ -15,13 +17,6 @@ def float_to_decimal(f):  # pragma: no cover
     numerator, denominator = Decimal(n), Decimal(d)
     return DECIMAL_CONTEXT.divide(numerator, denominator)
 
-
-NUMBER = 'N'
-STRING = 'S'
-BINARY = 'B'
-NUMBER_SET = 'NS'
-STRING_SET = 'SS'
-BINARY_SET = 'BS'
 
 TYPES = {
     'NUMBER': NUMBER,

@@ -53,6 +53,8 @@ class DynamoKey(object):
 
 
 class BaseIndex(object):
+
+    """ Base class for indexes """
     ALL = 'ALL'
     KEYS = 'KEYS_ONLY'
     INCLUDE = 'INCLUDE'
