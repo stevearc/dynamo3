@@ -16,7 +16,6 @@ The 'dynamo' object will be detected and replaced by the nose plugin at
 runtime.
 
 """
-import botocore.session
 import inspect
 import logging
 import nose
@@ -109,10 +108,8 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
                 self._dynamo_local = subprocess.Popen(cmd,
                                                       stdout=subprocess.PIPE,
                                                       stderr=subprocess.STDOUT)
-                session = botocore.session.get_session()
-                session.set_credentials('', '')
                 self._dynamo = DynamoDBConnection.connect_to_host(
-                    port=self.port, session=session)
+                    port=self.port, access_key='', secret_key='')
         return self._dynamo
 
     def startContext(self, context):  # pylint: disable=C0103
