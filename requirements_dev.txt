@@ -3,9 +3,6 @@ tox
 coverage
 pep8
 autopep8
-sphinx
-numpydoc
-sphinx_rtd_theme
 nose
 mock
 bumpversion
