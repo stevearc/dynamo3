@@ -60,6 +60,12 @@ class TestMisc(BaseSystemTest):
         conn = DynamoDBConnection.connect_to_region('us-west-1')
         self.assertIsNotNone(conn.host)
 
+    def test_connect_to_region_creds(self):
+        """ Can connect to a dynamo region with credentials """
+        conn = DynamoDBConnection.connect_to_region(
+            'us-west-1', access_key='abc', secret_key='12345')
+        self.assertIsNotNone(conn.host)
+
     def test_connect_to_host_without_session(self):
         """ Can connect to a dynamo host without passing in a session """
         conn = DynamoDBConnection.connect_to_host()
