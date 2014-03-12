@@ -11,7 +11,4 @@ from .fields import Throughput, Table, DynamoKey, LocalIndex, GlobalIndex
 from .types import Dynamizer, Binary, TYPES, TYPES_REV
 from .util import is_null
 
-try:
-    from ._version import __version__
-except ImportError:  # pragma: no cover
-    __version__ = 'unknown'
+__version__ = '0.1.0'

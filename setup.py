@@ -3,7 +3,6 @@ import os
 import sys
 
 from setuptools import setup, find_packages
-from dynamo3_version import git_version, UpdateVersion
 
 
 HERE = os.path.abspath(os.path.dirname(__file__))
@@ -26,8 +25,7 @@ if sys.version_info[:2] < (2, 7):
 if __name__ == "__main__":
     setup(
         name='dynamo3',
-        version=git_version('dynamo3'),
-        cmdclass={'update_version': UpdateVersion},
+        version='0.1.0',
         description='Python 3 compatible library for DynamoDB',
         long_description=README + '\n\n' + CHANGES,
         classifiers=[

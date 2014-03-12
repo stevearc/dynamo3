@@ -8,3 +8,4 @@ numpydoc
 sphinx_rtd_theme
 nose
 mock
+bumpversion
