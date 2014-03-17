@@ -1,5 +1,8 @@
 Changelog
 =========
+0.1.2
+-----
+* Bug fix: serializing ints fails
 
 0.1.1
 -----
