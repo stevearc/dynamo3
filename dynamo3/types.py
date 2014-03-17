@@ -83,7 +83,7 @@ class Dynamizer(object):
         self.register_encoder(six.binary_type, lambda _,
                               v: (STRING, v.decode('utf-8')))
         for t in six.integer_types:
-            self.register_encoder(t, lambda _, v: (NUMBER, v))
+            self.register_encoder(t, lambda _, v: (NUMBER, six.text_type(v)))
         self.register_encoder(
             float, lambda _, v: (NUMBER, six.text_type(float_to_decimal(v))))
         self.register_encoder(Decimal, lambda _, v:

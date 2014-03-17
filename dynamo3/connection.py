@@ -111,7 +111,8 @@ class DynamoDBConnection(object):
         return self.endpoint.region_name
 
     @classmethod
-    def connect_to_region(cls, region, session=None, **kwargs):
+    def connect_to_region(cls, region, session=None, access_key=None,
+                          secret_key=None, **kwargs):
         """
         Connect to an AWS region.
 
@@ -121,18 +122,25 @@ class DynamoDBConnection(object):
             Name of an AWS region
         session : :class:`~botocore.session.Session`, optional
             The Session object to use for the connection
+        access_key : str, optional
+            If session is None, set this access key when creating the session
+        secret_key : str, optional
+            If session is None, set this secret key when creating the session
         **kwargs : dict
             Keyword arguments to pass to the constructor
 
         """
         if session is None:
             session = botocore.session.get_session()
+            if access_key is not None:
+                session.set_credentials(access_key, secret_key)
         service = session.get_service('dynamodb')
         return cls(service, service.get_endpoint(region), **kwargs)
 
     @classmethod
     def connect_to_host(cls, host='localhost', port=8000, is_secure=False,
-                        session=None, **kwargs):
+                        session=None, access_key=None, secret_key=None,
+                        **kwargs):
         """
         Connect to a specific host.
 
@@ -146,12 +154,18 @@ class DynamoDBConnection(object):
             Enforce https connection (default False)
         session : :class:`~botocore.session.Session`, optional
             The Session object to use for the connection
+        access_key : str, optional
+            If session is None, set this access key when creating the session
+        secret_key : str, optional
+            If session is None, set this secret key when creating the session
         **kwargs : dict
             Keyword arguments to pass to the constructor
 
         """
         if session is None:
             session = botocore.session.get_session()
+            if access_key is not None:
+                session.set_credentials(access_key, secret_key)
         url = "http://%s:%d" % (host, port)
         service = session.get_service('dynamodb')
         endpoint = service.get_endpoint(
