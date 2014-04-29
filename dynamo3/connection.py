@@ -317,13 +317,13 @@ class DynamoDBConnection(object):
 
         Returns
         -------
-        response : :class:`~dynamo3.fields.Table` or bool
-            A Table if the table was deleted, False if no table exists
+        response : bool
+            True if the table was deleted, False if no table exists
 
         """
         try:
-            ret = self.call('DeleteTable', table_name=tablename)
-            return Table.from_response(ret['TableDescription'])
+            self.call('DeleteTable', table_name=tablename)
+            return True
         except DynamoDBError as e:
             if e.kwargs['Code'] == 'ResourceNotFoundException':
                 return False
