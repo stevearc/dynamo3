@@ -90,14 +90,10 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
                     self.region)
             else:
                 # Download DynamoDB Local
-                tmpdir = tempfile.gettempdir()
                 if not os.path.exists(self.path):
                     tarball = urlretrieve(self.link)[0]
                     with closing(tarfile.open(tarball, 'r:gz')) as archive:
-                        name = archive.getnames()[0]
-                        container = name.split('/')[0]
-                        archive.extractall(tmpdir)
-                    shutil.move(os.path.join(tmpdir, container), self.path)
+                        archive.extractall(self.path)
                     os.unlink(tarball)
 
                 # Run the jar
