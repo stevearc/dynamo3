@@ -1,5 +1,10 @@
 Changelog
 =========
+0.1.3
+-----
+* Bug fix: sometimes crash after deleting table
+* Bug fix: DynamoDB Local nose plugin fails
+
 0.1.2
 -----
 * Bug fix: serializing ints fails
