@@ -4,54 +4,16 @@ import time
 import botocore.session
 import six
 
-from .batch import BatchWriter
+from .batch import BatchWriter, encode_query_kwargs
 from .constants import NONE
 from .exception import raise_if_error, DynamoDBError, ThroughputException
 from .fields import Throughput, Table
 from .result import ResultSet, GetResultSet, Result
 from .types import Dynamizer
 from .util import is_null
+import logging
 
-
-CONDITIONS = {
-    'eq': 'EQ',
-    'ne': 'NE',
-    'le': 'LE',
-    'lte': 'LE',
-    'lt': 'LT',
-    'ge': 'GE',
-    'gte': 'GE',
-    'gt': 'GT',
-    'beginswith': 'BEGINS_WITH',
-    'begins_with': 'BEGINS_WITH',
-    'between': 'BETWEEN',
-    'in': 'IN',
-    'contains': 'CONTAINS',
-    'ncontains': 'NOT_CONTAINS',
-}
-
-
-def encode_query_kwargs(dynamizer, kwargs):
-    """ Encode query constraints in Dynamo format """
-    ret = {}
-    for k, v in six.iteritems(kwargs):
-        if '__' not in k:
-            raise TypeError("Invalid query argument '%s'" % k)
-        name, condition_key = k.split('__')
-        # null is a special case
-        if condition_key == 'null':
-            ret[name] = {
-                'ComparisonOperator': 'NULL' if v else 'NOT_NULL'
-            }
-            continue
-        elif not isinstance(v, (list, tuple, set, frozenset)):
-            v = (v,)
-        ret[name] = {
-            'AttributeValueList': [dynamizer.encode(value) for value in v],
-            'ComparisonOperator': CONDITIONS[condition_key],
-        }
-    return ret
-
+LOG = logging.getLogger(__name__)
 
 def build_expected(dynamizer, expected):
     """ Build the Expected parameters from a dict """
@@ -331,7 +293,7 @@ class DynamoDBConnection(object):
                 raise
 
     def put_item(self, tablename, item, expected=None, returns=NONE,
-                 return_capacity=NONE):
+                 return_capacity=NONE, expect_or=False, **kwargs):
         """
         Store an item, overwriting existing data
 
@@ -342,6 +304,7 @@ class DynamoDBConnection(object):
         item : dict
             Item data
         expected : dict, optional
+            DEPRECATED (use **kwargs instead).
             If present, will check the values in Dynamo before performing the
             write. If values do not match, will raise an exception. (Using None
             as a value checks that the field does not exist).
@@ -352,15 +315,26 @@ class DynamoDBConnection(object):
             INDEXES will return the consumed capacity for indexes, TOTAL will
             return the consumed capacity for the table and the indexes.
             (default NONE)
+        expect_or : bool, optional
+            If True, the **kwargs conditionals will be OR'd together. If False,
+            they will be AND'd. (default False).
+        **kwargs : dict, optional
+            Conditional filter on the PUT. Same format as the kwargs for
+            :meth:`~.scan`.
 
         """
-        kwargs = {}
-        if expected is not None:
-            kwargs['expected'] = build_expected(self.dynamizer, expected)
+        keywords = {}
+        if kwargs:
+            keywords['expected'] = encode_query_kwargs(self.dynamizer, kwargs)
+            if len(keywords['expected']) > 1:
+                keywords['conditional_operator'] = 'OR' if expect_or else 'AND'
+        elif expected is not None:
+            LOG.warn("Using deprecated argument 'expected' for put_item")
+            keywords['expected'] = build_expected(self.dynamizer, expected)
         item = self.dynamizer.encode_keys(item)
         ret = self.call('PutItem', table_name=tablename, item=item,
                         return_values=returns,
-                        return_consumed_capacity=return_capacity, **kwargs)
+                        return_consumed_capacity=return_capacity, **keywords)
         if ret:
             return Result(self.dynamizer, ret, 'Attributes')
 
@@ -396,7 +370,7 @@ class DynamoDBConnection(object):
         return Result(self.dynamizer, data, 'Item')
 
     def delete_item(self, tablename, key, expected=None, returns=NONE,
-                    return_capacity=NONE):
+                    return_capacity=NONE, expect_or=False, **kwargs):
         """
         Delete an item
 
@@ -408,6 +382,7 @@ class DynamoDBConnection(object):
             Primary key dict specifying the hash key and, if applicable, the
             range key of the item.
         expected : dict, optional
+            DEPRECATED (use **kwargs instead).
             If present, will check the values in Dynamo before performing the
             write. If values do not match, will raise an exception. (Using None
             as a value checks that the field does not exist).
@@ -417,16 +392,27 @@ class DynamoDBConnection(object):
             INDEXES will return the consumed capacity for indexes, TOTAL will
             return the consumed capacity for the table and the indexes.
             (default NONE)
+        expect_or : bool, optional
+            If True, the **kwargs conditionals will be OR'd together. If False,
+            they will be AND'd. (default False).
+        **kwargs : dict, optional
+            Conditional filter on the DELETE. Same format as the kwargs for
+            :meth:`~.scan`.
 
         """
         key = self.dynamizer.encode_keys(key)
-        kwargs = {}
-        if expected is not None:
-            kwargs['expected'] = build_expected(self.dynamizer, expected)
+        keywords = {}
+        if kwargs:
+            keywords['expected'] = encode_query_kwargs(self.dynamizer, kwargs)
+            if len(keywords['expected']) > 1:
+                keywords['conditional_operator'] = 'OR' if expect_or else 'AND'
+        elif expected is not None:
+            LOG.warn("Using deprecated argument 'expected' for delete_item")
+            keywords['expected'] = build_expected(self.dynamizer, expected)
         ret = self.call('DeleteItem', table_name=tablename, key=key,
                         return_values=returns,
                         return_consumed_capacity=return_capacity,
-                        **kwargs)
+                        **keywords)
         if ret:
             return Result(self.dynamizer, ret, 'Attributes')
 
@@ -480,7 +466,7 @@ class DynamoDBConnection(object):
                             return_capacity=return_capacity)
 
     def update_item(self, tablename, key, updates, returns=NONE,
-                    return_capacity=NONE):
+                    return_capacity=NONE, expect_or=False):
         """
         Update a single item in a table
 
@@ -500,15 +486,20 @@ class DynamoDBConnection(object):
             INDEXES will return the consumed capacity for indexes, TOTAL will
             return the consumed capacity for the table and the indexes.
             (default NONE)
+        expect_or : bool, optional
+            If True, the updates conditionals will be OR'd together. If False,
+            they will be AND'd. (default False).
 
         """
         key = self.dynamizer.encode_keys(key)
         attr_updates = {}
         expected = {}
+        kwargs = {}
         for update in updates:
             attr_updates.update(update.attrs(self.dynamizer))
             expected.update(update.expected(self.dynamizer))
-        kwargs = {}
+            if len(expected) > 1:
+                kwargs['conditional_operator'] = 'OR' if expect_or else 'AND'
         if expected:
             kwargs['expected'] = expected
 

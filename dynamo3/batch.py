@@ -8,6 +8,23 @@ from .util import is_null
 LOG = logging.getLogger(__name__)
 NO_ARG = object()
 
+CONDITIONS = {
+    'eq': 'EQ',
+    'ne': 'NE',
+    'le': 'LE',
+    'lte': 'LE',
+    'lt': 'LT',
+    'ge': 'GE',
+    'gte': 'GE',
+    'gt': 'GT',
+    'beginswith': 'BEGINS_WITH',
+    'begins_with': 'BEGINS_WITH',
+    'between': 'BETWEEN',
+    'in': 'IN',
+    'contains': 'CONTAINS',
+    'ncontains': 'NOT_CONTAINS',
+}
+
 
 class ItemUpdate(object):
 
@@ -26,8 +43,22 @@ class ItemUpdate(object):
     value : object, optional
         The new value for the field
     expected : object, optional
+        DEPRECATED (use the comparison **kwargs instead).
         The expected current value for the field (None expects value to not
         exist)
+    **kwargs : dict, optional
+        Expected condition. See below.
+
+    Examples
+    --------
+    You may pass in expected conditions using the operator as the key.
+
+    .. code-block:: python
+
+        # Put if value doesn't exist
+        ItemUpdate.put('foo', 'bar', eq=None)
+        # Add if value is less than 10
+        ItemUpdate.add('foo', 14, lt=10)
 
     """
 
@@ -35,7 +66,7 @@ class ItemUpdate(object):
     DELETE = 'DELETE'
     PUT = 'PUT'
 
-    def __init__(self, action, key, value=None, expected=NO_ARG):
+    def __init__(self, action, key, value=None, expected=NO_ARG, **kwargs):
         if is_null(value):
             if action == self.ADD:
                 raise ValueError("Update must set a value for non-delete "
@@ -46,7 +77,11 @@ class ItemUpdate(object):
         self.action = action
         self.key = key
         self.value = value
+        if expected is not NO_ARG:
+            LOG.warn("Using deprecated argument 'expected' in ItemUpdate")
         self._expected = expected
+        self._expect_kwargs = dict([(key + '__' + k, v) for k, v in
+                                    six.iteritems(kwargs)])
 
     @classmethod
     def put(cls, *args, **kwargs):
@@ -76,6 +111,8 @@ class ItemUpdate(object):
 
     def expected(self, dynamizer):
         """ Get the expected values for the update """
+        if self._expect_kwargs:
+            return encode_query_kwargs(dynamizer, self._expect_kwargs)
         if self._expected is not NO_ARG:
             ret = {}
             if is_null(self._expected):
@@ -115,6 +152,28 @@ def _encode_write(dynamizer, data, action, key):
 def encode_put(dynamizer, data):
     """ Encode an item put command """
     return _encode_write(dynamizer, data, 'PutRequest', 'Item')
+
+
+def encode_query_kwargs(dynamizer, kwargs):
+    """ Encode query constraints in Dynamo format """
+    ret = {}
+    for k, v in six.iteritems(kwargs):
+        if '__' not in k:
+            raise TypeError("Invalid query argument '%s'" % k)
+        name, condition_key = k.split('__')
+        # null is a special case
+        if condition_key == 'null':
+            ret[name] = {
+                'ComparisonOperator': 'NULL' if v else 'NOT_NULL'
+            }
+            continue
+        elif not isinstance(v, (list, tuple, set, frozenset)):
+            v = (v,)
+        ret[name] = {
+            'AttributeValueList': [dynamizer.encode(value) for value in v],
+            'ComparisonOperator': CONDITIONS[condition_key],
+        }
+    return ret
 
 
 def encode_delete(dynamizer, data):
