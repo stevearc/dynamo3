@@ -184,6 +184,40 @@ class TestQuery(BaseSystemTest):
         with self.assertRaises(TypeError):
             self.dynamo.query('foobar', id__eq='a', num_lt=3)
 
+    def test_filter(self):
+        """ Query can filter returned results """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'num': 1, 'a': 'a'})
+        self.dynamo.put_item('foobar', {'id': 'a', 'num': 2, 'b': 'b'})
+        results = self.dynamo.query('foobar', filter={'a__eq': 'a'},
+                                    id__eq='a')
+        self.assertItemsEqual(list(results), [{'id': 'a', 'num': 1, 'a': 'a'}])
+
+    def test_filter_and(self):
+        """ Can 'and' the filter arguments """
+        self.make_table()
+        a = {'id': 'a', 'num': 1, 'a': 'a', 'b': 'a'}
+        self.dynamo.put_item('foobar', a)
+        b = {'id': 'a', 'num': 2, 'a': 'a', 'b': 'b'}
+        self.dynamo.put_item('foobar', b)
+        results = self.dynamo.query('foobar',
+                                    filter={'a__eq': 'a', 'b__eq': 'a'},
+                                    id__eq='a')
+        self.assertItemsEqual(list(results), [a])
+
+    def test_filter_or(self):
+        """ Can 'or' the filter arguments """
+        self.make_table()
+        a = {'id': 'a', 'num': 1, 'a': 'a', 'b': 'a'}
+        self.dynamo.put_item('foobar', a)
+        b = {'id': 'a', 'num': 2, 'a': 'a', 'b': 'b'}
+        self.dynamo.put_item('foobar', b)
+        results = self.dynamo.query('foobar',
+                                    filter={'a__eq': 'a', 'b__eq': 'a'},
+                                    filter_or=True,
+                                    id__eq='a')
+        self.assertItemsEqual(list(results), [a, b])
+
 
 class TestScan(BaseSystemTest):
 
@@ -350,6 +384,24 @@ class TestScan(BaseSystemTest):
         self.dynamo.put_item('foobar', item)
         ret = self.dynamo.scan('foobar', num__null=False)
         self.assertItemsEqual(list(ret), [item])
+
+    def test_filter_and(self):
+        """ Multiple filter args are ANDed together """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'a': 'a', 'b': 'a'})
+        self.dynamo.put_item('foobar', {'id': 'b', 'a': 'a', 'b': 'b'})
+        ret = self.dynamo.scan('foobar', a__eq='a', b__eq='a')
+        self.assertItemsEqual(list(ret), [{'id': 'a', 'a': 'a', 'b': 'a'}])
+
+    def test_filter_or(self):
+        """ Can 'or' the filter arguments """
+        self.make_table()
+        a = {'id': 'a', 'a': 'a', 'b': 'a'}
+        self.dynamo.put_item('foobar', a)
+        b = {'id': 'b', 'a': 'a', 'b': 'b'}
+        self.dynamo.put_item('foobar', b)
+        ret = self.dynamo.scan('foobar', filter_or=True, a__eq='a', b__eq='a')
+        self.assertItemsEqual(list(ret), [a, b])
 
 
 class TestBatchGet(BaseSystemTest):

@@ -521,7 +521,7 @@ class DynamoDBConnection(object):
             return Result(self.dynamizer, result, 'Attributes')
 
     def scan(self, tablename, attributes=None, count=False, limit=None,
-             return_capacity=NONE, **kwargs):
+             return_capacity=NONE, filter_or=False, **kwargs):
         """
         Perform a full-table scan
 
@@ -540,6 +540,9 @@ class DynamoDBConnection(object):
             INDEXES will return the consumed capacity for indexes, TOTAL will
             return the consumed capacity for the table and the indexes.
             (default NONE)
+        filter_or : bool, optional
+            If True, multiple filter kwargs will be OR'd together. If False,
+            they will be AND'd together. (default False)
         **kwargs : dict, optional
             Filter arguments (examples below)
 
@@ -566,6 +569,8 @@ class DynamoDBConnection(object):
         if kwargs:
             keywords['scan_filter'] = encode_query_kwargs(
                 self.dynamizer, kwargs)
+            if len(kwargs) > 1:
+                keywords['conditional_operator'] = 'OR' if filter_or else 'AND'
         if count:
             keywords['select'] = 'COUNT'
             return self.call('Scan', **keywords)['Count']
@@ -574,7 +579,7 @@ class DynamoDBConnection(object):
 
     def query(self, tablename, attributes=None, consistent=False, count=False,
               index=None, limit=None, desc=False, return_capacity=NONE,
-              **kwargs):
+              filter=None, filter_or=False, **kwargs):
         """
         Perform an index query on a table
 
@@ -599,6 +604,13 @@ class DynamoDBConnection(object):
             INDEXES will return the consumed capacity for indexes, TOTAL will
             return the consumed capacity for the table and the indexes.
             (default NONE)
+        filter : dict, optional
+            Query arguments. Same format as **kwargs, but these arguments
+            filter the results on the server before they are returned. They
+            will NOT use an index, as that is what the **kwargs are for.
+        filter_or : bool, optional
+            If True, multiple filter args will be OR'd together. If False, they
+            will be AND'd together. (default False)
         **kwargs : dict, optional
             Query arguments (examples below)
 
@@ -625,6 +637,12 @@ class DynamoDBConnection(object):
             keywords['index_name'] = index
         if limit is not None:
             keywords['limit'] = limit
+        if filter is not None:
+            if len(filter) > 1:
+                keywords['conditional_operator'] = 'OR' if filter_or else 'AND'
+            keywords['query_filter'] = encode_query_kwargs(self.dynamizer,
+                                                           filter)
+
         keywords['scan_index_forward'] = not desc
 
         keywords['key_conditions'] = encode_query_kwargs(self.dynamizer,
