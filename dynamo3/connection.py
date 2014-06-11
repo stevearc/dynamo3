@@ -2,6 +2,7 @@
 import time
 
 import botocore.session
+import logging
 import six
 
 from .batch import BatchWriter, encode_query_kwargs
@@ -11,7 +12,7 @@ from .fields import Throughput, Table
 from .result import ResultSet, GetResultSet, Result
 from .types import Dynamizer
 from .util import is_null
-import logging
+
 
 LOG = logging.getLogger(__name__)
 
@@ -467,7 +468,7 @@ class DynamoDBConnection(object):
                             return_capacity=return_capacity)
 
     def update_item(self, tablename, key, updates, returns=NONE,
-                    return_capacity=NONE, expect_or=False):
+                    return_capacity=NONE, expect_or=False, **kwargs):
         """
         Update a single item in a table
 
@@ -490,25 +491,44 @@ class DynamoDBConnection(object):
         expect_or : bool, optional
             If True, the updates conditionals will be OR'd together. If False,
             they will be AND'd. (default False).
+        **kwargs : dict, optional
+            Conditional filter on the PUT. Same format as the kwargs for
+            :meth:`~.scan`.
+
+        Notes
+        -----
+        There are two ways to specify the expected values of fields. The
+        simplest is via the list of updates. Each updated field may specify a
+        constraint on the current value of that field. You may pass additional
+        constraints in via the **kwargs the same way you would for put_item.
+        This is necessary if you have constraints on fields that are not being
+        updated.
 
         """
         key = self.dynamizer.encode_keys(key)
         attr_updates = {}
         expected = {}
-        kwargs = {}
+        keywords = {}
         for update in updates:
             attr_updates.update(update.attrs(self.dynamizer))
             expected.update(update.expected(self.dynamizer))
-            if len(expected) > 1:
-                kwargs['conditional_operator'] = 'OR' if expect_or else 'AND'
+
+        # Pull the 'expected' constraints from the kwargs
+        for k, v in six.iteritems(encode_query_kwargs(self.dynamizer, kwargs)):
+            if k in expected:
+                raise ValueError("Cannot have more than one condition on a single field")
+            expected[k] = v
+
         if expected:
-            kwargs['expected'] = expected
+            keywords['expected'] = expected
+            if len(expected) > 1:
+                keywords['conditional_operator'] = 'OR' if expect_or else 'AND'
 
         result = self.call('UpdateItem', table_name=tablename, key=key,
                            attribute_updates=attr_updates,
                            return_values=returns,
                            return_consumed_capacity=return_capacity,
-                           **kwargs)
+                           **keywords)
         if result:
             return Result(self.dynamizer, result, 'Attributes')
 

@@ -80,6 +80,8 @@ class ItemUpdate(object):
         if expected is not NO_ARG:
             LOG.warn("Using deprecated argument 'expected' in ItemUpdate")
         self._expected = expected
+        if len(kwargs) > 1:
+            raise ValueError("Cannot have more than one condition on a single field")
         self._expect_kwargs = dict([(key + '__' + k, v) for k, v in
                                     six.iteritems(kwargs)])
 

@@ -346,9 +346,9 @@ class TestUpdateItem(BaseSystemTest):
         """ Expected conditionals can be OR'd together """
         self.make_table()
         self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
-        update = ItemUpdate.put('foo', 10, lt=5, between=(5, 7))
+        update = ItemUpdate.put('foo', 10, lt=5)
         self.dynamo.update_item('foobar', {'id': 'a'}, [update],
-                                expect_or=True)
+                                expect_or=True, baz__null=True)
 
     def test_write_converts_none(self):
         """ Write operation converts None values to a DELETE """
@@ -426,7 +426,7 @@ class TestPutItem(BaseSystemTest):
         self.make_table()
         self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
         self.dynamo.put_item('foobar', {'id': 'a', 'foo': 13},
-                             expect_or=True, foo__lt=4, foo__between=(5, 7))
+                             expect_or=True, foo__lt=4, baz__null=True)
 
     def test_return_item(self):
         """ PutItem can return the item that was Put """
@@ -510,4 +510,4 @@ class TestDeleteItem(BaseSystemTest):
         self.make_table()
         self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
         self.dynamo.delete_item('foobar', {'id': 'a'}, expect_or=True,
-                                foo__lt=4, foo__between=(5, 7))
+                                foo__lt=4, baz__null=True)
