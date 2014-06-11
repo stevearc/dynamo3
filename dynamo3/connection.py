@@ -15,6 +15,7 @@ import logging
 
 LOG = logging.getLogger(__name__)
 
+
 def build_expected(dynamizer, expected):
     """ Build the Expected parameters from a dict """
     ret = {}

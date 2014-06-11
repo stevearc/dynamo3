@@ -428,7 +428,6 @@ class TestPutItem(BaseSystemTest):
         self.dynamo.put_item('foobar', {'id': 'a', 'foo': 13},
                              expect_or=True, foo__lt=4, foo__between=(5, 7))
 
-
     def test_return_item(self):
         """ PutItem can return the item that was Put """
         self.make_table()
