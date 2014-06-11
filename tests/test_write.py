@@ -350,6 +350,19 @@ class TestUpdateItem(BaseSystemTest):
         self.dynamo.update_item('foobar', {'id': 'a'}, [update],
                                 expect_or=True, baz__null=True)
 
+    def test_expect_dupe_fail(self):
+        """ Update cannot expect a field to meet multiple constraints """
+        self.make_table()
+        with self.assertRaises(ValueError):
+            update = ItemUpdate.put('foo', 10, lt=5, gt=1)
+
+    def test_expect_dupe_fail2(self):
+        """ Update cannot expect a field to meet multiple constraints """
+        self.make_table()
+        update = ItemUpdate.put('foo', 10, lt=5)
+        with self.assertRaises(ValueError):
+            self.dynamo.update_item('foobar', {'id': 'a'}, [update], foo__gt=1)
+
     def test_write_converts_none(self):
         """ Write operation converts None values to a DELETE """
         hash_key = DynamoKey('id', data_type=STRING)
