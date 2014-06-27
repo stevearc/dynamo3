@@ -318,7 +318,7 @@ class TestUpdateItem(BaseSystemTest):
         self.assertTrue(isinstance(ret.indexes, dict))
         self.assertTrue(isinstance(ret.global_indexes, dict))
 
-    def test_expect_not_exists(self):
+    def test_expect_not_exists_deprecated(self):
         """ Update can expect a field to not exist """
         self.make_table()
         self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'bar'})
@@ -326,13 +326,42 @@ class TestUpdateItem(BaseSystemTest):
         with self.assertRaises(CheckFailed):
             self.dynamo.update_item('foobar', {'id': 'a'}, [update])
 
-    def test_expect_field(self):
+    def test_expect_field_deprecated(self):
         """ Update can expect a field to have a value """
         self.make_table()
         self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'bar'})
         update = ItemUpdate.put('foo', 'baz', expected='wat')
         with self.assertRaises(CheckFailed):
             self.dynamo.update_item('foobar', {'id': 'a'}, [update])
+
+    def test_expect_condition(self):
+        """ Update can expect a field to meet a condition """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
+        update = ItemUpdate.put('foo', 10, lt=5)
+        with self.assertRaises(CheckFailed):
+            self.dynamo.update_item('foobar', {'id': 'a'}, [update])
+
+    def test_expect_condition_or(self):
+        """ Expected conditionals can be OR'd together """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
+        update = ItemUpdate.put('foo', 10, lt=5)
+        self.dynamo.update_item('foobar', {'id': 'a'}, [update],
+                                expect_or=True, baz__null=True)
+
+    def test_expect_dupe_fail(self):
+        """ Update cannot expect a field to meet multiple constraints """
+        self.make_table()
+        with self.assertRaises(ValueError):
+            update = ItemUpdate.put('foo', 10, lt=5, gt=1)
+
+    def test_expect_dupe_fail2(self):
+        """ Update cannot expect a field to meet multiple constraints """
+        self.make_table()
+        update = ItemUpdate.put('foo', 10, lt=5)
+        with self.assertRaises(ValueError):
+            self.dynamo.update_item('foobar', {'id': 'a'}, [update], foo__gt=1)
 
     def test_write_converts_none(self):
         """ Write operation converts None values to a DELETE """
@@ -381,7 +410,7 @@ class TestPutItem(BaseSystemTest):
         ret = self.dynamo.get_item('foobar', {'id': 'a'})
         self.assertEqual(ret, {'id': 'a', 'foo': 'baz'})
 
-    def test_expect_not_exists(self):
+    def test_expect_not_exists_deprecated(self):
         """ Can expect a field to not exist """
         self.make_table()
         self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'bar'})
@@ -389,13 +418,28 @@ class TestPutItem(BaseSystemTest):
             self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'baz'},
                                  expected={'foo': None})
 
-    def test_expect_field(self):
+    def test_expect_field_deprecated(self):
         """ Can expect a field to have a value """
         self.make_table()
         self.dynamo.put_item('foobar', {'id': 'a'})
         with self.assertRaises(CheckFailed):
             self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'baz'},
                                  expected={'foo': 'bar'})
+
+    def test_expect_condition(self):
+        """ Put can expect a field to meet a condition """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
+        with self.assertRaises(CheckFailed):
+            self.dynamo.put_item('foobar', {'id': 'a', 'foo': 13},
+                                 foo__lt=4)
+
+    def test_expect_condition_or(self):
+        """ Expected conditionals can be OR'd together """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 13},
+                             expect_or=True, foo__lt=4, baz__null=True)
 
     def test_return_item(self):
         """ PutItem can return the item that was Put """
@@ -453,16 +497,30 @@ class TestDeleteItem(BaseSystemTest):
         self.assertTrue(isinstance(ret.indexes, dict))
         self.assertTrue(isinstance(ret.global_indexes, dict))
 
-    def test_expect_not_exists(self):
+    def test_expect_not_exists_deprecated(self):
         """ Delete can expect a field to not exist """
         self.make_table()
         self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'bar'})
         with self.assertRaises(CheckFailed):
             self.dynamo.delete_item('foobar', {'id': 'a'}, {'foo': None})
 
-    def test_expect_field(self):
+    def test_expect_field_deprecated(self):
         """ Delete can expect a field to have a value """
         self.make_table()
         self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'bar'})
         with self.assertRaises(CheckFailed):
             self.dynamo.delete_item('foobar', {'id': 'a'}, {'foo': 'baz'})
+
+    def test_expect_condition(self):
+        """ Delete can expect a field to meet a condition """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
+        with self.assertRaises(CheckFailed):
+            self.dynamo.delete_item('foobar', {'id': 'a'}, foo__lt=4)
+
+    def test_expect_condition_or(self):
+        """ Expected conditionals can be OR'd together """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
+        self.dynamo.delete_item('foobar', {'id': 'a'}, expect_or=True,
+                                foo__lt=4, baz__null=True)
