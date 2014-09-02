@@ -1,5 +1,9 @@
 Changelog
 =========
+0.2.1
+-----
+* Feature: New, unified ``connect`` method
+
 0.2.0
 -----
 * Feature: More expressive 'expected' conditionals

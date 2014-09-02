@@ -86,8 +86,7 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
         if self._dynamo is None:
             if self.region is not None:  # pragma: no cover
                 # Connect to live DynamoDB Region
-                self._dynamo = DynamoDBConnection.connect_to_region(
-                    self.region)
+                self._dynamo = DynamoDBConnection.connect(self.region)
             else:
                 # Download DynamoDB Local
                 if not os.path.exists(self.path):
@@ -104,8 +103,9 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
                 self._dynamo_local = subprocess.Popen(cmd,
                                                       stdout=subprocess.PIPE,
                                                       stderr=subprocess.STDOUT)
-                self._dynamo = DynamoDBConnection.connect_to_host(
-                    port=self.port, access_key='', secret_key='')
+                self._dynamo = DynamoDBConnection.connect(
+                    'us-west-1', access_key='', secret_key='',
+                    host='localhost', port=self.port, is_secure=False)
         return self._dynamo
 
     def startContext(self, context):  # pylint: disable=C0103
