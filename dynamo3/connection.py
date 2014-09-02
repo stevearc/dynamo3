@@ -80,6 +80,8 @@ class DynamoDBConnection(object):
         """
         Connect to an AWS region.
 
+        This method has been deprecated in favor of :meth:`~.connect`
+
         Parameters
         ----------
         region : str
@@ -108,6 +110,8 @@ class DynamoDBConnection(object):
         """
         Connect to a specific host.
 
+        This method has been deprecated in favor of :meth:`~.connect`
+
         Parameters
         ----------
         host : str, optional
@@ -134,6 +138,45 @@ class DynamoDBConnection(object):
         service = session.get_service('dynamodb')
         endpoint = service.get_endpoint(
             'local', endpoint_url=url, is_secure=is_secure)
+        return cls(service, endpoint, **kwargs)
+
+    @classmethod
+    def connect(cls, region, session=None, access_key=None, secret_key=None,
+                host=None, port=80, is_secure=True, **kwargs):
+        """
+        Connect to an AWS region.
+
+        Parameters
+        ----------
+        region : str
+            Name of an AWS region
+        session : :class:`~botocore.session.Session`, optional
+            The Session object to use for the connection
+        access_key : str, optional
+            If session is None, set this access key when creating the session
+        secret_key : str, optional
+            If session is None, set this secret key when creating the session
+        host : str, optional
+            Address of the host. Use this to connect to a local instance.
+        port : int, optional
+            Connect to the host on this port (default 80)
+        is_secure : bool, optional
+            Enforce https connection (default True)
+        **kwargs : dict
+            Keyword arguments to pass to the constructor
+
+        """
+        if session is None:
+            session = botocore.session.get_session()
+            if access_key is not None:
+                session.set_credentials(access_key, secret_key)
+        service = session.get_service('dynamodb')
+        url = None
+        if host is not None:
+            protocol = 'https' if is_secure else 'http'
+            url = "%s://%s:%d" % (protocol, host, port)
+        endpoint = service.get_endpoint(region, endpoint_url=url,
+                                        is_secure=is_secure)
         return cls(service, endpoint, **kwargs)
 
     def call(self, command, **kwargs):
