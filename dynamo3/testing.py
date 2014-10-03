@@ -66,7 +66,11 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
         parser.add_option('--dynamo-link', default=DYNAMO_LOCAL,
                           help="The link to the dynamodb local server code "
                           "(default '%s')" % DYNAMO_LOCAL)
-        parser.add_option('--dynamo-region',
+        default_region = 'us-east-1'
+        parser.add_option('--dynamo-region', default=default_region,
+                          help="Connect to this AWS region (default %s)" %
+                          default_region)
+        parser.add_option('--dynamo-live', action='store_true',
                           help="Run tests on ACTUAL DynamoDB region. "
                           "Standard AWS charges apply. "
                           "This will destroy all tables you have in the "
@@ -78,13 +82,14 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
         self.path = options.dynamo_path
         self.link = options.dynamo_link
         self.region = options.dynamo_region
+        self.live = options.dynamo_live
         logging.getLogger('botocore').setLevel(logging.WARNING)
 
     @property
     def dynamo(self):
         """ Lazy loading of the dynamo connection """
         if self._dynamo is None:
-            if self.region is not None:  # pragma: no cover
+            if self.live:  # pragma: no cover
                 # Connect to live DynamoDB Region
                 self._dynamo = DynamoDBConnection.connect(self.region)
             else:
@@ -104,7 +109,7 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
                                                       stdout=subprocess.PIPE,
                                                       stderr=subprocess.STDOUT)
                 self._dynamo = DynamoDBConnection.connect(
-                    'us-west-1', access_key='', secret_key='',
+                    self.region, access_key='', secret_key='',
                     host='localhost', port=self.port, is_secure=False)
         return self._dynamo
 
