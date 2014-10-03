@@ -1,5 +1,9 @@
 Changelog
 =========
+0.2.2
+-----
+* Tweak: Nose plugin allows setting region when connecting to DynamoDB Local
+
 0.2.1
 -----
 * Feature: New, unified ``connect`` method
