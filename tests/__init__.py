@@ -1,11 +1,11 @@
 """ Tests for Dynamo3 """
 from __future__ import unicode_literals
 
+import six
 from decimal import Decimal
 from mock import patch, MagicMock
-import six
-from six.moves.urllib.parse import urlparse  # pylint: disable=F0401,E0611
 from six.moves.cPickle import dumps, loads  # pylint: disable=F0401,E0611
+from six.moves.urllib.parse import urlparse  # pylint: disable=F0401,E0611
 
 from dynamo3 import (DynamoDBConnection, Binary, DynamoKey, Dynamizer, STRING,
                      ThroughputException)
@@ -225,6 +225,71 @@ class TestDataTypes(BaseSystemTest):
         """ Binary must wrap a string type """
         with self.assertRaises(TypeError):
             Binary(2)
+
+    def test_bool(self):
+        """ Store and retrieve a boolean """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'abc', 'b': True})
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item['b'], True)
+        self.assertTrue(isinstance(item['b'], bool))
+
+    def test_list(self):
+        """ Store and retrieve a list """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'abc', 'l': ['a', 1, False]})
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item['l'], ['a', 1, False])
+
+    def test_dict(self):
+        """ Store and retrieve a dict """
+        self.make_table()
+        data = {
+            'i': 1,
+            's': 'abc',
+            'n': None,
+            'l': ['a', 1, True],
+            'b': False,
+        }
+        self.dynamo.put_item('foobar', {'id': 'abc', 'd': data})
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item['d'], data)
+
+    def test_nested_dict(self):
+        """ Store and retrieve a nested dict """
+        self.make_table()
+        data = {
+            's': 'abc',
+            'd': {
+                'i': 42,
+            },
+        }
+        self.dynamo.put_item('foobar', {'id': 'abc', 'd': data})
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item['d'], data)
+
+    def test_nested_list(self):
+        """ Store and retrieve a nested list """
+        self.make_table()
+        data = [
+            1,
+            [
+                True,
+                None,
+                'abc',
+            ],
+        ]
+        self.dynamo.put_item('foobar', {'id': 'abc', 'l': data})
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item['l'], data)
+
+    def test_unrecognized_type(self):
+        """ Dynamizer throws error on unrecognized type """
+        value = {
+            'ASDF': 'abc',
+        }
+        with self.assertRaises(TypeError):
+            self.dynamo.dynamizer.decode(value)
 
 
 class TestDynamizer(unittest.TestCase):

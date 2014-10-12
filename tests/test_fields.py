@@ -1,5 +1,7 @@
 """ Tests for dynamo3.fields """
 from dynamo3 import DynamoKey, LocalIndex, GlobalIndex, Throughput, Table
+
+
 try:
     import unittest2 as unittest  # pylint: disable=F0401
 except ImportError:
@@ -9,6 +11,7 @@ except ImportError:
 class TestEqHash(unittest.TestCase):
 
     """ Tests for equality and hash methods """
+
     def test_dynamo_key_eq(self):
         """ Dynamo keys should be equal if names are equal """
         a, b = DynamoKey('foo'), DynamoKey('foo')
