@@ -169,7 +169,7 @@ def encode_query_kwargs(dynamizer, kwargs):
                 'ComparisonOperator': 'NULL' if v else 'NOT_NULL'
             }
             continue
-        elif not isinstance(v, (list, tuple, set, frozenset)):
+        elif condition_key not in ('in', 'between'):
             v = (v,)
         ret[name] = {
             'AttributeValueList': [dynamizer.encode(value) for value in v],
