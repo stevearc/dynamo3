@@ -7,6 +7,10 @@ BINARY = 'B'
 NUMBER_SET = 'NS'
 STRING_SET = 'SS'
 BINARY_SET = 'BS'
+LIST = 'L'
+BOOL = 'BOOL'
+MAP = 'M'
+NULL = 'NULL'
 
 NONE = 'NONE'
 

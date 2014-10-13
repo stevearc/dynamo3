@@ -38,8 +38,8 @@ EXC = {
 
 def raise_if_error(kwargs, response, data):
     """ Check a response and raise the correct exception if needed """
-    if 'Errors' in data:
-        error = data['Errors'][0]
+    if 'Error' in data:
+        error = data['Error']
         error.setdefault('Message', '')
         err_class = EXC.get(error['Code'], DynamoDBError)
         raise err_class(response.status_code, args=pformat(kwargs),

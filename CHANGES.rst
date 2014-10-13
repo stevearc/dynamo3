@@ -1,5 +1,11 @@
 Changelog
 =========
+0.3.0
+-----
+* **Breakage**: Dropping support for python 3.2 due to lack of botocore support
+* Feature: Support JSON document data types
+Features thanks to DynamoDB upgrades: https://aws.amazon.com/blogs/aws/dynamodb-update-json-and-more/
+
 0.2.2
 -----
 * Tweak: Nose plugin allows setting region when connecting to DynamoDB Local

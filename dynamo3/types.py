@@ -2,8 +2,9 @@
 import base64
 import six
 from decimal import Decimal, Context, Clamped, Overflow, Underflow
+
 from .constants import (NUMBER, STRING, BINARY, NUMBER_SET, STRING_SET,
-                        BINARY_SET)
+                        BINARY_SET, LIST, BOOL, MAP, NULL)
 from .util import is_null
 
 
@@ -25,6 +26,10 @@ TYPES = {
     'NUMBER_SET': NUMBER_SET,
     'STRING_SET': STRING_SET,
     'BINARY_SET': BINARY_SET,
+    'LIST': LIST,
+    'BOOL': BOOL,
+    'MAP': MAP,
+    'NULL': NULL,
 }
 TYPES_REV = dict(((v, k) for k, v in six.iteritems(TYPES)))
 
@@ -60,17 +65,35 @@ class Binary(object):
         """ Encode the binary string for Dynamo """
         return base64.b64encode(self.value).decode()
 
-    @classmethod
-    def decode(cls, value):
-        """ Decode the binary string stored in Dynamo """
-        return cls(base64.b64decode(value.encode()))
-
 
 def encode_set(dynamizer, value):
-    """ Encode a set """
+    """ Encode a set for the DynamoDB format """
     inner_value = next(iter(value))
     inner_type = dynamizer.raw_encode(inner_value)[0]
     return inner_type + 'S', [dynamizer.raw_encode(v)[1] for v in value]
+
+
+def encode_list(dynamizer, value):
+    """ Encode a list for the DynamoDB format """
+    encoded_list = []
+    dict(map(dynamizer.raw_encode, value))
+    for v in value:
+        encoded_type, encoded_value = dynamizer.raw_encode(v)
+        encoded_list.append({
+            encoded_type: encoded_value,
+        })
+    return 'L', encoded_list
+
+
+def encode_dict(dynamizer, value):
+    """ Encode a dict for the DynamoDB format """
+    encoded_dict = {}
+    for k, v in six.iteritems(value):
+        encoded_type, encoded_value = dynamizer.raw_encode(v)
+        encoded_dict[k] = {
+            encoded_type: encoded_value,
+        }
+    return 'M', encoded_dict
 
 
 class Dynamizer(object):
@@ -80,16 +103,18 @@ class Dynamizer(object):
     def __init__(self):
         self.encoders = {}
         self.register_encoder(six.text_type, lambda _, v: (STRING, v))
-        self.register_encoder(six.binary_type, lambda _,
-                              v: (STRING, v.decode('utf-8')))
+        self.register_encoder(six.binary_type, lambda _, v: (STRING, v.decode('utf-8')))
         for t in six.integer_types:
             self.register_encoder(t, lambda _, v: (NUMBER, six.text_type(v)))
-        self.register_encoder(
-            float, lambda _, v: (NUMBER, six.text_type(float_to_decimal(v))))
-        self.register_encoder(Decimal, lambda _, v:
-                              (NUMBER, six.text_type(DECIMAL_CONTEXT.create_decimal(v))))
+        self.register_encoder(float, lambda _, v: (NUMBER, six.text_type(float_to_decimal(v))))
+        self.register_encoder(Decimal, lambda _, v: (NUMBER, six.text_type(DECIMAL_CONTEXT.create_decimal(v))))
         self.register_encoder(set, encode_set)
+        self.register_encoder(frozenset, encode_set)
         self.register_encoder(Binary, lambda _, v: (BINARY, v.encode()))
+        self.register_encoder(bool, lambda _, v: (BOOL, v))
+        self.register_encoder(list, encode_list)
+        self.register_encoder(dict, encode_dict)
+        self.register_encoder(type(None), lambda _, v: (NULL, True))
 
     def register_encoder(self, type, encoder):
         """
@@ -129,16 +154,29 @@ class Dynamizer(object):
 
     def decode(self, dynamo_value):
         """ Decode a dynamo value into a python value """
-        type, value = list(dynamo_value.items())[0]
+        type, value = next(six.iteritems(dynamo_value))
         if type == STRING:
             return value
         elif type == BINARY:
-            return Binary.decode(value)
+            return Binary(value)
         elif type == NUMBER:
             return Decimal(value)
         elif type == STRING_SET:
             return set(value)
         elif type == BINARY_SET:
-            return set((Binary.decode(v) for v in value))
+            return set((Binary(v) for v in value))
         elif type == NUMBER_SET:
             return set((Decimal(v) for v in value))
+        elif type == BOOL:
+            return value
+        elif type == LIST:
+            return [self.decode(v) for v in value]
+        elif type == MAP:
+            decoded_dict = {}
+            for k, v in six.iteritems(value):
+                decoded_dict[k] = self.decode(v)
+            return decoded_dict
+        elif type == NULL:
+            return None
+        else:
+            raise TypeError("Received unrecognized type %r from dynamo", type)
