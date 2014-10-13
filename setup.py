@@ -25,7 +25,7 @@ if sys.version_info[:2] < (2, 7):
 if __name__ == "__main__":
     setup(
         name='dynamo3',
-        version='0.2.2',
+        version='0.3.0',
         description='Python 3 compatible library for DynamoDB',
         long_description=README + '\n\n' + CHANGES,
         classifiers=[

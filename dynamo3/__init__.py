@@ -11,4 +11,4 @@ from .fields import Throughput, Table, DynamoKey, LocalIndex, GlobalIndex
 from .types import Dynamizer, Binary, TYPES, TYPES_REV
 from .util import is_null
 
-__version__ = '0.2.2'
+__version__ = '0.3.0'
