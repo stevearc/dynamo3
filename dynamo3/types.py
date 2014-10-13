@@ -170,7 +170,7 @@ class Dynamizer(object):
         elif type == BOOL:
             return value
         elif type == LIST:
-            return map(self.decode, value)
+            return [self.decode(v) for v in value]
         elif type == MAP:
             decoded_dict = {}
             for k, v in six.iteritems(value):
