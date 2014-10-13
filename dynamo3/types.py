@@ -65,11 +65,6 @@ class Binary(object):
         """ Encode the binary string for Dynamo """
         return base64.b64encode(self.value).decode()
 
-    @classmethod
-    def decode(cls, value):
-        """ Decode the binary string stored in Dynamo """
-        return cls(base64.b64decode(value.encode()))
-
 
 def encode_set(dynamizer, value):
     """ Encode a set for the DynamoDB format """
@@ -108,25 +103,18 @@ class Dynamizer(object):
     def __init__(self):
         self.encoders = {}
         self.register_encoder(six.text_type, lambda _, v: (STRING, v))
-        self.register_encoder(six.binary_type, lambda _,
-                              v: (STRING, v.decode('utf-8')))
+        self.register_encoder(six.binary_type, lambda _, v: (STRING, v.decode('utf-8')))
         for t in six.integer_types:
             self.register_encoder(t, lambda _, v: (NUMBER, six.text_type(v)))
-        self.register_encoder(
-            float, lambda _, v: (NUMBER, six.text_type(float_to_decimal(v))))
-        self.register_encoder(
-            Decimal, lambda _, v: (
-                NUMBER, six.text_type(
-                    DECIMAL_CONTEXT.create_decimal(v))))
+        self.register_encoder(float, lambda _, v: (NUMBER, six.text_type(float_to_decimal(v))))
+        self.register_encoder(Decimal, lambda _, v: (NUMBER, six.text_type(DECIMAL_CONTEXT.create_decimal(v))))
         self.register_encoder(set, encode_set)
         self.register_encoder(frozenset, encode_set)
         self.register_encoder(Binary, lambda _, v: (BINARY, v.encode()))
-        self.register_encoder(
-            bool, lambda _, v: (
-                BOOL, 'true' if v else 'false'))
+        self.register_encoder(bool, lambda _, v: (BOOL, v))
         self.register_encoder(list, encode_list)
         self.register_encoder(dict, encode_dict)
-        self.register_encoder(type(None), lambda _, v: (NULL, 'true'))
+        self.register_encoder(type(None), lambda _, v: (NULL, True))
 
     def register_encoder(self, type, encoder):
         """
@@ -170,13 +158,13 @@ class Dynamizer(object):
         if type == STRING:
             return value
         elif type == BINARY:
-            return Binary.decode(value)
+            return Binary(value)
         elif type == NUMBER:
             return Decimal(value)
         elif type == STRING_SET:
             return set(value)
         elif type == BINARY_SET:
-            return set((Binary.decode(v) for v in value))
+            return set((Binary(v) for v in value))
         elif type == NUMBER_SET:
             return set((Decimal(v) for v in value))
         elif type == BOOL:

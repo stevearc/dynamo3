@@ -94,9 +94,9 @@ class TestMisc(BaseSystemTest):
         def call(*_, **__):
             """ Dummy service call """
             return MagicMock(), {
-                'Errors': [{
+                'Error': {
                     'Code': 'ProvisionedThroughputExceededException',
-                }]
+                }
             }
 
         with patch.object(self.dynamo, 'service') as service:
