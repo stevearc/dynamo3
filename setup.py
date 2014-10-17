@@ -6,8 +6,12 @@ from setuptools import setup, find_packages
 
 
 HERE = os.path.abspath(os.path.dirname(__file__))
-README = open(os.path.join(HERE, 'README.rst')).read()
-CHANGES = open(os.path.join(HERE, 'CHANGES.rst')).read()
+
+with open(os.path.join(HERE, 'README.rst')) as f:
+    README = f.read()
+
+with open(os.path.join(HERE, 'CHANGES.rst')) as f:
+    CHANGES = f.read()
 
 REQUIREMENTS = [
     'botocore>=0.65.0',
