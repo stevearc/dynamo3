@@ -1,5 +1,9 @@
 Changelog
 =========
+0.3.1
+-----
+* Bug fix: Crash when parsing description of table being deleted
+
 0.3.0
 -----
 * **Breakage**: Dropping support for python 3.2 due to lack of botocore support
