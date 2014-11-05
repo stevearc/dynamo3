@@ -8,7 +8,7 @@ from six.moves.cPickle import dumps, loads  # pylint: disable=F0401,E0611
 from six.moves.urllib.parse import urlparse  # pylint: disable=F0401,E0611
 
 from dynamo3 import (DynamoDBConnection, Binary, DynamoKey, Dynamizer, STRING,
-                     ThroughputException)
+                     ThroughputException, Table)
 
 
 try:
@@ -112,6 +112,22 @@ class TestMisc(BaseSystemTest):
         """ Describing a missing table returns None """
         ret = self.dynamo.describe_table('foobar')
         self.assertIsNone(ret)
+
+    def test_describe_during_delete(self):
+        """ Describing a table during a delete operation should not crash """
+        response = {
+            'ItemCount': 0,
+            'ProvisionedThroughput': {
+                'NumberOfDecreasesToday': 0,
+                'ReadCapacityUnits': 5,
+                'WriteCapacityUnits': 5
+            },
+            'TableName': 'myTableName',
+            'TableSizeBytes': 0,
+            'TableStatus': 'DELETING'
+        }
+        table = Table.from_response(response)
+        self.assertEqual(table.status, 'DELETING')
 
     def test_delete_missing(self):
         """ Deleting a missing table returns False """

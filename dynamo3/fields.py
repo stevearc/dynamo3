@@ -278,13 +278,16 @@ class Table(object):
     @classmethod
     def from_response(cls, response):
         """ Create a Table from returned Dynamo data """
-        attrs = dict(((d['AttributeName'],
-                       DynamoKey(d['AttributeName'], d['AttributeType'])) for d
-                      in response['AttributeDefinitions']))
-        hash_key = attrs[response['KeySchema'][0]['AttributeName']]
+        hash_key = None
         range_key = None
-        if len(response['KeySchema']) > 1:
-            range_key = attrs[response['KeySchema'][1]['AttributeName']]
+        # KeySchema may not be in the response if the TableStatus is DELETING.
+        if 'KeySchema' in response:
+            attrs = dict(((d['AttributeName'],
+                           DynamoKey(d['AttributeName'], d['AttributeType']))
+                          for d in response['AttributeDefinitions']))
+            hash_key = attrs[response['KeySchema'][0]['AttributeName']]
+            if len(response['KeySchema']) > 1:
+                range_key = attrs[response['KeySchema'][1]['AttributeName']]
 
         indexes = []
         for idx in response.get('LocalSecondaryIndexes', []):
