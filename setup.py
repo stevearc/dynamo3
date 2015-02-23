@@ -10,7 +10,7 @@ README = open(os.path.join(HERE, 'README.rst')).read()
 CHANGES = open(os.path.join(HERE, 'CHANGES.rst')).read()
 
 REQUIREMENTS = [
-    'botocore>=0.65.0',
+    'botocore>=0.85.0',
     'six',
 ]
 
