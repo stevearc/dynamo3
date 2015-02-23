@@ -61,10 +61,6 @@ class Binary(object):
     def __repr__(self):
         return 'Binary(%s)' % self.value
 
-    def encode(self):
-        """ Encode the binary string for Dynamo """
-        return base64.b64encode(self.value).decode()
-
 
 def encode_set(dynamizer, value):
     """ Encode a set for the DynamoDB format """
@@ -110,7 +106,7 @@ class Dynamizer(object):
         self.register_encoder(Decimal, lambda _, v: (NUMBER, six.text_type(DECIMAL_CONTEXT.create_decimal(v))))
         self.register_encoder(set, encode_set)
         self.register_encoder(frozenset, encode_set)
-        self.register_encoder(Binary, lambda _, v: (BINARY, v.encode()))
+        self.register_encoder(Binary, lambda _, v: (BINARY, v.value))
         self.register_encoder(bool, lambda _, v: (BOOL, v))
         self.register_encoder(list, encode_list)
         self.register_encoder(dict, encode_dict)

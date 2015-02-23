@@ -1,5 +1,9 @@
 Changelog
 =========
+0.3.2
+-----
+* Bug fix: Serialization of blobs broken with botocore 0.85.0
+
 0.3.1
 -----
 * Bug fix: Crash when parsing description of table being deleted
