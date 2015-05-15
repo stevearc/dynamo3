@@ -701,7 +701,7 @@ class DynamoDBConnection(object):
         keywords['ScanIndexForward'] = not desc
 
         keywords['KeyConditions'] = encode_query_kwargs(self.dynamizer,
-                                                         kwargs)
+                                                        kwargs)
         if count:
             keywords['Select'] = 'COUNT'
             return self.call('query', **keywords)['Count']

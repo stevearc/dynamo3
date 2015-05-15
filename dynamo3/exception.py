@@ -2,6 +2,7 @@
 import sys
 
 import botocore
+import six
 from pprint import pformat
 
 
@@ -18,7 +19,7 @@ class DynamoDBError(botocore.exceptions.BotoCoreError):
     def re_raise(self):
         """ Raise this exception with the original traceback """
         if self.exc_info is not None:
-            raise self, None, self.exc_info[2]
+            six.reraise(type(self), self, self.exc_info[2])
         else:
             raise self
 
