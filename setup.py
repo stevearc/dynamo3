@@ -14,7 +14,7 @@ with open(os.path.join(HERE, 'CHANGES.rst')) as f:
     CHANGES = f.read()
 
 REQUIREMENTS = [
-    'botocore>=0.85.0',
+    'botocore>=0.89.0',
     'six',
 ]
 
