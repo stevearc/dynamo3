@@ -12,8 +12,7 @@ from .constants import NONE
 from .exception import translate_exception, DynamoDBError, ThroughputException
 from .fields import Throughput, Table
 from .result import ResultSet, GetResultSet, Result
-from .types import Dynamizer
-from .util import is_null
+from .types import Dynamizer, is_null
 
 
 LOG = logging.getLogger(__name__)

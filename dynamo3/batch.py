@@ -2,7 +2,7 @@
 import logging
 import six
 
-from .util import is_null
+from .types import is_null
 
 
 LOG = logging.getLogger(__name__)

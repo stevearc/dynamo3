@@ -1,11 +1,9 @@
 """ DynamoDB types and type logic """
-import base64
 import six
 from decimal import Decimal, Context, Clamped, Overflow, Underflow
 
 from .constants import (NUMBER, STRING, BINARY, NUMBER_SET, STRING_SET,
                         BINARY_SET, LIST, BOOL, MAP, NULL)
-from .util import is_null
 
 
 DECIMAL_CONTEXT = Context(Emin=-128, Emax=126, rounding=None, prec=38,
@@ -32,6 +30,12 @@ TYPES = {
     'NULL': NULL,
 }
 TYPES_REV = dict(((v, k) for k, v in six.iteritems(TYPES)))
+
+
+def is_null(value):
+    """ Check if a value is equivalent to null in Dynamo """
+    return (value is None or
+            (isinstance(value, (set, frozenset)) and len(value) == 0))
 
 
 class Binary(object):
@@ -99,11 +103,19 @@ class Dynamizer(object):
     def __init__(self):
         self.encoders = {}
         self.register_encoder(six.text_type, lambda _, v: (STRING, v))
-        self.register_encoder(six.binary_type, lambda _, v: (STRING, v.decode('utf-8')))
+        self.register_encoder(
+            six.binary_type, lambda _, v: (
+                STRING, v.decode('utf-8')))
         for t in six.integer_types:
             self.register_encoder(t, lambda _, v: (NUMBER, six.text_type(v)))
-        self.register_encoder(float, lambda _, v: (NUMBER, six.text_type(float_to_decimal(v))))
-        self.register_encoder(Decimal, lambda _, v: (NUMBER, six.text_type(DECIMAL_CONTEXT.create_decimal(v))))
+        self.register_encoder(
+            float, lambda _, v: (
+                NUMBER, six.text_type(
+                    float_to_decimal(v))))
+        self.register_encoder(
+            Decimal, lambda _, v: (
+                NUMBER, six.text_type(
+                    DECIMAL_CONTEXT.create_decimal(v))))
         self.register_encoder(set, encode_set)
         self.register_encoder(frozenset, encode_set)
         self.register_encoder(Binary, lambda _, v: (BINARY, v.value))
