@@ -242,9 +242,9 @@ class TestBatchWrite(BaseSystemTest):
         # unprocessed
         self.assertEqual(len(conn.call.mock_calls), 3)
         self.assertEqual(conn.call.mock_calls[1],
-                         call('BatchWriteItem', request_items={'foo': [key1]}))
+                         call('batch_write_item', RequestItems={'foo': [key1]}))
         self.assertEqual(conn.call.mock_calls[2],
-                         call('BatchWriteItem', request_items={'foo': [key2]}))
+                         call('batch_write_item', RequestItems={'foo': [key2]}))
 
 
 class TestUpdateItem(BaseSystemTest):

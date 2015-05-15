@@ -284,4 +284,4 @@ class BatchWriter(object):
         data = {
             self.tablename: items,
         }
-        return self.connection.call('BatchWriteItem', request_items=data)
+        return self.connection.call('batch_write_item', RequestItems=data)
