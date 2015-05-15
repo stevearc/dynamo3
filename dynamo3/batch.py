@@ -1,4 +1,6 @@
 """ Code for batch processing """
+import warnings
+
 import logging
 import six
 
@@ -78,7 +80,8 @@ class ItemUpdate(object):
         self.key = key
         self.value = value
         if expected is not NO_ARG:
-            LOG.warn("Using deprecated argument 'expected' in ItemUpdate")
+            warnings.warn("Using deprecated argument 'expected' in "
+                          "ItemUpdate. Use kwargs instead.")
         self._expected = expected
         if len(kwargs) > 1:
             raise ValueError("Cannot have more than one condition on a single field")

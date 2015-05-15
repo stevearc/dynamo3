@@ -3,7 +3,6 @@ import time
 import warnings
 
 import botocore.session
-import logging
 import six
 from botocore.exceptions import ClientError
 
@@ -13,9 +12,6 @@ from .exception import translate_exception, DynamoDBError, ThroughputException
 from .fields import Throughput, Table
 from .result import ResultSet, GetResultSet, Result
 from .types import Dynamizer, is_null
-
-
-LOG = logging.getLogger(__name__)
 
 
 def build_expected(dynamizer, expected):
@@ -377,7 +373,8 @@ class DynamoDBConnection(object):
             if len(keywords['Expected']) > 1:
                 keywords['ConditionalOperator'] = 'OR' if expect_or else 'AND'
         elif expected is not None:
-            LOG.warn("Using deprecated argument 'expected' for put_item")
+            warnings.warn("Using deprecated argument 'expected' for put_item. "
+                          "Use kwargs instead.")
             keywords['Expected'] = build_expected(self.dynamizer, expected)
         item = self.dynamizer.encode_keys(item)
         ret = self.call('put_item', TableName=tablename, Item=item,
@@ -455,7 +452,8 @@ class DynamoDBConnection(object):
             if len(keywords['Expected']) > 1:
                 keywords['ConditionalOperator'] = 'OR' if expect_or else 'AND'
         elif expected is not None:
-            LOG.warn("Using deprecated argument 'expected' for delete_item")
+            warnings.warn("Using deprecated argument 'expected' for "
+                          "delete_item. Use kwargs instead.")
             keywords['Expected'] = build_expected(self.dynamizer, expected)
         ret = self.call('delete_item', TableName=tablename, Key=key,
                         ReturnValues=returns,
