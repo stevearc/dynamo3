@@ -83,10 +83,13 @@ class ItemUpdate(object):
             warnings.warn("Using deprecated argument 'expected' in "
                           "ItemUpdate. Use kwargs instead.")
         self._expected = expected
+        self._expect_kwargs = {}
         if len(kwargs) > 1:
-            raise ValueError("Cannot have more than one condition on a single field")
-        self._expect_kwargs = dict([(key + '__' + k, v) for k, v in
-                                    six.iteritems(kwargs)])
+            raise ValueError("Cannot have more than one condition on a "
+                             "single field")
+        elif len(kwargs) == 1:
+            op, expected_value = next(six.iteritems(kwargs))
+            self._expect_kwargs[key + '__' + op] = expected_value
 
     @classmethod
     def put(cls, *args, **kwargs):
@@ -166,6 +169,10 @@ def encode_query_kwargs(dynamizer, kwargs):
         if '__' not in k:
             raise TypeError("Invalid query argument '%s'" % k)
         name, condition_key = k.split('__')
+        # Convert ==None to IS_NULL
+        if condition_key == 'eq' and is_null(v):
+            condition_key = 'null'
+            v = True
         # null is a special case
         if condition_key == 'null':
             ret[name] = {
