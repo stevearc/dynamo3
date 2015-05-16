@@ -1,5 +1,10 @@
 Changelog
 =========
+
+0.4.0
+-----
+* Migrating to botocore client API since services will be deprecated soon
+
 0.3.2
 -----
 * Bug fix: Serialization of blobs broken with botocore 0.85.0
