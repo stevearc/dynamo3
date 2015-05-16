@@ -242,9 +242,9 @@ class TestBatchWrite(BaseSystemTest):
         # unprocessed
         self.assertEqual(len(conn.call.mock_calls), 3)
         self.assertEqual(conn.call.mock_calls[1],
-                         call('BatchWriteItem', request_items={'foo': [key1]}))
+                         call('batch_write_item', RequestItems={'foo': [key1]}))
         self.assertEqual(conn.call.mock_calls[2],
-                         call('BatchWriteItem', request_items={'foo': [key2]}))
+                         call('batch_write_item', RequestItems={'foo': [key2]}))
 
 
 class TestUpdateItem(BaseSystemTest):
@@ -372,6 +372,16 @@ class TestUpdateItem(BaseSystemTest):
         self.dynamo.update_item('foobar', {'id': 'a'}, [update])
         ret = list(self.dynamo.scan('foobar'))
         self.assertItemsEqual(ret, [{'id': 'a'}])
+
+    def test_condition_converts_eq_null(self):
+        """ Conditional converts eq=None to null=True """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        update = ItemUpdate.put('foo', set([1, 2]), eq=set())
+        self.dynamo.update_item('foobar', {'id': 'a'}, [update])
+        update = ItemUpdate.put('foo', set([2]), eq=set())
+        with self.assertRaises(CheckFailed):
+            self.dynamo.update_item('foobar', {'id': 'a'}, [update])
 
     def test_write_add_require_value(self):
         """ Doing an ADD requires a non-null value """

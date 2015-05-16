@@ -67,23 +67,23 @@ class ResultSet(PagedIterator):
     def can_fetch_more(self):
         """ True if there are more results on the server """
         return (self.last_evaluated_key is not None and
-                self.kwargs.get('limit') != 0)
+                self.kwargs.get('Limit') != 0)
 
     def fetch(self):
         """ Fetch more results from Dynamo """
         data = self.connection.call(*self.args, **self.kwargs)
         self.last_evaluated_key = data.get('LastEvaluatedKey')
         if self.last_evaluated_key is not None:
-            self.kwargs['exclusive_start_key'] = self.last_evaluated_key
+            self.kwargs['ExclusiveStartKey'] = self.last_evaluated_key
         else:
-            self.kwargs.pop('exclusive_start_key', None)
+            self.kwargs.pop('ExclusiveStartKey', None)
         self._update_capacity(data)
         return iter(data[self.response_key])
 
     def __next__(self):
         result = super(ResultSet, self).__next__()
-        if 'limit' in self.kwargs:
-            self.kwargs['limit'] -= 1
+        if 'Limit' in self.kwargs:
+            self.kwargs['Limit'] -= 1
         if isinstance(result, dict):
             return self.connection.dynamizer.decode_keys(result)
         return result
@@ -133,12 +133,12 @@ class GetResultSet(PagedIterator):
             query['AttributesToGet'] = self.attributes
         query['Keys'] = keys
         kwargs = {
-            'request_items': {
+            'RequestItems': {
                 self.tablename: query,
             },
-            'return_consumed_capacity': self.return_capacity,
+            'ReturnConsumedCapacity': self.return_capacity,
         }
-        data = self.connection.call('BatchGetItem', **kwargs)
+        data = self.connection.call('batch_get_item', **kwargs)
         for items in six.itervalues(data.get('UnprocessedKeys', {})):
             self.unprocessed_keys.extend(items['Keys'])
         self._update_capacity(data)

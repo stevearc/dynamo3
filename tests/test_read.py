@@ -57,8 +57,9 @@ class TestQuery(BaseSystemTest):
             'name': 'baz',
         }
         self.dynamo.put_item('foobar', item)
-        ret = self.dynamo.query('foobar', id__eq='a', name__eq='baz',
-                                index='name-index')
+        ret = self.dynamo.query('foobar', name__eq='baz',
+                                index='name-index',
+                                filter={'id__eq': 'a'})
         self.assertItemsEqual(list(ret), [item])
 
     def test_attributes(self):

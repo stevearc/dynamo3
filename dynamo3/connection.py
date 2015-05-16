@@ -1,20 +1,17 @@
 """ Connection class for DynamoDB """
 import time
+import warnings
 
 import botocore.session
-import logging
 import six
+from botocore.exceptions import ClientError
 
 from .batch import BatchWriter, encode_query_kwargs
 from .constants import NONE
-from .exception import raise_if_error, DynamoDBError, ThroughputException
+from .exception import translate_exception, DynamoDBError, ThroughputException
 from .fields import Throughput, Table
 from .result import ResultSet, GetResultSet, Result
-from .types import Dynamizer
-from .util import is_null
-
-
-LOG = logging.getLogger(__name__)
+from .types import Dynamizer, is_null
 
 
 def build_expected(dynamizer, expected):
@@ -43,10 +40,8 @@ class DynamoDBConnection(object):
 
     Parameters
     ----------
-    service : :class:`~botocore.service.Service`, optional
-        The botocore service that will be used for requests
-    endpoint : :class:`~botocore.endpoint.Endpoint`, optional
-        The botocore endpoint that will be used for requests
+    client : :class:`~botocore.client.BaseClient`, optional
+        The botocore client that will be used for requests
     dynamizer : :class:`~dynamo3.types.Dynamizer`, optional
         The Dynamizer object to use for encoding/decoding values
 
@@ -58,21 +53,20 @@ class DynamoDBConnection(object):
 
     """
 
-    def __init__(self, service=None, endpoint=None, dynamizer=Dynamizer()):
-        self.service = service
-        self.endpoint = endpoint
+    def __init__(self, client=None, dynamizer=Dynamizer()):
+        self.client = client
         self.dynamizer = dynamizer
         self.request_retries = 10
 
     @property
     def host(self):
         """ The address of the endpoint """
-        return self.endpoint.host
+        return self.client.meta.endpoint_url
 
     @property
     def region(self):
         """ The name of the current connected region """
-        return self.endpoint.region_name
+        return self.client.meta.region_name
 
     @classmethod
     def connect_to_region(cls, region, session=None, access_key=None,
@@ -96,12 +90,14 @@ class DynamoDBConnection(object):
             Keyword arguments to pass to the constructor
 
         """
+        warnings.warn("connect_to_region is deprecated and will be removed. "
+                      "Use connect instead.")
         if session is None:
             session = botocore.session.get_session()
             if access_key is not None:
                 session.set_credentials(access_key, secret_key)
-        service = session.get_service('dynamodb')
-        return cls(service, service.get_endpoint(region), **kwargs)
+        client = session.create_client('dynamodb', region)
+        return cls(client, **kwargs)
 
     @classmethod
     def connect_to_host(cls, host='localhost', port=8000, is_secure=False,
@@ -130,15 +126,16 @@ class DynamoDBConnection(object):
             Keyword arguments to pass to the constructor
 
         """
+        warnings.warn("connect_to_host is deprecated and will be removed. "
+                      "Use connect instead.")
         if session is None:
             session = botocore.session.get_session()
             if access_key is not None:
                 session.set_credentials(access_key, secret_key)
         url = "http://%s:%d" % (host, port)
-        service = session.get_service('dynamodb')
-        endpoint = service.get_endpoint(
-            'local', endpoint_url=url, is_secure=is_secure)
-        return cls(service, endpoint, **kwargs)
+        client = session.create_client('dynamodb', 'local', endpoint_url=url,
+                                       use_ssl=is_secure)
+        return cls(client, **kwargs)
 
     @classmethod
     def connect(cls, region, session=None, access_key=None, secret_key=None,
@@ -170,14 +167,13 @@ class DynamoDBConnection(object):
             session = botocore.session.get_session()
             if access_key is not None:
                 session.set_credentials(access_key, secret_key)
-        service = session.get_service('dynamodb')
         url = None
         if host is not None:
             protocol = 'https' if is_secure else 'http'
             url = "%s://%s:%d" % (protocol, host, port)
-        endpoint = service.get_endpoint(region, endpoint_url=url,
-                                        is_secure=is_secure)
-        return cls(service, endpoint, **kwargs)
+        client = session.create_client('dynamodb', region, endpoint_url=url,
+                                       use_ssl=is_secure)
+        return cls(client, **kwargs)
 
     def call(self, command, **kwargs):
         """
@@ -199,18 +195,21 @@ class DynamoDBConnection(object):
         data : dict
 
         """
-        op = self.service.get_operation(command)
+        op = getattr(self.client, command)
         attempt = 0
         while True:
-            response, data = op.call(self.endpoint, **kwargs)
             try:
-                raise_if_error(kwargs, response, data)
+                data = op(**kwargs)
                 break
-            except ThroughputException:
+            except ClientError as e:
+                exc = translate_exception(e, kwargs)
                 attempt += 1
-                if attempt > self.request_retries:
-                    raise
-                self.exponential_sleep(attempt)
+                if isinstance(exc, ThroughputException):
+                    if attempt > self.request_retries:
+                        exc.re_raise()
+                    self.exponential_sleep(attempt)
+                else:
+                    exc.re_raise()
         return data
 
     def exponential_sleep(self, attempt):
@@ -233,7 +232,7 @@ class DynamoDBConnection(object):
             Iterator that returns table names as strings
 
         """
-        return ResultSet(self, 'TableNames', 'ListTables', limit=limit)
+        return ResultSet(self, 'TableNames', 'list_tables', Limit=limit)
 
     def describe_table(self, tablename):
         """
@@ -251,7 +250,7 @@ class DynamoDBConnection(object):
         """
         try:
             response = self.call(
-                'DescribeTable', table_name=tablename)['Table']
+                'describe_table', TableName=tablename)['Table']
             return Table.from_response(response)
         except DynamoDBError as e:
             if e.kwargs['Code'] == 'ResourceNotFoundException':
@@ -291,14 +290,14 @@ class DynamoDBConnection(object):
 
         kwargs = {}
         if indexes:
-            kwargs['local_secondary_indexes'] = [
+            kwargs['LocalSecondaryIndexes'] = [
                 idx.schema(hash_key) for idx in indexes
             ]
             for idx in indexes:
                 all_attrs.add(idx.range_key)
 
         if global_indexes:
-            kwargs['global_secondary_indexes'] = [
+            kwargs['GlobalSecondaryIndexes'] = [
                 idx.schema() for idx in global_indexes
             ]
             for idx in global_indexes:
@@ -307,10 +306,10 @@ class DynamoDBConnection(object):
                     all_attrs.add(idx.range_key)
 
         attr_definitions = [attr.definition() for attr in all_attrs]
-        return self.call('CreateTable', table_name=tablename,
-                         attribute_definitions=attr_definitions,
-                         key_schema=key_schema,
-                         provisioned_throughput=throughput.schema(),
+        return self.call('create_table', TableName=tablename,
+                         AttributeDefinitions=attr_definitions,
+                         KeySchema=key_schema,
+                         ProvisionedThroughput=throughput.schema(),
                          **kwargs)
 
     def delete_table(self, tablename):
@@ -329,7 +328,7 @@ class DynamoDBConnection(object):
 
         """
         try:
-            self.call('DeleteTable', table_name=tablename)
+            self.call('delete_table', TableName=tablename)
             return True
         except DynamoDBError as e:
             if e.kwargs['Code'] == 'ResourceNotFoundException':
@@ -370,16 +369,17 @@ class DynamoDBConnection(object):
         """
         keywords = {}
         if kwargs:
-            keywords['expected'] = encode_query_kwargs(self.dynamizer, kwargs)
-            if len(keywords['expected']) > 1:
-                keywords['conditional_operator'] = 'OR' if expect_or else 'AND'
+            keywords['Expected'] = encode_query_kwargs(self.dynamizer, kwargs)
+            if len(keywords['Expected']) > 1:
+                keywords['ConditionalOperator'] = 'OR' if expect_or else 'AND'
         elif expected is not None:
-            LOG.warn("Using deprecated argument 'expected' for put_item")
-            keywords['expected'] = build_expected(self.dynamizer, expected)
+            warnings.warn("Using deprecated argument 'expected' for put_item. "
+                          "Use kwargs instead.")
+            keywords['Expected'] = build_expected(self.dynamizer, expected)
         item = self.dynamizer.encode_keys(item)
-        ret = self.call('PutItem', table_name=tablename, item=item,
-                        return_values=returns,
-                        return_consumed_capacity=return_capacity, **keywords)
+        ret = self.call('put_item', TableName=tablename, Item=item,
+                        ReturnValues=returns,
+                        ReturnConsumedCapacity=return_capacity, **keywords)
         if ret:
             return Result(self.dynamizer, ret, 'Attributes')
 
@@ -407,11 +407,11 @@ class DynamoDBConnection(object):
         """
         kwargs = {}
         if attributes is not None:
-            kwargs['attributes_to_get'] = attributes
+            kwargs['AttributesToGet'] = attributes
         key = self.dynamizer.encode_keys(key)
-        data = self.call('GetItem', table_name=tablename, key=key,
-                         consistent_read=consistent,
-                         return_consumed_capacity=return_capacity, **kwargs)
+        data = self.call('get_item', TableName=tablename, Key=key,
+                         ConsistentRead=consistent,
+                         ReturnConsumedCapacity=return_capacity, **kwargs)
         return Result(self.dynamizer, data, 'Item')
 
     def delete_item(self, tablename, key, expected=None, returns=NONE,
@@ -448,15 +448,16 @@ class DynamoDBConnection(object):
         key = self.dynamizer.encode_keys(key)
         keywords = {}
         if kwargs:
-            keywords['expected'] = encode_query_kwargs(self.dynamizer, kwargs)
-            if len(keywords['expected']) > 1:
-                keywords['conditional_operator'] = 'OR' if expect_or else 'AND'
+            keywords['Expected'] = encode_query_kwargs(self.dynamizer, kwargs)
+            if len(keywords['Expected']) > 1:
+                keywords['ConditionalOperator'] = 'OR' if expect_or else 'AND'
         elif expected is not None:
-            LOG.warn("Using deprecated argument 'expected' for delete_item")
-            keywords['expected'] = build_expected(self.dynamizer, expected)
-        ret = self.call('DeleteItem', table_name=tablename, key=key,
-                        return_values=returns,
-                        return_consumed_capacity=return_capacity,
+            warnings.warn("Using deprecated argument 'expected' for "
+                          "delete_item. Use kwargs instead.")
+            keywords['Expected'] = build_expected(self.dynamizer, expected)
+        ret = self.call('delete_item', TableName=tablename, Key=key,
+                        ReturnValues=returns,
+                        ReturnConsumedCapacity=return_capacity,
                         **keywords)
         if ret:
             return Result(self.dynamizer, ret, 'Attributes')
@@ -503,9 +504,6 @@ class DynamoDBConnection(object):
             (default NONE)
 
         """
-        kwargs = {}
-        if attributes is not None:
-            kwargs['attributes_to_get'] = attributes
         return GetResultSet(self, tablename, keys,
                             consistent=consistent, attributes=attributes,
                             return_capacity=return_capacity)
@@ -563,14 +561,14 @@ class DynamoDBConnection(object):
             expected[k] = v
 
         if expected:
-            keywords['expected'] = expected
+            keywords['Expected'] = expected
             if len(expected) > 1:
-                keywords['conditional_operator'] = 'OR' if expect_or else 'AND'
+                keywords['ConditionalOperator'] = 'OR' if expect_or else 'AND'
 
-        result = self.call('UpdateItem', table_name=tablename, key=key,
-                           attribute_updates=attr_updates,
-                           return_values=returns,
-                           return_consumed_capacity=return_capacity,
+        result = self.call('update_item', TableName=tablename, Key=key,
+                           AttributeUpdates=attr_updates,
+                           ReturnValues=returns,
+                           ReturnConsumedCapacity=return_capacity,
                            **keywords)
         if result:
             return Result(self.dynamizer, result, 'Attributes')
@@ -614,23 +612,23 @@ class DynamoDBConnection(object):
 
         """
         keywords = {
-            'table_name': tablename,
-            'return_consumed_capacity': return_capacity,
+            'TableName': tablename,
+            'ReturnConsumedCapacity': return_capacity,
         }
         if attributes is not None:
-            keywords['attributes_to_get'] = attributes
+            keywords['AttributesToGet'] = attributes
         if limit is not None:
-            keywords['limit'] = limit
+            keywords['Limit'] = limit
         if kwargs:
-            keywords['scan_filter'] = encode_query_kwargs(
+            keywords['ScanFilter'] = encode_query_kwargs(
                 self.dynamizer, kwargs)
             if len(kwargs) > 1:
-                keywords['conditional_operator'] = 'OR' if filter_or else 'AND'
+                keywords['ConditionalOperator'] = 'OR' if filter_or else 'AND'
         if count:
-            keywords['select'] = 'COUNT'
-            return self.call('Scan', **keywords)['Count']
+            keywords['Select'] = 'COUNT'
+            return self.call('scan', **keywords)['Count']
         else:
-            return ResultSet(self, 'Items', 'Scan', **keywords)
+            return ResultSet(self, 'Items', 'scan', **keywords)
 
     def query(self, tablename, attributes=None, consistent=False, count=False,
               index=None, limit=None, desc=False, return_capacity=NONE,
@@ -682,31 +680,31 @@ class DynamoDBConnection(object):
 
         """
         keywords = {
-            'table_name': tablename,
-            'return_consumed_capacity': return_capacity,
-            'consistent_read': consistent,
+            'TableName': tablename,
+            'ReturnConsumedCapacity': return_capacity,
+            'ConsistentRead': consistent,
         }
         if attributes is not None:
-            keywords['attributes_to_get'] = attributes
+            keywords['AttributesToGet'] = attributes
         if index is not None:
-            keywords['index_name'] = index
+            keywords['IndexName'] = index
         if limit is not None:
-            keywords['limit'] = limit
+            keywords['Limit'] = limit
         if filter is not None:
             if len(filter) > 1:
-                keywords['conditional_operator'] = 'OR' if filter_or else 'AND'
-            keywords['query_filter'] = encode_query_kwargs(self.dynamizer,
-                                                           filter)
+                keywords['ConditionalOperator'] = 'OR' if filter_or else 'AND'
+            keywords['QueryFilter'] = encode_query_kwargs(self.dynamizer,
+                                                          filter)
 
-        keywords['scan_index_forward'] = not desc
+        keywords['ScanIndexForward'] = not desc
 
-        keywords['key_conditions'] = encode_query_kwargs(self.dynamizer,
-                                                         kwargs)
+        keywords['KeyConditions'] = encode_query_kwargs(self.dynamizer,
+                                                        kwargs)
         if count:
-            keywords['select'] = 'COUNT'
-            return self.call('Query', **keywords)['Count']
+            keywords['Select'] = 'COUNT'
+            return self.call('query', **keywords)['Count']
         else:
-            return ResultSet(self, 'Items', 'Query', **keywords)
+            return ResultSet(self, 'Items', 'query', **keywords)
 
     def update_table(self, tablename, throughput=None, global_indexes=None):
         """
@@ -724,9 +722,9 @@ class DynamoDBConnection(object):
         """
         kwargs = {}
         if throughput is not None:
-            kwargs['provisioned_throughput'] = throughput.schema()
+            kwargs['ProvisionedThroughput'] = throughput.schema()
         if global_indexes is not None:
-            kwargs['global_secondary_index_updates'] = [
+            kwargs['GlobalSecondaryIndexUpdates'] = [
                 {
                     'Update': {
                         'IndexName': key,
@@ -735,4 +733,4 @@ class DynamoDBConnection(object):
                 }
                 for key, value in six.iteritems(global_indexes)
             ]
-        return self.call('UpdateTable', table_name=tablename, **kwargs)
+        return self.call('update_table', TableName=tablename, **kwargs)

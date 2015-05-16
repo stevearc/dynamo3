@@ -1,8 +1,10 @@
 """ Code for batch processing """
+import warnings
+
 import logging
 import six
 
-from .util import is_null
+from .types import is_null
 
 
 LOG = logging.getLogger(__name__)
@@ -78,12 +80,16 @@ class ItemUpdate(object):
         self.key = key
         self.value = value
         if expected is not NO_ARG:
-            LOG.warn("Using deprecated argument 'expected' in ItemUpdate")
+            warnings.warn("Using deprecated argument 'expected' in "
+                          "ItemUpdate. Use kwargs instead.")
         self._expected = expected
+        self._expect_kwargs = {}
         if len(kwargs) > 1:
-            raise ValueError("Cannot have more than one condition on a single field")
-        self._expect_kwargs = dict([(key + '__' + k, v) for k, v in
-                                    six.iteritems(kwargs)])
+            raise ValueError("Cannot have more than one condition on a "
+                             "single field")
+        elif len(kwargs) == 1:
+            op, expected_value = next(six.iteritems(kwargs))
+            self._expect_kwargs[key + '__' + op] = expected_value
 
     @classmethod
     def put(cls, *args, **kwargs):
@@ -163,6 +169,10 @@ def encode_query_kwargs(dynamizer, kwargs):
         if '__' not in k:
             raise TypeError("Invalid query argument '%s'" % k)
         name, condition_key = k.split('__')
+        # Convert ==None to IS_NULL
+        if condition_key == 'eq' and is_null(v):
+            condition_key = 'null'
+            v = True
         # null is a special case
         if condition_key == 'null':
             ret[name] = {
@@ -284,4 +294,4 @@ class BatchWriter(object):
         data = {
             self.tablename: items,
         }
-        return self.connection.call('BatchWriteItem', request_items=data)
+        return self.connection.call('batch_write_item', RequestItems=data)

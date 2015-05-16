@@ -2,8 +2,9 @@
 from __future__ import unicode_literals
 
 import six
+from botocore.exceptions import ClientError
 from decimal import Decimal
-from mock import patch, MagicMock
+from mock import patch
 from six.moves.cPickle import dumps, loads  # pylint: disable=F0401,E0611
 from six.moves.urllib.parse import urlparse  # pylint: disable=F0401,E0611
 
@@ -93,17 +94,21 @@ class TestMisc(BaseSystemTest):
         """ Throughput exceptions trigger a retry of the request """
         def call(*_, **__):
             """ Dummy service call """
-            return MagicMock(), {
+            response = {
+                'ResponseMetadata': {
+                    'HTTPStatusCode': 400,
+                },
                 'Error': {
                     'Code': 'ProvisionedThroughputExceededException',
+                    'Message': 'Does not matter',
                 }
             }
+            raise ClientError(response, 'list_tables')
 
-        with patch.object(self.dynamo, 'service') as service:
-            op = service.get_operation()
-            op.call.side_effect = call
+        with patch.object(self.dynamo, 'client') as client:
+            client.list_tables.side_effect = call
             with self.assertRaises(ThroughputException):
-                self.dynamo.call('Does not matter')
+                self.dynamo.call('list_tables')
         self.assertEqual(len(time.sleep.mock_calls),
                          self.dynamo.request_retries - 1)
         self.assertTrue(time.sleep.called)
