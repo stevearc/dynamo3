@@ -10,4 +10,4 @@ from .exception import (CheckFailed, ConditionalCheckFailedException,
 from .fields import Throughput, Table, DynamoKey, LocalIndex, GlobalIndex
 from .types import Dynamizer, Binary, TYPES, TYPES_REV, is_null
 
-__version__ = '0.3.2'
+__version__ = '0.4.0'
