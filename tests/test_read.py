@@ -716,6 +716,14 @@ class TestScan2(BaseSystemTest):
         ret = self.dynamo.scan2('foobar', filter='id = :id', id='a')
         self.assertItemsEqual(list(ret), [{'id': 'a'}])
 
+    def test_expr_values(self):
+        """ Can pass in ExpressionAttributeValues direcly """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        self.dynamo.put_item('foobar', {'id': 'b'})
+        ret = self.dynamo.scan2('foobar', filter='id = :id', expr_values={':id': 'a'})
+        self.assertItemsEqual(list(ret), [{'id': 'a'}])
+
     def test_ne(self):
         """ Can scan with NE constraint """
         self.make_table()
