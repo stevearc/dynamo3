@@ -396,6 +396,97 @@ class TestUpdateItem(BaseSystemTest):
         self.assertFalse(a != b)
 
 
+class TestUpdateItem2(BaseSystemTest):
+
+    """ Test the new UpdateItem API """
+
+    def make_table(self):
+        """ Convenience method for creating a table """
+        hash_key = DynamoKey('id')
+        self.dynamo.create_table('foobar', hash_key=hash_key)
+
+    def test_update_field(self):
+        """ Update an item field """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        self.dynamo.update2('foobar', {'id': 'a'}, 'SET foo = :bar', bar='bar')
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item, {'id': 'a', 'foo': 'bar'})
+
+    def test_atomic_add_num(self):
+        """ Update can atomically add to a number """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        self.dynamo.update2('foobar', {'id': 'a'}, 'ADD foo :foo', foo=1)
+        self.dynamo.update2('foobar', {'id': 'a'}, 'ADD foo :foo', foo=2)
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item, {'id': 'a', 'foo': 3})
+
+    def test_atomic_add_set(self):
+        """ Update can atomically add to a set """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        self.dynamo.update2('foobar', {'id': 'a'}, 'ADD foo :foo',
+                            foo=set([1]))
+        self.dynamo.update2('foobar', {'id': 'a'}, 'ADD foo :foo',
+                            foo=set([1, 2]))
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item, {'id': 'a', 'foo': set([1, 2])})
+
+    def test_delete_field(self):
+        """ Update can delete fields from an item """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'bar'})
+        self.dynamo.update2('foobar', {'id': 'a'}, 'REMOVE foo')
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item, {'id': 'a'})
+
+    def test_return_item(self):
+        """ Update can return the updated item """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        ret = self.dynamo.update2('foobar', {'id': 'a'}, 'SET foo = :foo',
+                                  returns=ALL_NEW, foo='bar')
+        self.assertEqual(ret, {'id': 'a', 'foo': 'bar'})
+
+    def test_return_metadata(self):
+        """ The Update return value contains capacity metadata """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        ret = self.dynamo.update2('foobar', {'id': 'a'}, 'SET foo = :foo',
+                                  returns=ALL_NEW,
+                                  return_capacity=TOTAL, foo='bar')
+        self.assertTrue(is_number(ret.capacity))
+        self.assertTrue(is_number(ret.table_capacity))
+        self.assertTrue(isinstance(ret.indexes, dict))
+        self.assertTrue(isinstance(ret.global_indexes, dict))
+
+    def test_expect_condition(self):
+        """ Update can expect a field to meet a condition """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
+        with self.assertRaises(CheckFailed):
+            self.dynamo.update2('foobar', {'id': 'a'}, 'SET foo = :foo',
+                                condition='foo < :max', foo=10, max=5)
+
+    def test_expect_condition_or(self):
+        """ Expected conditionals can be OR'd together """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
+        self.dynamo.update2('foobar', {'id': 'a'}, 'SET foo = :foo',
+                            condition='foo < :max OR NOT attribute_exists(baz)',
+                            foo=10, max=5)
+
+    def test_expression_values(self):
+        """ Can pass in expression values directly """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
+        self.dynamo.update2('foobar', {'id': 'a'}, 'SET #f = :foo',
+                            alias={'#f': 'foo'}, expr_values={':foo': 10})
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item, {'id': 'a', 'foo': 10})
+
+
 class TestPutItem(BaseSystemTest):
 
     """ Tests for PutItem """

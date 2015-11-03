@@ -7,7 +7,7 @@ import six
 from botocore.exceptions import ClientError
 
 from .batch import BatchWriter, encode_query_kwargs
-from .constants import NONE
+from .constants import NONE, COUNT
 from .exception import translate_exception, DynamoDBError, ThroughputException
 from .fields import Throughput, Table
 from .result import ResultSet, GetResultSet, Result
@@ -28,6 +28,16 @@ def build_expected(dynamizer, expected):
                 'Value': dynamizer.encode(v),
             }
     return ret
+
+
+def build_expression_values(dynamizer, expr_values, kwargs):
+    """ Build ExpresionAttributeValues from a value or kwargs """
+    if expr_values:
+        values = expr_values
+        return dynamizer.encode_keys(values)
+    elif kwargs:
+        values = dict(((':' + k, v) for k, v in six.iteritems(kwargs)))
+        return dynamizer.encode_keys(values)
 
 
 class DynamoDBConnection(object):
@@ -513,6 +523,9 @@ class DynamoDBConnection(object):
         """
         Update a single item in a table
 
+        This uses the older version of the DynamoDB API.
+        See also: :meth:`~.update2`.
+
         Parameters
         ----------
         tablename : str
@@ -573,6 +586,65 @@ class DynamoDBConnection(object):
         if result:
             return Result(self.dynamizer, result, 'Attributes')
 
+    def update2(self, tablename, key, expression, expr_values=None, alias=None,
+                condition=None, returns=NONE, return_capacity=NONE,
+                return_item_collection_metrics=NONE, **kwargs):
+        """
+        Update a single item in a table
+
+        For many parameters you will want to reference the DynamoDB API:
+            http://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateItem.html
+
+        Parameters
+        ----------
+        tablename : str
+            Name of the table to update
+        key : dict
+            Primary key dict specifying the hash key and, if applicable, the
+            range key of the item.
+        expression : str
+            See docs for UpdateExpression
+        expr_values : dict, optional
+            See docs for ExpressionAttributeValues. See also: kwargs
+        alias : dict, optional
+            See docs for ExpressionAttributeNames
+        condition : str, optional
+            See docs for ConditionExpression
+        returns : {NONE, ALL_OLD, UPDATED_OLD, ALL_NEW, UPDATED_NEW}, optional
+            Return either the old or new values, either all attributes or just
+            the ones that changed. (default NONE)
+        return_capacity : {NONE, INDEXES, TOTAL}, optional
+            INDEXES will return the consumed capacity for indexes, TOTAL will
+            return the consumed capacity for the table and the indexes.
+            (default NONE)
+        return_item_collection_metrics : (NONE, SIZE), optional
+            SIZE will return statistics about item collections that were
+            modified.
+        **kwargs : dict, optional
+            If expr_values is not provided, the kwargs dict will be used as the
+            ExpressionAttributeValues (a ':' will be automatically prepended to
+            all keys).
+
+        """
+        keywords = {
+            'TableName': tablename,
+            'Key': self.dynamizer.encode_keys(key),
+            'UpdateExpression': expression,
+            'ReturnValues': returns,
+            'ReturnConsumedCapacity': return_capacity,
+            'ReturnItemCollectionMetrics': return_item_collection_metrics,
+        }
+        values = build_expression_values(self.dynamizer, expr_values, kwargs)
+        if values:
+            keywords['ExpressionAttributeValues'] = values
+        if alias:
+            keywords['ExpressionAttributeNames'] = alias
+        if condition:
+            keywords['ConditionExpression'] = condition
+        result = self.call('update_item', **keywords)
+        if result:
+            return Result(self.dynamizer, result, 'Attributes')
+
     def scan(self, tablename, attributes=None, count=False, limit=None,
              return_capacity=NONE, filter_or=False, **kwargs):
         """
@@ -628,7 +700,7 @@ class DynamoDBConnection(object):
             if len(kwargs) > 1:
                 keywords['ConditionalOperator'] = 'OR' if filter_or else 'AND'
         if count:
-            keywords['Select'] = 'COUNT'
+            keywords['Select'] = COUNT
             return self.call('scan', **keywords)['Count']
         else:
             return ResultSet(self, 'Items', 'scan', **keywords)
@@ -693,14 +765,9 @@ class DynamoDBConnection(object):
             'ReturnConsumedCapacity': return_capacity,
             'ConsistentRead': consistent,
         }
-        if expr_values:
-            values = expr_values
-            keywords['ExpressionAttributeValues'] = \
-                self.dynamizer.encode_keys(values)
-        elif kwargs:
-            values = dict(((':' + k, v) for k, v in six.iteritems(kwargs)))
-            keywords['ExpressionAttributeValues'] = \
-                self.dynamizer.encode_keys(values)
+        values = build_expression_values(self.dynamizer, expr_values, kwargs)
+        if values:
+            keywords['ExpressionAttributeValues'] = values
         if attributes is not None:
             if not isinstance(attributes, six.string_types):
                 attributes = ', '.join(attributes)
@@ -720,7 +787,7 @@ class DynamoDBConnection(object):
         if total_segments is not None:
             keywords['TotalSegments'] = total_segments
 
-        if select == 'COUNT':
+        if select == COUNT:
             return self.call('scan', **keywords)
         else:
             return ResultSet(self, 'Items', 'scan', **keywords)
@@ -799,7 +866,7 @@ class DynamoDBConnection(object):
         keywords['KeyConditions'] = encode_query_kwargs(self.dynamizer,
                                                         kwargs)
         if count:
-            keywords['Select'] = 'COUNT'
+            keywords['Select'] = COUNT
             return self.call('query', **keywords)['Count']
         else:
             return ResultSet(self, 'Items', 'query', **keywords)
@@ -857,16 +924,13 @@ class DynamoDBConnection(object):
             connection.query2('mytable', 'foo = :foo', expr_values={':foo': 5})
 
         """
-        if expr_values:
-            values = expr_values
-        else:
-            values = dict(((':' + k, v) for k, v in six.iteritems(kwargs)))
+        values = build_expression_values(self.dynamizer, expr_values, kwargs)
         keywords = {
             'TableName': tablename,
             'ReturnConsumedCapacity': return_capacity,
             'ConsistentRead': consistent,
             'KeyConditionExpression': key_condition_expr,
-            'ExpressionAttributeValues': self.dynamizer.encode_keys(values),
+            'ExpressionAttributeValues': values,
             'ScanIndexForward': not desc,
         }
         if attributes is not None:
@@ -884,7 +948,7 @@ class DynamoDBConnection(object):
         if filter:
             keywords['FilterExpression'] = filter
 
-        if select == 'COUNT':
+        if select == COUNT:
             return self.call('query', **keywords)
         else:
             return ResultSet(self, 'Items', 'query', **keywords)
