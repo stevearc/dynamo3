@@ -578,6 +578,9 @@ class DynamoDBConnection(object):
         """
         Perform a full-table scan
 
+        This uses the older version of the DynamoDB API.
+        See also: :meth:`~.scan2`.
+
         Parameters
         ----------
         tablename : str
@@ -627,6 +630,98 @@ class DynamoDBConnection(object):
         if count:
             keywords['Select'] = 'COUNT'
             return self.call('scan', **keywords)['Count']
+        else:
+            return ResultSet(self, 'Items', 'scan', **keywords)
+
+    def scan2(self, tablename, expr_values=None, alias=None, attributes=None,
+              consistent=False, select=None, index=None, limit=None,
+              return_capacity=NONE, filter=False, segment=None,
+              total_segments=None, **kwargs):
+        """
+        Perform a full-table scan
+
+        For many parameters you will want to reference the DynamoDB API:
+        http://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html
+
+        Parameters
+        ----------
+        tablename : str
+            Name of the table to scan
+        expr_values : dict, optional
+            See docs for ExpressionAttributeValues. See also: kwargs
+        alias : dict, optional
+            See docs for ExpressionAttributeNames
+        attributes : str or list, optional
+            See docs for ProjectionExpression. If list, it will be joined by
+            commas.
+        consistent : bool, optional
+            Perform a strongly consistent read of the data (default False)
+        select : str, optional
+            See docs for Select
+        index : str, optional
+            The name of the index to query
+        limit : int, optional
+            Maximum number of items to return
+        return_capacity : {NONE, INDEXES, TOTAL}, optional
+            INDEXES will return the consumed capacity for indexes, TOTAL will
+            return the consumed capacity for the table and the indexes.
+            (default NONE)
+        filter : str, optional
+            See docs for FilterExpression
+        segment : int, optional
+            When doing a parallel scan, the unique thread identifier for this
+            scan. If present, total_segments must also be present.
+        total_segments : int, optional
+            When doing a parallel scan, the total number of threads performing
+            the scan.
+        **kwargs : dict, optional
+            If expr_values is not provided, the kwargs dict will be used as the
+            ExpressionAttributeValues (a ':' will be automatically prepended to
+            all keys).
+
+        Examples
+        --------
+
+        .. code-block:: python
+
+            connection.scan2('mytable', filter='contains(tags, :search)', search='text)
+            connection.scan2('mytable', filter='id = :id', expr_values={':id': 'dsa'})
+
+        """
+        keywords = {
+            'TableName': tablename,
+            'ReturnConsumedCapacity': return_capacity,
+            'ConsistentRead': consistent,
+        }
+        if expr_values:
+            values = expr_values
+            keywords['ExpressionAttributeValues'] = \
+                self.dynamizer.encode_keys(values)
+        elif kwargs:
+            values = dict(((':' + k, v) for k, v in six.iteritems(kwargs)))
+            keywords['ExpressionAttributeValues'] = \
+                self.dynamizer.encode_keys(values)
+        if attributes is not None:
+            if not isinstance(attributes, six.string_types):
+                attributes = ', '.join(attributes)
+            keywords['ProjectionExpression'] = attributes
+        if index is not None:
+            keywords['IndexName'] = index
+        if limit is not None:
+            keywords['Limit'] = limit
+        if alias:
+            keywords['ExpressionAttributeNames'] = alias
+        if select:
+            keywords['Select'] = select
+        if filter:
+            keywords['FilterExpression'] = filter
+        if segment is not None:
+            keywords['Segment'] = segment
+        if total_segments is not None:
+            keywords['TotalSegments'] = total_segments
+
+        if select == 'COUNT':
+            return self.call('scan', **keywords)
         else:
             return ResultSet(self, 'Items', 'scan', **keywords)
 

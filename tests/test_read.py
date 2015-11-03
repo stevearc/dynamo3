@@ -6,7 +6,7 @@ from six.moves import xrange as _xrange  # pylint: disable=F0401
 from . import BaseSystemTest, is_number
 from dynamo3 import STRING, NUMBER, DynamoKey, LocalIndex, GlobalIndex, TOTAL
 from dynamo3.result import Result, GetResultSet
-from mock import MagicMock, call
+from mock import MagicMock
 
 
 class TestQuery(BaseSystemTest):
@@ -643,6 +643,241 @@ class TestScan(BaseSystemTest):
         self.dynamo.put_item('foobar', b)
         ret = self.dynamo.scan('foobar', filter_or=True, a__eq='a', b__eq='a')
         self.assertItemsEqual(list(ret), [a, b])
+
+
+class TestScan2(BaseSystemTest):
+
+    """ Tests for newer scan api """
+
+    def make_table(self):
+        """ Convenience method for making a table """
+        hash_key = DynamoKey('id')
+        self.dynamo.create_table('foobar', hash_key=hash_key)
+
+    def test_attributes(self):
+        """ Can select only certain attributes """
+        hash_key = DynamoKey('id')
+        self.dynamo.create_table('foobar', hash_key)
+        item = {
+            'id': 'a',
+            'foo': 'bar',
+        }
+        self.dynamo.put_item('foobar', item)
+        results = self.dynamo.scan2('foobar', attributes='id')
+        self.assertItemsEqual(list(results), [{'id': 'a'}])
+
+    def test_attributes_list(self):
+        """ Can select only certain attributes specified by a list """
+        hash_key = DynamoKey('id')
+        self.dynamo.create_table('foobar', hash_key)
+        item = {
+            'id': 'a',
+            'foo': 'bar',
+        }
+        self.dynamo.put_item('foobar', item)
+        results = self.dynamo.scan2('foobar', attributes=['id'])
+        self.assertItemsEqual(list(results), [{'id': 'a'}])
+
+    def test_limit(self):
+        """ Can limit the number of scan results """
+        self.make_table()
+        with self.dynamo.batch_write('foobar') as batch:
+            for i in _xrange(3):
+                batch.put({'id': str(i)})
+        ret = self.dynamo.scan2('foobar', limit=1)
+        self.assertEqual(len(list(ret)), 1)
+
+    def test_count(self):
+        """ Can count items instead of returning the actual items """
+        self.make_table()
+        with self.dynamo.batch_write('foobar') as batch:
+            for i in _xrange(3):
+                batch.put({'id': str(i)})
+        ret = self.dynamo.scan2('foobar', select='COUNT')
+        self.assertEqual(ret['Count'], 3)
+        self.assertEqual(ret['ScannedCount'], 3)
+
+    def test_capacity(self):
+        """ Can return consumed capacity """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        ret = self.dynamo.scan2('foobar', return_capacity=TOTAL)
+        list(ret)
+        self.assertTrue(is_number(ret.capacity))
+        self.assertTrue(is_number(ret.table_capacity))
+        self.assertTrue(isinstance(ret.indexes, dict))
+        self.assertTrue(isinstance(ret.global_indexes, dict))
+
+    def test_eq(self):
+        """ Can scan with EQ constraint """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        self.dynamo.put_item('foobar', {'id': 'b'})
+        ret = self.dynamo.scan2('foobar', filter='id = :id', id='a')
+        self.assertItemsEqual(list(ret), [{'id': 'a'}])
+
+    def test_ne(self):
+        """ Can scan with NE constraint """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        self.dynamo.put_item('foobar', {'id': 'b'})
+        ret = self.dynamo.scan2('foobar', filter='id <> :id', id='b')
+        self.assertItemsEqual(list(ret), [{'id': 'a'}])
+
+    def test_le(self):
+        """ Can scan with <= constraint """
+        self.make_table()
+        item = {'id': 'a', 'num': 1}
+        self.dynamo.put_item('foobar', item)
+        self.dynamo.put_item('foobar', {'id': 'b', 'num': 2})
+        ret = self.dynamo.scan2('foobar', filter='num <= :num', num=1)
+        self.assertItemsEqual(list(ret), [item])
+
+    def test_lt(self):
+        """ Can scan with < constraint """
+        self.make_table()
+        item = {'id': 'a', 'num': 1}
+        self.dynamo.put_item('foobar', item)
+        self.dynamo.put_item('foobar', {'id': 'b', 'num': 2})
+        ret = list(self.dynamo.scan2('foobar', filter='num < :num', num=2))
+        self.assertItemsEqual(ret, [item])
+
+    def test_ge(self):
+        """ Can scan with >= constraint """
+        self.make_table()
+        item = {'id': 'a', 'num': 2}
+        self.dynamo.put_item('foobar', {'id': 'b', 'num': 1})
+        self.dynamo.put_item('foobar', item)
+        ret = self.dynamo.scan2('foobar', filter='num >= :num', num=2)
+        self.assertItemsEqual(list(ret), [item])
+
+    def test_gt(self):
+        """ Can scan with > constraint """
+        self.make_table()
+        item = {'id': 'a', 'num': 2}
+        self.dynamo.put_item('foobar', {'id': 'b', 'num': 1})
+        self.dynamo.put_item('foobar', item)
+        ret = self.dynamo.scan2('foobar', filter='num > :num', num=1)
+        self.assertItemsEqual(list(ret), [item])
+
+    def test_beginswith(self):
+        """ Can scan with 'begins with' constraint """
+        hash_key = DynamoKey('id')
+        self.dynamo.create_table('foobar', hash_key=hash_key)
+        item = {'id': 'a', 'name': 'David'}
+        self.dynamo.put_item('foobar', {'id': 'b', 'name': 'Steven'})
+        self.dynamo.put_item('foobar', item)
+        ret = self.dynamo.scan2('foobar', filter='begins_with(#name, :name)',
+                                alias={'#name': 'name'}, name='D')
+        self.assertItemsEqual(list(ret), [item])
+
+    def test_between(self):
+        """ Can scan with 'between' constraint """
+        self.make_table()
+        item = {'id': 'a', 'num': 2}
+        self.dynamo.put_item('foobar', {'id': 'b', 'num': 1})
+        self.dynamo.put_item('foobar', item)
+        ret = self.dynamo.scan2('foobar', filter='num between :low and :high',
+                                low=2, high=10)
+        self.assertItemsEqual(list(ret), [item])
+
+    def test_in(self):
+        """ Can scan with 'in' constraint """
+        self.make_table()
+        item = {'id': 'a', 'num': 2}
+        self.dynamo.put_item('foobar', {'id': 'b', 'num': 1})
+        self.dynamo.put_item('foobar', item)
+        ret = self.dynamo.scan2('foobar', filter='num in (:v1, :v2, :v3, :v4)',
+                                v1=2, v2=3, v3=4, v4=4)
+        self.assertItemsEqual(list(ret), [item])
+
+    def test_contains(self):
+        """ Can scan with 'contains' constraint """
+        self.make_table()
+        item = {'id': 'a', 'nums': set([1, 2, 3])}
+        self.dynamo.put_item('foobar', {'id': 'b', 'nums': set([4, 5, 6])})
+        self.dynamo.put_item('foobar', item)
+        ret = list(self.dynamo.scan2('foobar', filter='contains(nums, :num)', num=2))
+        self.assertItemsEqual(ret, [item])
+
+    def test_ncontains(self):
+        """ Can scan with 'not contains' constraint """
+        self.make_table()
+        item = {'id': 'a', 'nums': set([1, 2, 3])}
+        self.dynamo.put_item('foobar', {'id': 'b', 'nums': set([4, 5, 6])})
+        self.dynamo.put_item('foobar', item)
+        ret = list(self.dynamo.scan2('foobar',
+                                     filter='not contains(nums, :num)', num=4))
+        self.assertItemsEqual(ret, [item])
+
+    def test_is_null(self):
+        """ Can scan with 'is null' constraint """
+        self.make_table()
+        item = {'id': 'a'}
+        self.dynamo.put_item('foobar', {'id': 'b', 'num': 1})
+        self.dynamo.put_item('foobar', item)
+        ret = self.dynamo.scan2('foobar', filter='not attribute_exists(num)')
+        self.assertItemsEqual(list(ret), [item])
+
+    def test_is_not_null(self):
+        """ Can scan with 'is not null' constraint """
+        self.make_table()
+        item = {'id': 'a', 'num': 1}
+        self.dynamo.put_item('foobar', {'id': 'b'})
+        self.dynamo.put_item('foobar', item)
+        ret = self.dynamo.scan2('foobar', filter='attribute_exists(num)')
+        self.assertItemsEqual(list(ret), [item])
+
+    def test_filter_and(self):
+        """ Multiple filter args are ANDed together """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'a': 'a', 'b': 'a'})
+        self.dynamo.put_item('foobar', {'id': 'b', 'a': 'a', 'b': 'b'})
+        ret = self.dynamo.scan2('foobar', filter='a = :a and b = :b', a='a',
+                                b='a')
+        self.assertItemsEqual(list(ret), [{'id': 'a', 'a': 'a', 'b': 'a'}])
+
+    def test_filter_or(self):
+        """ Can 'or' the filter arguments """
+        self.make_table()
+        a = {'id': 'a', 'a': 'a', 'b': 'a'}
+        self.dynamo.put_item('foobar', a)
+        b = {'id': 'b', 'a': 'a', 'b': 'b'}
+        self.dynamo.put_item('foobar', b)
+        ret = self.dynamo.scan2('foobar', filter='a = :a or b = :b', a='a',
+                                b='a')
+        self.assertItemsEqual(list(ret), [a, b])
+
+    def test_scan_index(self):
+        """ Can scan a global index """
+        hash_key = DynamoKey('id', data_type=STRING)
+        index_field = DynamoKey('name')
+        index = GlobalIndex.all('name-index', index_field)
+        self.dynamo.create_table('foobar', hash_key, global_indexes=[index])
+        item = {
+            'id': 'a',
+            'name': 'baz',
+        }
+        self.dynamo.put_item('foobar', item)
+        item2 = {
+            'id': 'b',
+        }
+        self.dynamo.put_item('foobar', item2)
+        ret = self.dynamo.scan2('foobar', index='name-index')
+        self.assertItemsEqual(list(ret), [item])
+
+    def test_parallel_scan(self):
+        """ Can scan a table in segments """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        self.dynamo.put_item('foobar', {'id': 'b'})
+        self.dynamo.put_item('foobar', {'id': 'c'})
+        self.dynamo.put_item('foobar', {'id': 'd'})
+        ret1 = self.dynamo.scan2('foobar', segment=0, total_segments=2)
+        ret2 = self.dynamo.scan2('foobar', segment=1, total_segments=2)
+        self.assertItemsEqual(list(ret1) + list(ret2),
+                              [{'id': 'a'}, {'id': 'b'},
+                               {'id': 'c'}, {'id': 'd'}])
 
 
 class TestBatchGet(BaseSystemTest):
