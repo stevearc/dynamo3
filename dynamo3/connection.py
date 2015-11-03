@@ -636,6 +636,9 @@ class DynamoDBConnection(object):
         """
         Perform an index query on a table
 
+        This uses the older version of the DynamoDB API.
+        See also: :meth:`~.query2`.
+
         Parameters
         ----------
         tablename : str
@@ -703,6 +706,91 @@ class DynamoDBConnection(object):
         if count:
             keywords['Select'] = 'COUNT'
             return self.call('query', **keywords)['Count']
+        else:
+            return ResultSet(self, 'Items', 'query', **keywords)
+
+    def query2(self, tablename, key_condition_expr, expr_values=None,
+               alias=None, attributes=None, consistent=False, select=None,
+               index=None, limit=None, desc=False, return_capacity=NONE,
+               filter=None, **kwargs):
+        """
+        Perform an index query on a table
+
+        For many parameters you will want to reference the DynamoDB API:
+        http://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html
+
+        Parameters
+        ----------
+        tablename : str
+            Name of the table to query
+        key_condition_expr : str
+            See docs for KeyConditionExpression
+        expr_values : dict, optional
+            See docs for ExpressionAttributeValues. See also: kwargs
+        alias : dict, optional
+            See docs for ExpressionAttributeNames
+        attributes : str or list, optional
+            See docs for ProjectionExpression. If list, it will be joined by
+            commas.
+        consistent : bool, optional
+            Perform a strongly consistent read of the data (default False)
+        select : str, optional
+            See docs for Select
+        index : str, optional
+            The name of the index to query
+        limit : int, optional
+            Maximum number of items to return
+        desc : bool, optional
+            If True, return items in descending order (default False)
+        return_capacity : {NONE, INDEXES, TOTAL}, optional
+            INDEXES will return the consumed capacity for indexes, TOTAL will
+            return the consumed capacity for the table and the indexes.
+            (default NONE)
+        filter : str, optional
+            See docs for FilterExpression
+        **kwargs : dict, optional
+            If expr_values is not provided, the kwargs dict will be used as the
+            ExpressionAttributeValues (a ':' will be automatically prepended to
+            all keys).
+
+        Examples
+        --------
+
+        .. code-block:: python
+
+            connection.query2('mytable', 'foo = :foo', foo=5)
+            connection.query2('mytable', 'foo = :foo', expr_values={':foo': 5})
+
+        """
+        if expr_values:
+            values = expr_values
+        else:
+            values = dict(((':' + k, v) for k, v in six.iteritems(kwargs)))
+        keywords = {
+            'TableName': tablename,
+            'ReturnConsumedCapacity': return_capacity,
+            'ConsistentRead': consistent,
+            'KeyConditionExpression': key_condition_expr,
+            'ExpressionAttributeValues': self.dynamizer.encode_keys(values),
+            'ScanIndexForward': not desc,
+        }
+        if attributes is not None:
+            if not isinstance(attributes, six.string_types):
+                attributes = ', '.join(attributes)
+            keywords['ProjectionExpression'] = attributes
+        if index is not None:
+            keywords['IndexName'] = index
+        if limit is not None:
+            keywords['Limit'] = limit
+        if alias:
+            keywords['ExpressionAttributeNames'] = alias
+        if select:
+            keywords['Select'] = select
+        if filter:
+            keywords['FilterExpression'] = filter
+
+        if select == 'COUNT':
+            return self.call('query', **keywords)
         else:
             return ResultSet(self, 'Items', 'query', **keywords)
 
