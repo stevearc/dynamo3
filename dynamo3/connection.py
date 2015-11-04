@@ -429,6 +429,9 @@ class DynamoDBConnection(object):
         """
         Delete an item
 
+        This uses the older version of the DynamoDB API.
+        See also: :meth:`~.delete_item2`.
+
         Parameters
         ----------
         tablename : str
@@ -471,6 +474,62 @@ class DynamoDBConnection(object):
                         **keywords)
         if ret:
             return Result(self.dynamizer, ret, 'Attributes')
+
+    def delete_item2(self, tablename, key, expr_values=None, alias=None,
+                     condition=None, returns=NONE, return_capacity=NONE,
+                     return_item_collection_metrics=NONE, **kwargs):
+        """
+        Delete an item from a table
+
+        For many parameters you will want to reference the DynamoDB API:
+        http://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DeleteItem.html
+
+        Parameters
+        ----------
+        tablename : str
+            Name of the table to update
+        key : dict
+            Primary key dict specifying the hash key and, if applicable, the
+            range key of the item.
+        expr_values : dict, optional
+            See docs for ExpressionAttributeValues. See also: kwargs
+        alias : dict, optional
+            See docs for ExpressionAttributeNames
+        condition : str, optional
+            See docs for ConditionExpression
+        returns : {NONE, ALL_OLD, UPDATED_OLD, ALL_NEW, UPDATED_NEW}, optional
+            Return either the old or new values, either all attributes or just
+            the ones that changed. (default NONE)
+        return_capacity : {NONE, INDEXES, TOTAL}, optional
+            INDEXES will return the consumed capacity for indexes, TOTAL will
+            return the consumed capacity for the table and the indexes.
+            (default NONE)
+        return_item_collection_metrics : (NONE, SIZE), optional
+            SIZE will return statistics about item collections that were
+            modified.
+        **kwargs : dict, optional
+            If expr_values is not provided, the kwargs dict will be used as the
+            ExpressionAttributeValues (a ':' will be automatically prepended to
+            all keys).
+
+        """
+        keywords = {
+            'TableName': tablename,
+            'Key': self.dynamizer.encode_keys(key),
+            'ReturnValues': returns,
+            'ReturnConsumedCapacity': return_capacity,
+            'ReturnItemCollectionMetrics': return_item_collection_metrics,
+        }
+        values = build_expression_values(self.dynamizer, expr_values, kwargs)
+        if values:
+            keywords['ExpressionAttributeValues'] = values
+        if alias:
+            keywords['ExpressionAttributeNames'] = alias
+        if condition:
+            keywords['ConditionExpression'] = condition
+        result = self.call('delete_item', **keywords)
+        if result:
+            return Result(self.dynamizer, result, 'Attributes')
 
     def batch_write(self, tablename):
         """
@@ -524,7 +583,7 @@ class DynamoDBConnection(object):
         Update a single item in a table
 
         This uses the older version of the DynamoDB API.
-        See also: :meth:`~.update2`.
+        See also: :meth:`~.update_item2`.
 
         Parameters
         ----------
@@ -586,14 +645,14 @@ class DynamoDBConnection(object):
         if result:
             return Result(self.dynamizer, result, 'Attributes')
 
-    def update2(self, tablename, key, expression, expr_values=None, alias=None,
+    def update_item2(self, tablename, key, expression, expr_values=None, alias=None,
                 condition=None, returns=NONE, return_capacity=NONE,
                 return_item_collection_metrics=NONE, **kwargs):
         """
         Update a single item in a table
 
         For many parameters you will want to reference the DynamoDB API:
-            http://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateItem.html
+        http://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateItem.html
 
         Parameters
         ----------
