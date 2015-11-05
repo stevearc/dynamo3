@@ -104,6 +104,7 @@ class GetResultSet(PagedIterator):
         self.return_capacity = return_capacity
         self.page_size = 100
         self.unprocessed_keys = []
+        self._attempt = 0
 
     def _get_next_keys(self):
         """ Get the next page of keys to fetch """
@@ -139,8 +140,17 @@ class GetResultSet(PagedIterator):
             'ReturnConsumedCapacity': self.return_capacity,
         }
         data = self.connection.call('batch_get_item', **kwargs)
-        for items in six.itervalues(data.get('UnprocessedKeys', {})):
-            self.unprocessed_keys.extend(items['Keys'])
+        if 'UnprocessedKeys' in data:
+            for items in six.itervalues(data['UnprocessedKeys']):
+                self.unprocessed_keys.extend(items['Keys'])
+            # Getting UnprocessedKeys indicates that we are exceeding our
+            # throughput. So sleep for a bit.
+            self._attempt += 1
+            self.connection.exponential_sleep(self._attempt)
+        else:
+            # No UnprocessedKeys means our request rate is fine, so we can
+            # reset the attempt number.
+            self._attempt = 0
         self._update_capacity(data)
         return iter(data['Responses'][self.tablename])
 

@@ -2,6 +2,11 @@
 from .types import STRING
 
 
+def snake_to_camel(name):
+    """ Convert snake_case to CamelCase """
+    return ''.join([piece.capitalize() for piece in name.split('_')])
+
+
 class DynamoKey(object):
 
     """
@@ -64,6 +69,13 @@ class BaseIndex(object):
         self.name = name
         self.range_key = range_key
         self.include_fields = includes
+        self.response = {}
+
+    def __getattr__(self, name):
+        camel_name = snake_to_camel(name)
+        if camel_name in self.response:
+            return self.response[camel_name]
+        return super(BaseIndex, self).__getattribute__(name)
 
     def schema(self, hash_key):
         """
@@ -138,9 +150,11 @@ class LocalIndex(BaseIndex):
     def from_response(cls, response, attrs):
         """ Create an index from returned Dynamo data """
         proj = response['Projection']
-        return cls(proj['ProjectionType'], response['IndexName'],
-                   attrs[response['KeySchema'][1]['AttributeName']],
-                   proj.get('NonKeyAttributes'))
+        index = cls(proj['ProjectionType'], response['IndexName'],
+                    attrs[response['KeySchema'][1]['AttributeName']],
+                    proj.get('NonKeyAttributes'))
+        index.response = response
+        return index
 
 
 class GlobalIndex(BaseIndex):
@@ -188,14 +202,16 @@ class GlobalIndex(BaseIndex):
     def from_response(cls, response, attrs):
         """ Create an index from returned Dynamo data """
         proj = response['Projection']
-        hash_key = attrs[response['KeySchema'][0]['AttributeName']]
+        hash_key = attrs.get(response['KeySchema'][0]['AttributeName'])
         range_key = None
         if len(response['KeySchema']) > 1:
             range_key = attrs[response['KeySchema'][1]['AttributeName']]
         throughput = Throughput.from_response(
             response['ProvisionedThroughput'])
-        return cls(proj['ProjectionType'], response['IndexName'], hash_key,
-                   range_key, proj.get('NonKeyAttributes'), throughput)
+        index = cls(proj['ProjectionType'], response['IndexName'], hash_key,
+                    range_key, proj.get('NonKeyAttributes'), throughput)
+        index.response = response
+        return index
 
     def __hash__(self):
         return super(GlobalIndex, self).__hash__()
@@ -263,8 +279,7 @@ class Table(object):
     """ Representation of a DynamoDB table """
 
     def __init__(self, name, hash_key, range_key=None, indexes=None,
-                 global_indexes=None, throughput=None, status=None, size=0,
-                 item_count=0):
+                 global_indexes=None, throughput=None, status=None, size=0):
         self.name = name
         self.hash_key = hash_key
         self.range_key = range_key
@@ -273,7 +288,13 @@ class Table(object):
         self.throughput = throughput or Throughput()
         self.status = status
         self.size = size
-        self.item_count = item_count
+        self.response = {}
+
+    def __getattr__(self, name):
+        camel_name = snake_to_camel(name)
+        if camel_name in self.response:
+            return self.response[camel_name]
+        return super(Table, self).__getattribute__(name)
 
     @classmethod
     def from_response(cls, response):
@@ -296,7 +317,7 @@ class Table(object):
         for idx in response.get('GlobalSecondaryIndexes', []):
             global_indexes.append(GlobalIndex.from_response(idx, attrs))
 
-        return cls(
+        table = cls(
             name=response['TableName'],
             hash_key=hash_key,
             range_key=range_key,
@@ -306,8 +327,9 @@ class Table(object):
                 response['ProvisionedThroughput']),
             status=response['TableStatus'],
             size=response['TableSizeBytes'],
-            item_count=response['ItemCount'],
         )
+        table.response = response
+        return table
 
     def __hash__(self):
         return hash(self.name)
@@ -322,6 +344,74 @@ class Table(object):
             self.global_indexes == other.global_indexes and
             self.throughput == other.throughput
         )
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+
+class IndexUpdate(object):
+
+    """
+    An update to a GlobalSecondaryIndex to be passed to update_table
+
+    You should generally use the factory methods :meth:`~update`,
+    :meth:`~create`, and :meth:`~delete` instead of the constructor.
+
+    """
+
+    def __init__(self, action, index_name, **kwargs):
+        self.action = action
+        self.index_name = index_name
+        self.extra = kwargs
+
+    @classmethod
+    def update(cls, index_name, throughput):
+        """ Update the throughput on the index """
+        return cls('Update', index_name, throughput=throughput)
+
+    @classmethod
+    def create(cls, index):
+        """ Create a new index """
+        return cls('Create', None, index=index)
+
+    @classmethod
+    def delete(cls, index_name):
+        """ Delete an index """
+        return cls('Delete', index_name)
+
+    def get_attrs(self):
+        """ Get all attrs necessary for the update (empty unless Create) """
+        if self.action != 'Create':
+            return []
+        index = self.extra['index']
+        ret = [index.hash_key]
+        if index.range_key is not None:
+            ret.append(index.range_key)
+        return ret
+
+    def serialize(self):
+        """ Get the serialized Dynamo format for the update """
+        if self.action == 'Create':
+            payload = self.extra['index'].schema()
+        else:
+            payload = {
+                'IndexName': self.index_name,
+            }
+            if self.action == 'Update':
+                payload['ProvisionedThroughput'] = \
+                    self.extra['throughput'].schema()
+        return {
+            self.action: payload
+        }
+
+    def __hash__(self):
+        return hash(self.action) + hash(self.index_name)
+
+    def __eq__(self, other):
+        return (type(other) == type(self) and
+                self.action == other.action and
+                self.index_name == other.index_name and
+                self.extra == other.extra)
 
     def __ne__(self, other):
         return not self.__eq__(other)

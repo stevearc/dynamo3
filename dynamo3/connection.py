@@ -7,7 +7,7 @@ import six
 from botocore.exceptions import ClientError
 
 from .batch import BatchWriter, encode_query_kwargs
-from .constants import NONE
+from .constants import NONE, COUNT
 from .exception import translate_exception, DynamoDBError, ThroughputException
 from .fields import Throughput, Table
 from .result import ResultSet, GetResultSet, Result
@@ -28,6 +28,16 @@ def build_expected(dynamizer, expected):
                 'Value': dynamizer.encode(v),
             }
     return ret
+
+
+def build_expression_values(dynamizer, expr_values, kwargs):
+    """ Build ExpresionAttributeValues from a value or kwargs """
+    if expr_values:
+        values = expr_values
+        return dynamizer.encode_keys(values)
+    elif kwargs:
+        values = dict(((':' + k, v) for k, v in six.iteritems(kwargs)))
+        return dynamizer.encode_keys(values)
 
 
 class DynamoDBConnection(object):
@@ -419,6 +429,9 @@ class DynamoDBConnection(object):
         """
         Delete an item
 
+        This uses the older version of the DynamoDB API.
+        See also: :meth:`~.delete_item2`.
+
         Parameters
         ----------
         tablename : str
@@ -461,6 +474,62 @@ class DynamoDBConnection(object):
                         **keywords)
         if ret:
             return Result(self.dynamizer, ret, 'Attributes')
+
+    def delete_item2(self, tablename, key, expr_values=None, alias=None,
+                     condition=None, returns=NONE, return_capacity=NONE,
+                     return_item_collection_metrics=NONE, **kwargs):
+        """
+        Delete an item from a table
+
+        For many parameters you will want to reference the DynamoDB API:
+        http://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DeleteItem.html
+
+        Parameters
+        ----------
+        tablename : str
+            Name of the table to update
+        key : dict
+            Primary key dict specifying the hash key and, if applicable, the
+            range key of the item.
+        expr_values : dict, optional
+            See docs for ExpressionAttributeValues. See also: kwargs
+        alias : dict, optional
+            See docs for ExpressionAttributeNames
+        condition : str, optional
+            See docs for ConditionExpression
+        returns : {NONE, ALL_OLD, UPDATED_OLD, ALL_NEW, UPDATED_NEW}, optional
+            Return either the old or new values, either all attributes or just
+            the ones that changed. (default NONE)
+        return_capacity : {NONE, INDEXES, TOTAL}, optional
+            INDEXES will return the consumed capacity for indexes, TOTAL will
+            return the consumed capacity for the table and the indexes.
+            (default NONE)
+        return_item_collection_metrics : (NONE, SIZE), optional
+            SIZE will return statistics about item collections that were
+            modified.
+        **kwargs : dict, optional
+            If expr_values is not provided, the kwargs dict will be used as the
+            ExpressionAttributeValues (a ':' will be automatically prepended to
+            all keys).
+
+        """
+        keywords = {
+            'TableName': tablename,
+            'Key': self.dynamizer.encode_keys(key),
+            'ReturnValues': returns,
+            'ReturnConsumedCapacity': return_capacity,
+            'ReturnItemCollectionMetrics': return_item_collection_metrics,
+        }
+        values = build_expression_values(self.dynamizer, expr_values, kwargs)
+        if values:
+            keywords['ExpressionAttributeValues'] = values
+        if alias:
+            keywords['ExpressionAttributeNames'] = alias
+        if condition:
+            keywords['ConditionExpression'] = condition
+        result = self.call('delete_item', **keywords)
+        if result:
+            return Result(self.dynamizer, result, 'Attributes')
 
     def batch_write(self, tablename):
         """
@@ -512,6 +581,9 @@ class DynamoDBConnection(object):
                     return_capacity=NONE, expect_or=False, **kwargs):
         """
         Update a single item in a table
+
+        This uses the older version of the DynamoDB API.
+        See also: :meth:`~.update_item2`.
 
         Parameters
         ----------
@@ -573,10 +645,72 @@ class DynamoDBConnection(object):
         if result:
             return Result(self.dynamizer, result, 'Attributes')
 
+    def update_item2(self, tablename, key, expression, expr_values=None, alias=None,
+                     condition=None, returns=NONE, return_capacity=NONE,
+                     return_item_collection_metrics=NONE, **kwargs):
+        """
+        Update a single item in a table
+
+        For many parameters you will want to reference the DynamoDB API:
+        http://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateItem.html
+
+        Parameters
+        ----------
+        tablename : str
+            Name of the table to update
+        key : dict
+            Primary key dict specifying the hash key and, if applicable, the
+            range key of the item.
+        expression : str
+            See docs for UpdateExpression
+        expr_values : dict, optional
+            See docs for ExpressionAttributeValues. See also: kwargs
+        alias : dict, optional
+            See docs for ExpressionAttributeNames
+        condition : str, optional
+            See docs for ConditionExpression
+        returns : {NONE, ALL_OLD, UPDATED_OLD, ALL_NEW, UPDATED_NEW}, optional
+            Return either the old or new values, either all attributes or just
+            the ones that changed. (default NONE)
+        return_capacity : {NONE, INDEXES, TOTAL}, optional
+            INDEXES will return the consumed capacity for indexes, TOTAL will
+            return the consumed capacity for the table and the indexes.
+            (default NONE)
+        return_item_collection_metrics : (NONE, SIZE), optional
+            SIZE will return statistics about item collections that were
+            modified.
+        **kwargs : dict, optional
+            If expr_values is not provided, the kwargs dict will be used as the
+            ExpressionAttributeValues (a ':' will be automatically prepended to
+            all keys).
+
+        """
+        keywords = {
+            'TableName': tablename,
+            'Key': self.dynamizer.encode_keys(key),
+            'UpdateExpression': expression,
+            'ReturnValues': returns,
+            'ReturnConsumedCapacity': return_capacity,
+            'ReturnItemCollectionMetrics': return_item_collection_metrics,
+        }
+        values = build_expression_values(self.dynamizer, expr_values, kwargs)
+        if values:
+            keywords['ExpressionAttributeValues'] = values
+        if alias:
+            keywords['ExpressionAttributeNames'] = alias
+        if condition:
+            keywords['ConditionExpression'] = condition
+        result = self.call('update_item', **keywords)
+        if result:
+            return Result(self.dynamizer, result, 'Attributes')
+
     def scan(self, tablename, attributes=None, count=False, limit=None,
              return_capacity=NONE, filter_or=False, **kwargs):
         """
         Perform a full-table scan
+
+        This uses the older version of the DynamoDB API.
+        See also: :meth:`~.scan2`.
 
         Parameters
         ----------
@@ -625,8 +759,95 @@ class DynamoDBConnection(object):
             if len(kwargs) > 1:
                 keywords['ConditionalOperator'] = 'OR' if filter_or else 'AND'
         if count:
-            keywords['Select'] = 'COUNT'
+            keywords['Select'] = COUNT
             return self.call('scan', **keywords)['Count']
+        else:
+            return ResultSet(self, 'Items', 'scan', **keywords)
+
+    def scan2(self, tablename, expr_values=None, alias=None, attributes=None,
+              consistent=False, select=None, index=None, limit=None,
+              return_capacity=NONE, filter=False, segment=None,
+              total_segments=None, **kwargs):
+        """
+        Perform a full-table scan
+
+        For many parameters you will want to reference the DynamoDB API:
+        http://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html
+
+        Parameters
+        ----------
+        tablename : str
+            Name of the table to scan
+        expr_values : dict, optional
+            See docs for ExpressionAttributeValues. See also: kwargs
+        alias : dict, optional
+            See docs for ExpressionAttributeNames
+        attributes : str or list, optional
+            See docs for ProjectionExpression. If list, it will be joined by
+            commas.
+        consistent : bool, optional
+            Perform a strongly consistent read of the data (default False)
+        select : str, optional
+            See docs for Select
+        index : str, optional
+            The name of the index to query
+        limit : int, optional
+            Maximum number of items to return
+        return_capacity : {NONE, INDEXES, TOTAL}, optional
+            INDEXES will return the consumed capacity for indexes, TOTAL will
+            return the consumed capacity for the table and the indexes.
+            (default NONE)
+        filter : str, optional
+            See docs for FilterExpression
+        segment : int, optional
+            When doing a parallel scan, the unique thread identifier for this
+            scan. If present, total_segments must also be present.
+        total_segments : int, optional
+            When doing a parallel scan, the total number of threads performing
+            the scan.
+        **kwargs : dict, optional
+            If expr_values is not provided, the kwargs dict will be used as the
+            ExpressionAttributeValues (a ':' will be automatically prepended to
+            all keys).
+
+        Examples
+        --------
+
+        .. code-block:: python
+
+            connection.scan2('mytable', filter='contains(tags, :search)', search='text)
+            connection.scan2('mytable', filter='id = :id', expr_values={':id': 'dsa'})
+
+        """
+        keywords = {
+            'TableName': tablename,
+            'ReturnConsumedCapacity': return_capacity,
+            'ConsistentRead': consistent,
+        }
+        values = build_expression_values(self.dynamizer, expr_values, kwargs)
+        if values:
+            keywords['ExpressionAttributeValues'] = values
+        if attributes is not None:
+            if not isinstance(attributes, six.string_types):
+                attributes = ', '.join(attributes)
+            keywords['ProjectionExpression'] = attributes
+        if index is not None:
+            keywords['IndexName'] = index
+        if limit is not None:
+            keywords['Limit'] = limit
+        if alias:
+            keywords['ExpressionAttributeNames'] = alias
+        if select:
+            keywords['Select'] = select
+        if filter:
+            keywords['FilterExpression'] = filter
+        if segment is not None:
+            keywords['Segment'] = segment
+        if total_segments is not None:
+            keywords['TotalSegments'] = total_segments
+
+        if select == COUNT:
+            return self.call('scan', **keywords)
         else:
             return ResultSet(self, 'Items', 'scan', **keywords)
 
@@ -635,6 +856,9 @@ class DynamoDBConnection(object):
               filter=None, filter_or=False, **kwargs):
         """
         Perform an index query on a table
+
+        This uses the older version of the DynamoDB API.
+        See also: :meth:`~.query2`.
 
         Parameters
         ----------
@@ -701,12 +925,95 @@ class DynamoDBConnection(object):
         keywords['KeyConditions'] = encode_query_kwargs(self.dynamizer,
                                                         kwargs)
         if count:
-            keywords['Select'] = 'COUNT'
+            keywords['Select'] = COUNT
             return self.call('query', **keywords)['Count']
         else:
             return ResultSet(self, 'Items', 'query', **keywords)
 
-    def update_table(self, tablename, throughput=None, global_indexes=None):
+    def query2(self, tablename, key_condition_expr, expr_values=None,
+               alias=None, attributes=None, consistent=False, select=None,
+               index=None, limit=None, desc=False, return_capacity=NONE,
+               filter=None, **kwargs):
+        """
+        Perform an index query on a table
+
+        For many parameters you will want to reference the DynamoDB API:
+        http://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html
+
+        Parameters
+        ----------
+        tablename : str
+            Name of the table to query
+        key_condition_expr : str
+            See docs for KeyConditionExpression
+        expr_values : dict, optional
+            See docs for ExpressionAttributeValues. See also: kwargs
+        alias : dict, optional
+            See docs for ExpressionAttributeNames
+        attributes : str or list, optional
+            See docs for ProjectionExpression. If list, it will be joined by
+            commas.
+        consistent : bool, optional
+            Perform a strongly consistent read of the data (default False)
+        select : str, optional
+            See docs for Select
+        index : str, optional
+            The name of the index to query
+        limit : int, optional
+            Maximum number of items to return
+        desc : bool, optional
+            If True, return items in descending order (default False)
+        return_capacity : {NONE, INDEXES, TOTAL}, optional
+            INDEXES will return the consumed capacity for indexes, TOTAL will
+            return the consumed capacity for the table and the indexes.
+            (default NONE)
+        filter : str, optional
+            See docs for FilterExpression
+        **kwargs : dict, optional
+            If expr_values is not provided, the kwargs dict will be used as the
+            ExpressionAttributeValues (a ':' will be automatically prepended to
+            all keys).
+
+        Examples
+        --------
+
+        .. code-block:: python
+
+            connection.query2('mytable', 'foo = :foo', foo=5)
+            connection.query2('mytable', 'foo = :foo', expr_values={':foo': 5})
+
+        """
+        values = build_expression_values(self.dynamizer, expr_values, kwargs)
+        keywords = {
+            'TableName': tablename,
+            'ReturnConsumedCapacity': return_capacity,
+            'ConsistentRead': consistent,
+            'KeyConditionExpression': key_condition_expr,
+            'ExpressionAttributeValues': values,
+            'ScanIndexForward': not desc,
+        }
+        if attributes is not None:
+            if not isinstance(attributes, six.string_types):
+                attributes = ', '.join(attributes)
+            keywords['ProjectionExpression'] = attributes
+        if index is not None:
+            keywords['IndexName'] = index
+        if limit is not None:
+            keywords['Limit'] = limit
+        if alias:
+            keywords['ExpressionAttributeNames'] = alias
+        if select:
+            keywords['Select'] = select
+        if filter:
+            keywords['FilterExpression'] = filter
+
+        if select == COUNT:
+            return self.call('query', **keywords)
+        else:
+            return ResultSet(self, 'Items', 'query', **keywords)
+
+    def update_table(self, tablename, throughput=None, global_indexes=None,
+                     index_updates=None):
         """
         Update the throughput of a table and/or global indexes
 
@@ -717,13 +1024,23 @@ class DynamoDBConnection(object):
         throughput : :class:`~dynamo3.fields.Throughput`, optional
             The new throughput of the table
         global_indexes : dict, optional
+            DEPRECATED. Use index_updates now.
             Map of index name to :class:`~dynamo3.fields.Throughput`
+        index_updates : list of :class:`~dynamo3.fields.IndexUpdate`, optional
+            List of IndexUpdates to perform
 
         """
         kwargs = {}
+        all_attrs = set()
         if throughput is not None:
             kwargs['ProvisionedThroughput'] = throughput.schema()
-        if global_indexes is not None:
+        if index_updates is not None:
+            updates = []
+            for update in index_updates:
+                all_attrs.update(update.get_attrs())
+                updates.append(update.serialize())
+            kwargs['GlobalSecondaryIndexUpdates'] = updates
+        elif global_indexes is not None:
             kwargs['GlobalSecondaryIndexUpdates'] = [
                 {
                     'Update': {
@@ -733,4 +1050,7 @@ class DynamoDBConnection(object):
                 }
                 for key, value in six.iteritems(global_indexes)
             ]
+        if all_attrs:
+            attr_definitions = [attr.definition() for attr in all_attrs]
+            kwargs['AttributeDefinitions'] = attr_definitions
         return self.call('update_table', TableName=tablename, **kwargs)

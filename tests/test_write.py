@@ -7,7 +7,7 @@ from six.moves import xrange as _xrange  # pylint: disable=F0401
 from . import BaseSystemTest, is_number
 from dynamo3 import (STRING, NUMBER, DynamoKey, LocalIndex, GlobalIndex, Table,
                      Throughput, ItemUpdate, ALL_NEW, ALL_OLD, TOTAL,
-                     CheckFailed)
+                     CheckFailed, IndexUpdate)
 from dynamo3.batch import BatchWriter
 
 
@@ -148,13 +148,13 @@ class TestUpdateTable(BaseSystemTest):
         table = self.dynamo.describe_table('foobar')
         self.assertEqual(table.throughput, tp)
 
-    def test_update_global_index_throughput(self):
-        """ Update throughput on a global index """
+    def test_update_global_index_throughput_old(self):
+        """ Update throughput on a global index OLD API """
         hash_key = DynamoKey('id', data_type=STRING)
         index_field = DynamoKey('name')
         index = GlobalIndex.all('name-index', index_field)
-        self.dynamo.create_table(
-            'foobar', hash_key=hash_key, global_indexes=[index])
+        self.dynamo.create_table('foobar', hash_key=hash_key,
+                                 global_indexes=[index])
         tp = Throughput(2, 1)
         self.dynamo.update_table('foobar', global_indexes={'name-index': tp})
         table = self.dynamo.describe_table('foobar')
@@ -165,14 +165,59 @@ class TestUpdateTable(BaseSystemTest):
         hash_key = DynamoKey('id', data_type=STRING)
         index_field = DynamoKey('name')
         index = GlobalIndex.all('name-index', index_field)
-        self.dynamo.create_table(
-            'foobar', hash_key=hash_key, global_indexes=[index])
+        self.dynamo.create_table('foobar', hash_key=hash_key,
+                                 global_indexes=[index])
         tp = Throughput(2, 1)
-        self.dynamo.update_table(
-            'foobar', throughput=tp, global_indexes={'name-index': tp})
+        self.dynamo.update_table('foobar', throughput=tp,
+                                 global_indexes={'name-index': tp})
         table = self.dynamo.describe_table('foobar')
         self.assertEqual(table.throughput, tp)
         self.assertEqual(table.global_indexes[0].throughput, tp)
+
+    def test_update_index_throughput(self):
+        """ Update the throughput on a global index """
+        hash_key = DynamoKey('id', data_type=STRING)
+        index_field = DynamoKey('name')
+        index = GlobalIndex.all('name-index', index_field)
+        self.dynamo.create_table('foobar', hash_key=hash_key,
+                                 global_indexes=[index])
+        tp = Throughput(2, 1)
+        self.dynamo.update_table('foobar', index_updates=[
+            IndexUpdate.update('name-index', tp)])
+        table = self.dynamo.describe_table('foobar')
+        self.assertEqual(table.global_indexes[0].throughput, tp)
+
+    def test_delete_index(self):
+        """ Delete a global index """
+        hash_key = DynamoKey('id', data_type=STRING)
+        index_field = DynamoKey('name')
+        index = GlobalIndex.all('name-index', index_field)
+        self.dynamo.create_table('foobar', hash_key=hash_key,
+                                 global_indexes=[index])
+        self.dynamo.update_table('foobar', index_updates=[
+            IndexUpdate.delete('name-index')])
+        table = self.dynamo.describe_table('foobar')
+        self.assertTrue(len(table.global_indexes) == 0 or
+                        table.global_indexes[0].index_status == 'DELETING')
+
+    def test_create_index(self):
+        """ Create a global index """
+        hash_key = DynamoKey('id', data_type=STRING)
+        self.dynamo.create_table('foobar', hash_key=hash_key)
+        index_field = DynamoKey('name')
+        index = GlobalIndex.all('name-index', index_field, hash_key)
+        self.dynamo.update_table('foobar', index_updates=[
+            IndexUpdate.create(index)])
+        table = self.dynamo.describe_table('foobar')
+        self.assertEqual(len(table.global_indexes), 1)
+
+    def test_index_update_equality(self):
+        """ IndexUpdates should have sane == behavior """
+        self.assertEqual(IndexUpdate.delete('foo'), IndexUpdate.delete('foo'))
+        collection = set([IndexUpdate.delete('foo')])
+        self.assertIn(IndexUpdate.delete('foo'), collection)
+        self.assertNotEqual(IndexUpdate.delete('foo'),
+                            IndexUpdate.delete('bar'))
 
 
 class TestBatchWrite(BaseSystemTest):
@@ -396,6 +441,98 @@ class TestUpdateItem(BaseSystemTest):
         self.assertFalse(a != b)
 
 
+class TestUpdateItem2(BaseSystemTest):
+
+    """ Test the new UpdateItem API """
+
+    def make_table(self):
+        """ Convenience method for creating a table """
+        hash_key = DynamoKey('id')
+        self.dynamo.create_table('foobar', hash_key=hash_key)
+
+    def test_update_field(self):
+        """ Update an item field """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        self.dynamo.update_item2('foobar', {'id': 'a'}, 'SET foo = :bar',
+                                 bar='bar')
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item, {'id': 'a', 'foo': 'bar'})
+
+    def test_atomic_add_num(self):
+        """ Update can atomically add to a number """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        self.dynamo.update_item2('foobar', {'id': 'a'}, 'ADD foo :foo', foo=1)
+        self.dynamo.update_item2('foobar', {'id': 'a'}, 'ADD foo :foo', foo=2)
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item, {'id': 'a', 'foo': 3})
+
+    def test_atomic_add_set(self):
+        """ Update can atomically add to a set """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        self.dynamo.update_item2('foobar', {'id': 'a'}, 'ADD foo :foo',
+                                 foo=set([1]))
+        self.dynamo.update_item2('foobar', {'id': 'a'}, 'ADD foo :foo',
+                                 foo=set([1, 2]))
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item, {'id': 'a', 'foo': set([1, 2])})
+
+    def test_delete_field(self):
+        """ Update can delete fields from an item """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'bar'})
+        self.dynamo.update_item2('foobar', {'id': 'a'}, 'REMOVE foo')
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item, {'id': 'a'})
+
+    def test_return_item(self):
+        """ Update can return the updated item """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        ret = self.dynamo.update_item2('foobar', {'id': 'a'}, 'SET foo = :foo',
+                                       returns=ALL_NEW, foo='bar')
+        self.assertEqual(ret, {'id': 'a', 'foo': 'bar'})
+
+    def test_return_metadata(self):
+        """ The Update return value contains capacity metadata """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        ret = self.dynamo.update_item2('foobar', {'id': 'a'}, 'SET foo = :foo',
+                                       returns=ALL_NEW, return_capacity=TOTAL,
+                                       foo='bar')
+        self.assertTrue(is_number(ret.capacity))
+        self.assertTrue(is_number(ret.table_capacity))
+        self.assertTrue(isinstance(ret.indexes, dict))
+        self.assertTrue(isinstance(ret.global_indexes, dict))
+
+    def test_expect_condition(self):
+        """ Update can expect a field to meet a condition """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
+        with self.assertRaises(CheckFailed):
+            self.dynamo.update_item2('foobar', {'id': 'a'}, 'SET foo = :foo',
+                                     condition='foo < :max', foo=10, max=5)
+
+    def test_expect_condition_or(self):
+        """ Expected conditionals can be OR'd together """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
+        self.dynamo.update_item2(
+            'foobar', {'id': 'a'}, 'SET foo = :foo',
+            condition='foo < :max OR NOT attribute_exists(baz)', foo=10, max=5)
+
+    def test_expression_values(self):
+        """ Can pass in expression values directly """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
+        self.dynamo.update_item2('foobar', {'id': 'a'}, 'SET #f = :foo',
+                                 alias={'#f': 'foo'}, expr_values={':foo': 10})
+        item = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(item, {'id': 'a', 'foo': 10})
+
+
 class TestPutItem(BaseSystemTest):
 
     """ Tests for PutItem """
@@ -534,3 +671,74 @@ class TestDeleteItem(BaseSystemTest):
         self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
         self.dynamo.delete_item('foobar', {'id': 'a'}, expect_or=True,
                                 foo__lt=4, baz__null=True)
+
+
+class TestDeleteItem2(BaseSystemTest):
+
+    """ Tests for the new DeleteItem API """
+
+    def make_table(self):
+        """ Convenience method for creating a table """
+        hash_key = DynamoKey('id')
+        self.dynamo.create_table('foobar', hash_key=hash_key)
+
+    def test_delete(self):
+        """ Delete an item """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        self.dynamo.delete_item2('foobar', {'id': 'a'})
+        num = self.dynamo.scan('foobar', count=True)
+        self.assertEqual(num, 0)
+
+    def test_return_item(self):
+        """ Delete can return the deleted item """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'bar'})
+        ret = self.dynamo.delete_item2('foobar', {'id': 'a'}, returns=ALL_OLD)
+        self.assertEqual(ret, {'id': 'a', 'foo': 'bar'})
+
+    def test_return_metadata(self):
+        """ The Delete return value contains capacity metadata """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        ret = self.dynamo.delete_item2('foobar', {'id': 'a'},
+                                       returns=ALL_OLD,
+                                       return_capacity=TOTAL)
+        self.assertTrue(is_number(ret.capacity))
+        self.assertTrue(is_number(ret.table_capacity))
+        self.assertTrue(isinstance(ret.indexes, dict))
+        self.assertTrue(isinstance(ret.global_indexes, dict))
+
+    def test_expect_not_exists_deprecated(self):
+        """ Delete can expect a field to not exist """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'bar'})
+        with self.assertRaises(CheckFailed):
+            self.dynamo.delete_item2('foobar', {'id': 'a'},
+                                     condition='NOT attribute_exists(foo)')
+
+    def test_expect_field_deprecated(self):
+        """ Delete can expect a field to have a value """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'bar'})
+        with self.assertRaises(CheckFailed):
+            self.dynamo.delete_item2('foobar', {'id': 'a'},
+                                     condition='#f = :foo',
+                                     alias={'#f': 'foo'}, foo='baz')
+
+    def test_expect_condition(self):
+        """ Delete can expect a field to meet a condition """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
+        with self.assertRaises(CheckFailed):
+            self.dynamo.delete_item2('foobar', {'id': 'a'},
+                                     condition='foo < :low',
+                                     expr_values={':low': 4})
+
+    def test_expect_condition_or(self):
+        """ Expected conditionals can be OR'd together """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 5})
+        self.dynamo.delete_item2(
+            'foobar', {'id': 'a'},
+            condition='foo < :foo OR NOT attribute_exists(baz)', foo=4)

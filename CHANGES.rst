@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.4.1
+-----
+* Feature: update_table can create and delete global indexes
+* Feature: New methods to take advantage of the newer expression API. See scan2, query2, update_item2, and delete_item2.
+
 0.4.0
 -----
 * Migrating to botocore client API since services will be deprecated soon
