@@ -7,7 +7,8 @@ from .constants import (STRING, NUMBER, BINARY, STRING_SET, NUMBER_SET,
 from .exception import (CheckFailed, ConditionalCheckFailedException,
                         ThroughputException,
                         ProvisionedThroughputExceededException, DynamoDBError)
-from .fields import Throughput, Table, DynamoKey, LocalIndex, GlobalIndex
+from .fields import (Throughput, Table, DynamoKey, LocalIndex, GlobalIndex,
+                     IndexUpdate)
 from .types import Dynamizer, Binary, TYPES, TYPES_REV, is_null
 
 __version__ = '0.4.0'

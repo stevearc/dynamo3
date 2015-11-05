@@ -7,7 +7,7 @@ from six.moves import xrange as _xrange  # pylint: disable=F0401
 from . import BaseSystemTest, is_number
 from dynamo3 import (STRING, NUMBER, DynamoKey, LocalIndex, GlobalIndex, Table,
                      Throughput, ItemUpdate, ALL_NEW, ALL_OLD, TOTAL,
-                     CheckFailed)
+                     CheckFailed, IndexUpdate)
 from dynamo3.batch import BatchWriter
 
 
@@ -148,13 +148,13 @@ class TestUpdateTable(BaseSystemTest):
         table = self.dynamo.describe_table('foobar')
         self.assertEqual(table.throughput, tp)
 
-    def test_update_global_index_throughput(self):
-        """ Update throughput on a global index """
+    def test_update_global_index_throughput_old(self):
+        """ Update throughput on a global index OLD API """
         hash_key = DynamoKey('id', data_type=STRING)
         index_field = DynamoKey('name')
         index = GlobalIndex.all('name-index', index_field)
-        self.dynamo.create_table(
-            'foobar', hash_key=hash_key, global_indexes=[index])
+        self.dynamo.create_table('foobar', hash_key=hash_key,
+                                 global_indexes=[index])
         tp = Throughput(2, 1)
         self.dynamo.update_table('foobar', global_indexes={'name-index': tp})
         table = self.dynamo.describe_table('foobar')
@@ -165,14 +165,51 @@ class TestUpdateTable(BaseSystemTest):
         hash_key = DynamoKey('id', data_type=STRING)
         index_field = DynamoKey('name')
         index = GlobalIndex.all('name-index', index_field)
-        self.dynamo.create_table(
-            'foobar', hash_key=hash_key, global_indexes=[index])
+        self.dynamo.create_table('foobar', hash_key=hash_key,
+                                 global_indexes=[index])
         tp = Throughput(2, 1)
-        self.dynamo.update_table(
-            'foobar', throughput=tp, global_indexes={'name-index': tp})
+        self.dynamo.update_table('foobar', throughput=tp,
+                                 global_indexes={'name-index': tp})
         table = self.dynamo.describe_table('foobar')
         self.assertEqual(table.throughput, tp)
         self.assertEqual(table.global_indexes[0].throughput, tp)
+
+    def test_update_index_throughput(self):
+        """ Update the throughput on a global index """
+        hash_key = DynamoKey('id', data_type=STRING)
+        index_field = DynamoKey('name')
+        index = GlobalIndex.all('name-index', index_field)
+        self.dynamo.create_table('foobar', hash_key=hash_key,
+                                 global_indexes=[index])
+        tp = Throughput(2, 1)
+        self.dynamo.update_table('foobar', index_updates=[
+            IndexUpdate.update('name-index', tp)])
+        table = self.dynamo.describe_table('foobar')
+        self.assertEqual(table.global_indexes[0].throughput, tp)
+
+    def test_delete_index(self):
+        """ Delete a global index """
+        hash_key = DynamoKey('id', data_type=STRING)
+        index_field = DynamoKey('name')
+        index = GlobalIndex.all('name-index', index_field)
+        self.dynamo.create_table('foobar', hash_key=hash_key,
+                                 global_indexes=[index])
+        self.dynamo.update_table('foobar', index_updates=[
+            IndexUpdate.delete('name-index')])
+        table = self.dynamo.describe_table('foobar')
+        self.assertTrue(len(table.global_indexes) == 0 or
+                        table.global_indexes[0].index_status == 'DELETING')
+
+    def test_create_index(self):
+        """ Create a global index """
+        hash_key = DynamoKey('id', data_type=STRING)
+        self.dynamo.create_table('foobar', hash_key=hash_key)
+        index_field = DynamoKey('name')
+        index = GlobalIndex.all('name-index', index_field)
+        self.dynamo.update_table('foobar', index_updates=[
+            IndexUpdate.create(index)])
+        table = self.dynamo.describe_table('foobar')
+        self.assertEqual(len(table.global_indexes), 1)
 
 
 class TestBatchWrite(BaseSystemTest):
@@ -627,6 +664,7 @@ class TestDeleteItem(BaseSystemTest):
         self.dynamo.delete_item('foobar', {'id': 'a'}, expect_or=True,
                                 foo__lt=4, baz__null=True)
 
+
 class TestDeleteItem2(BaseSystemTest):
 
     """ Tests for the new DeleteItem API """
@@ -656,8 +694,8 @@ class TestDeleteItem2(BaseSystemTest):
         self.make_table()
         self.dynamo.put_item('foobar', {'id': 'a'})
         ret = self.dynamo.delete_item2('foobar', {'id': 'a'},
-                                      returns=ALL_OLD,
-                                      return_capacity=TOTAL)
+                                       returns=ALL_OLD,
+                                       return_capacity=TOTAL)
         self.assertTrue(is_number(ret.capacity))
         self.assertTrue(is_number(ret.table_capacity))
         self.assertTrue(isinstance(ret.indexes, dict))

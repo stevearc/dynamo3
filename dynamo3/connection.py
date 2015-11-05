@@ -646,8 +646,8 @@ class DynamoDBConnection(object):
             return Result(self.dynamizer, result, 'Attributes')
 
     def update_item2(self, tablename, key, expression, expr_values=None, alias=None,
-                condition=None, returns=NONE, return_capacity=NONE,
-                return_item_collection_metrics=NONE, **kwargs):
+                     condition=None, returns=NONE, return_capacity=NONE,
+                     return_item_collection_metrics=NONE, **kwargs):
         """
         Update a single item in a table
 
@@ -1012,7 +1012,8 @@ class DynamoDBConnection(object):
         else:
             return ResultSet(self, 'Items', 'query', **keywords)
 
-    def update_table(self, tablename, throughput=None, global_indexes=None):
+    def update_table(self, tablename, throughput=None, global_indexes=None,
+                     index_updates=None):
         """
         Update the throughput of a table and/or global indexes
 
@@ -1023,13 +1024,23 @@ class DynamoDBConnection(object):
         throughput : :class:`~dynamo3.fields.Throughput`, optional
             The new throughput of the table
         global_indexes : dict, optional
+            DEPRECATED. Use index_updates now.
             Map of index name to :class:`~dynamo3.fields.Throughput`
+        index_updates : list of :class:`~dynamo3.fields.IndexUpdate`, optional
+            List of IndexUpdates to perform
 
         """
         kwargs = {}
+        all_attrs = set()
         if throughput is not None:
             kwargs['ProvisionedThroughput'] = throughput.schema()
-        if global_indexes is not None:
+        if index_updates is not None:
+            updates = []
+            for update in index_updates:
+                all_attrs.update(update.get_attrs())
+                updates.append(update.serialize())
+            kwargs['GlobalSecondaryIndexUpdates'] = updates
+        elif global_indexes is not None:
             kwargs['GlobalSecondaryIndexUpdates'] = [
                 {
                     'Update': {
@@ -1039,4 +1050,7 @@ class DynamoDBConnection(object):
                 }
                 for key, value in six.iteritems(global_indexes)
             ]
+        if all_attrs:
+            attr_definitions = [attr.definition() for attr in all_attrs]
+            kwargs['AttributeDefinitions'] = attr_definitions
         return self.call('update_table', TableName=tablename, **kwargs)
