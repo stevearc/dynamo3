@@ -9,7 +9,7 @@ from six.moves.cPickle import dumps, loads  # pylint: disable=F0401,E0611
 from six.moves.urllib.parse import urlparse  # pylint: disable=F0401,E0611
 
 from dynamo3 import (DynamoDBConnection, Binary, DynamoKey, Dynamizer, STRING,
-                     ThroughputException, Table)
+                     ThroughputException, Table, GlobalIndex)
 
 
 try:
@@ -117,6 +117,25 @@ class TestMisc(BaseSystemTest):
         """ Describing a missing table returns None """
         ret = self.dynamo.describe_table('foobar')
         self.assertIsNone(ret)
+
+    def test_magic_table_props(self):
+        """ Table magically looks up properties on response object """
+        hash_key = DynamoKey('id')
+        self.dynamo.create_table('foobar', hash_key=hash_key)
+        ret = self.dynamo.describe_table('foobar')
+        self.assertIsNotNone(ret.item_count)
+        with self.assertRaises(AttributeError):
+            self.assertIsNotNone(ret.crazy_property)
+
+    def test_magic_index_props(self):
+        """ Index magically looks up properties on response object """
+        index = GlobalIndex.all('idx-name', DynamoKey('id'))
+        index.response = {
+            'FooBar': 2
+        }
+        self.assertEqual(index.foo_bar, 2)
+        with self.assertRaises(AttributeError):
+            self.assertIsNotNone(index.crazy_property)
 
     def test_describe_during_delete(self):
         """ Describing a table during a delete operation should not crash """

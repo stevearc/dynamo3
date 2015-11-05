@@ -205,11 +205,19 @@ class TestUpdateTable(BaseSystemTest):
         hash_key = DynamoKey('id', data_type=STRING)
         self.dynamo.create_table('foobar', hash_key=hash_key)
         index_field = DynamoKey('name')
-        index = GlobalIndex.all('name-index', index_field)
+        index = GlobalIndex.all('name-index', index_field, hash_key)
         self.dynamo.update_table('foobar', index_updates=[
             IndexUpdate.create(index)])
         table = self.dynamo.describe_table('foobar')
         self.assertEqual(len(table.global_indexes), 1)
+
+    def test_index_update_equality(self):
+        """ IndexUpdates should have sane == behavior """
+        self.assertEqual(IndexUpdate.delete('foo'), IndexUpdate.delete('foo'))
+        collection = set([IndexUpdate.delete('foo')])
+        self.assertIn(IndexUpdate.delete('foo'), collection)
+        self.assertNotEqual(IndexUpdate.delete('foo'),
+                            IndexUpdate.delete('bar'))
 
 
 class TestBatchWrite(BaseSystemTest):

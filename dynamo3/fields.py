@@ -69,11 +69,9 @@ class BaseIndex(object):
         self.name = name
         self.range_key = range_key
         self.include_fields = includes
-        self.response = None
+        self.response = {}
 
     def __getattr__(self, name):
-        if self.response is None:
-            return super(BaseIndex, self).__getattribute__(name)
         camel_name = snake_to_camel(name)
         if camel_name in self.response:
             return self.response[camel_name]
@@ -290,11 +288,9 @@ class Table(object):
         self.throughput = throughput or Throughput()
         self.status = status
         self.size = size
-        self.response = None
+        self.response = {}
 
     def __getattr__(self, name):
-        if self.response is None:
-            return super(Table, self).__getattribute__(name)
         camel_name = snake_to_camel(name)
         if camel_name in self.response:
             return self.response[camel_name]
