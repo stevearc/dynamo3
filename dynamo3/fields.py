@@ -1,10 +1,6 @@
 """ Objects for defining fields and indexes """
 from .types import STRING
-
-
-def snake_to_camel(name):
-    """ Convert snake_case to CamelCase """
-    return ''.join([piece.capitalize() for piece in name.split('_')])
+from .util import snake_to_camel
 
 
 class DynamoKey(object):

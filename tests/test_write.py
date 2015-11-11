@@ -1,7 +1,7 @@
 """ Test the write functions of Dynamo """
 from __future__ import unicode_literals
 
-from mock import MagicMock, call
+from mock import MagicMock, call, ANY
 from six.moves import xrange as _xrange  # pylint: disable=F0401
 
 from . import BaseSystemTest, is_number
@@ -134,6 +134,12 @@ class TestCreate(BaseSystemTest):
         desc = self.dynamo.describe_table('foobar')
         self.assertEqual(desc, table)
 
+    def test_dry_run(self):
+        """ dry_run=True """
+        hash_key = DynamoKey('id', data_type=STRING)
+        ret = self.dynamo.create_table('foobar', hash_key=hash_key, dry_run=True)
+        self.assertEqual(ret, ('CreateTable', ANY))
+
 
 class TestUpdateTable(BaseSystemTest):
 
@@ -219,6 +225,12 @@ class TestUpdateTable(BaseSystemTest):
         self.assertNotEqual(IndexUpdate.delete('foo'),
                             IndexUpdate.delete('bar'))
 
+    def test_dry_run(self):
+        """ dry_run=True """
+        tp = Throughput(2, 1)
+        ret = self.dynamo.update_table('foobar', throughput=tp, dry_run=True)
+        self.assertEqual(ret, ('UpdateTable', ANY))
+
 
 class TestBatchWrite(BaseSystemTest):
 
@@ -286,10 +298,37 @@ class TestBatchWrite(BaseSystemTest):
         # Should insert the first item, and then the two sets we marked as
         # unprocessed
         self.assertEqual(len(conn.call.mock_calls), 3)
+        kwargs = {
+            'RequestItems': {
+                'foo': [key1],
+            },
+            'ReturnConsumedCapacity': ANY,
+            'ReturnItemCollectionMetrics': ANY,
+        }
         self.assertEqual(conn.call.mock_calls[1],
-                         call('batch_write_item', RequestItems={'foo': [key1]}))
+                         call('batch_write_item', **kwargs))
+        kwargs['RequestItems']['foo'][0] = key2
         self.assertEqual(conn.call.mock_calls[2],
-                         call('batch_write_item', RequestItems={'foo': [key2]}))
+                         call('batch_write_item', **kwargs))
+
+    def test_exc_aborts(self):
+        """ Exception during a write will not flush data """
+        hash_key = DynamoKey('id', data_type=STRING)
+        self.dynamo.create_table('foobar', hash_key=hash_key)
+        try:
+            with self.dynamo.batch_write('foobar') as batch:
+                batch.put({'id': 'a'})
+                raise Exception
+        except Exception:
+            pass
+        ret = list(self.dynamo.scan('foobar'))
+        self.assertEqual(len(ret), 0)
+
+    def test_dry_run(self):
+        """ dry_run=True """
+        with self.dynamo.batch_write('foobar', dry_run=True) as batch:
+            batch.put({'id': 'a'})
+        self.assertEqual(batch.calls[0], ('BatchWriteItem', ANY))
 
 
 class TestUpdateItem(BaseSystemTest):
@@ -532,6 +571,12 @@ class TestUpdateItem2(BaseSystemTest):
         item = list(self.dynamo.scan('foobar'))[0]
         self.assertEqual(item, {'id': 'a', 'foo': 10})
 
+    def test_dry_run(self):
+        """ dry_run=True """
+        ret = self.dynamo.update_item2('foobar', {'id': 'a'}, 'SET foo = :bar',
+                                       bar='bar', dry_run=True)
+        self.assertEqual(ret, ('UpdateItem', ANY))
+
 
 class TestPutItem(BaseSystemTest):
 
@@ -606,6 +651,72 @@ class TestPutItem(BaseSystemTest):
         self.assertTrue(is_number(ret.table_capacity))
         self.assertTrue(isinstance(ret.indexes, dict))
         self.assertTrue(isinstance(ret.global_indexes, dict))
+
+
+class TestPutItem2(BaseSystemTest):
+
+    """ Tests for new PutItem API """
+
+    def make_table(self):
+        """ Convenience method for creating a table """
+        hash_key = DynamoKey('id')
+        self.dynamo.create_table('foobar', hash_key=hash_key)
+
+    def test_new_item(self):
+        """ Can Put new item into table """
+        self.make_table()
+        self.dynamo.put_item2('foobar', {'id': 'a'})
+        ret = list(self.dynamo.scan('foobar'))[0]
+        self.assertEqual(ret, {'id': 'a'})
+
+    def test_overwrite_item(self):
+        """ Can overwrite an existing item """
+        self.make_table()
+        self.dynamo.put_item2('foobar', {'id': 'a', 'foo': 'bar'})
+        self.dynamo.put_item2('foobar', {'id': 'a', 'foo': 'baz'})
+        ret = self.dynamo.get_item('foobar', {'id': 'a'})
+        self.assertEqual(ret, {'id': 'a', 'foo': 'baz'})
+
+    def test_expect_condition(self):
+        """ Put can expect a field to meet a condition """
+        self.make_table()
+        self.dynamo.put_item2('foobar', {'id': 'a', 'foo': 5})
+        with self.assertRaises(CheckFailed):
+            self.dynamo.put_item2('foobar', {'id': 'a', 'foo': 13},
+                                  condition='#f < :v', alias={'#f': 'foo'},
+                                  v=4)
+
+    def test_expect_condition_or(self):
+        """ Expected conditionals can be OR'd together """
+        self.make_table()
+        self.dynamo.put_item2('foobar', {'id': 'a', 'foo': 5})
+        self.dynamo.put_item2('foobar', {'id': 'a', 'foo': 13},
+                              condition='foo < :v OR attribute_not_exists(baz)',
+                              v=4)
+
+    def test_return_item(self):
+        """ PutItem can return the item that was Put """
+        self.make_table()
+        self.dynamo.put_item2('foobar', {'id': 'a'})
+        ret = self.dynamo.put_item2('foobar', {'id': 'a'}, returns=ALL_OLD)
+        self.assertEqual(ret, {'id': 'a'})
+
+    def test_return_capacity(self):
+        """ PutItem can return the consumed capacity """
+        self.make_table()
+        self.dynamo.put_item2('foobar', {'id': 'a'})
+        ret = self.dynamo.put_item2('foobar', {'id': 'a'},
+                                    returns=ALL_OLD,
+                                    return_capacity=TOTAL)
+        self.assertTrue(is_number(ret.capacity))
+        self.assertTrue(is_number(ret.table_capacity))
+        self.assertTrue(isinstance(ret.indexes, dict))
+        self.assertTrue(isinstance(ret.global_indexes, dict))
+
+    def test_dry_run(self):
+        """ dry_run=True """
+        ret = self.dynamo.put_item2('foobar', {'id': 'a'}, dry_run=True)
+        self.assertEqual(ret, ('PutItem', ANY))
 
 
 class TestDeleteItem(BaseSystemTest):
@@ -742,3 +853,8 @@ class TestDeleteItem2(BaseSystemTest):
         self.dynamo.delete_item2(
             'foobar', {'id': 'a'},
             condition='foo < :foo OR NOT attribute_exists(baz)', foo=4)
+
+    def test_dry_run(self):
+        """ dry_run=True """
+        ret = self.dynamo.delete_item2('foobar', {'id': 'a'}, dry_run=True)
+        self.assertEqual(ret, ('DeleteItem', ANY))

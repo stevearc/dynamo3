@@ -49,8 +49,6 @@ EXC = {
 
 def translate_exception(exc, kwargs):
     """ Translate a botocore.exceptions.ClientError into a dynamo3 error """
-    if 'Error' not in exc.response:
-        return exc
     error = exc.response['Error']
     error.setdefault('Message', '')
     err_class = EXC.get(error['Code'], DynamoDBError)

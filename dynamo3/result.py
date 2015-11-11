@@ -1,8 +1,7 @@
 """ Wrappers for result objects and iterators """
 import six
-from six.moves import xrange as _xrange  # pylint: disable=F0401
 
-from .constants import NONE
+from .constants import NONE, MAX_GET_BATCH
 
 
 class PagedIterator(six.Iterator):
@@ -17,9 +16,9 @@ class PagedIterator(six.Iterator):
         self.global_indexes = {}
 
     @property
-    def can_fetch_more(self):
+    def can_fetch_more(self):  # pragma: no cover
         """ Return True if more results can be fetched from the server """
-        return True
+        raise NotImplementedError
 
     def fetch(self):  # pragma: no cover
         """ Fetch additional results from the server and return an iterator """
@@ -98,51 +97,37 @@ class GetResultSet(PagedIterator):
         super(GetResultSet, self).__init__()
         self.connection = connection
         self.tablename = tablename
-        self.key_iter = iter(keys)
+        self.keys = keys
         self.consistent = consistent
         self.attributes = attributes
         self.return_capacity = return_capacity
-        self.page_size = 100
-        self.unprocessed_keys = []
         self._attempt = 0
 
-    def _get_next_keys(self):
-        """ Get the next page of keys to fetch """
-        keys = []
-        try:
-            # First try to iterate through the keys we were given
-            for _ in _xrange(self.page_size):
-                key = six.next(self.key_iter)
-                keys.append(self.connection.dynamizer.encode_keys(key))
-        except StopIteration:
-            # If there are no keys left, check the unprocessed keys
-            if not keys:
-                if self.unprocessed_keys:
-                    keys = self.unprocessed_keys[:self.page_size]
-                    self.unprocessed_keys = \
-                        self.unprocessed_keys[self.page_size:]
-                else:
-                    # If we're out of unprocessed keys, we're out of all keys
-                    raise StopIteration
-        return keys
+    @property
+    def can_fetch_more(self):
+        return bool(self.keys)
 
-    def fetch(self):
-        """ Fetch a set of items from their keys """
-        keys = self._get_next_keys()
+    def build_kwargs(self):
+        """ Construct the kwargs to pass to batch_get_item """
+        keys, self.keys = self.keys[:MAX_GET_BATCH], self.keys[MAX_GET_BATCH:]
         query = {'ConsistentRead': self.consistent}
         if self.attributes is not None:
             query['AttributesToGet'] = self.attributes
         query['Keys'] = keys
-        kwargs = {
+        return {
             'RequestItems': {
                 self.tablename: query,
             },
             'ReturnConsumedCapacity': self.return_capacity,
         }
+
+    def fetch(self):
+        """ Fetch a set of items from their keys """
+        kwargs = self.build_kwargs()
         data = self.connection.call('batch_get_item', **kwargs)
         if 'UnprocessedKeys' in data:
             for items in six.itervalues(data['UnprocessedKeys']):
-                self.unprocessed_keys.extend(items['Keys'])
+                self.keys.extend(items['Keys'])
             # Getting UnprocessedKeys indicates that we are exceeding our
             # throughput. So sleep for a bit.
             self._attempt += 1

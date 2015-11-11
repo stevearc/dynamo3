@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.4.2
+-----
+* Feature: New methods to take advantage of the newer expression API. See get_item2, put_item2.
+* Feature: Shortcut ``use_version`` for switching over to the new APIs.
+
 0.4.1
 -----
 * Feature: update_table can create and delete global indexes
