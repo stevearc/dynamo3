@@ -1,17 +1,20 @@
 """ Connection class for DynamoDB """
+import re
 import time
 import warnings
+import inspect
 
 import botocore.session
 import six
 from botocore.exceptions import ClientError
 
 from .batch import BatchWriter, encode_query_kwargs
-from .constants import NONE, COUNT
+from .constants import NONE, COUNT, API_VERSIONS
 from .exception import translate_exception, DynamoDBError, ThroughputException
 from .fields import Throughput, Table
 from .result import ResultSet, GetResultSet, Result
 from .types import Dynamizer, is_null
+from .util import dry_call
 
 
 def build_expected(dynamizer, expected):
@@ -45,8 +48,7 @@ class DynamoDBConnection(object):
     """
     Connection to DynamoDB.
 
-    You should generally call :meth:`~.connect_to_region` and
-    :meth:`~.connect_to_host` instead of the constructor.
+    You should generally call :meth:`~.connect` instead of the constructor.
 
     Parameters
     ----------
@@ -67,6 +69,38 @@ class DynamoDBConnection(object):
         self.client = client
         self.dynamizer = dynamizer
         self.request_retries = 10
+        self.version = API_VERSIONS[0]
+
+    def use_version(self, version):
+        """
+        Use a specific version of the DynamoDBConnection API.
+
+        There are some methods with multiple implementations that use different
+        versions of the DynamoDB API (for example: :meth:`~.query` and
+        :meth:`~.query2`).
+
+        """
+        assert version in API_VERSIONS
+        pattern = re.compile(r'^(.+)([0-9]+)$')
+        methods = inspect.getmembers(self, inspect.ismethod)
+        # Ignore the private methods
+        methods = [(name, meth) for (name, meth) in methods
+                   if not name.startswith('_')]
+        versioned_methods = {}
+        for name, method in methods:
+            match = pattern.match(name)
+            if not match:
+                continue
+            base_name = match.group(1)
+            ver = int(match.group(2))
+            if ver > version:
+                continue
+            versioned_methods.setdefault(base_name, (method, ver))
+            if ver > versioned_methods[base_name][1]:
+                versioned_methods[base_name] = (name, ver)
+        for base_name, (method, _) in six.iteritems(versioned_methods):
+            setattr(self, base_name, method)
+        self.version = version
 
     @property
     def host(self):
@@ -269,7 +303,7 @@ class DynamoDBConnection(object):
                 raise
 
     def create_table(self, tablename, hash_key, range_key=None,
-                     indexes=None, global_indexes=None, throughput=None):
+                     indexes=None, global_indexes=None, throughput=None, dry_run=False):
         """
         Create a table
 
@@ -298,7 +332,11 @@ class DynamoDBConnection(object):
         if range_key is not None:
             key_schema.append(range_key.range_schema())
 
-        kwargs = {}
+        kwargs = {
+            'TableName': tablename,
+            'KeySchema': key_schema,
+            'ProvisionedThroughput': throughput.schema(),
+        }
         if indexes:
             kwargs['LocalSecondaryIndexes'] = [
                 idx.schema(hash_key) for idx in indexes
@@ -315,12 +353,11 @@ class DynamoDBConnection(object):
                 if idx.range_key is not None:
                     all_attrs.add(idx.range_key)
 
-        attr_definitions = [attr.definition() for attr in all_attrs]
-        return self.call('create_table', TableName=tablename,
-                         AttributeDefinitions=attr_definitions,
-                         KeySchema=key_schema,
-                         ProvisionedThroughput=throughput.schema(),
-                         **kwargs)
+        kwargs['AttributeDefinitions'] = [attr.definition() for attr in
+                                          all_attrs]
+        if dry_run:
+            return dry_call('create_table', kwargs)
+        return self.call('create_table', **kwargs)
 
     def delete_table(self, tablename):
         """
@@ -347,9 +384,12 @@ class DynamoDBConnection(object):
                 raise
 
     def put_item(self, tablename, item, expected=None, returns=NONE,
-                 return_capacity=NONE, expect_or=False, **kwargs):
+                 return_capacity=NONE, expect_or=False, dry_run=False, **kwargs):
         """
         Store an item, overwriting existing data
+
+        This uses the older version of the DynamoDB API.
+        See also: :meth:`~.put_item2`.
 
         Parameters
         ----------
@@ -393,10 +433,71 @@ class DynamoDBConnection(object):
         if ret:
             return Result(self.dynamizer, ret, 'Attributes')
 
+    def put_item2(self, tablename, item, expr_values=None, alias=None,
+                  condition=None, returns=NONE, return_capacity=NONE,
+                  return_item_collection_metrics=NONE, dry_run=False,
+                  **kwargs):
+        """
+        Put a new item into a table
+
+        For many parameters you will want to reference the DynamoDB API:
+        http://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_PutItem.html
+
+        Parameters
+        ----------
+        tablename : str
+            Name of the table to update
+        item : dict
+            Item data
+        expr_values : dict, optional
+            See docs for ExpressionAttributeValues. See also: kwargs
+        alias : dict, optional
+            See docs for ExpressionAttributeNames
+        condition : str, optional
+            See docs for ConditionExpression
+        returns : {NONE, ALL_OLD}, optional
+            Return nothing or the old values from the item that was
+            overwritten, if any (default NONE)
+        return_capacity : {NONE, INDEXES, TOTAL}, optional
+            INDEXES will return the consumed capacity for indexes, TOTAL will
+            return the consumed capacity for the table and the indexes.
+            (default NONE)
+        return_item_collection_metrics : (NONE, SIZE), optional
+            SIZE will return statistics about item collections that were
+            modified.
+        **kwargs : dict, optional
+            If expr_values is not provided, the kwargs dict will be used as the
+            ExpressionAttributeValues (a ':' will be automatically prepended to
+            all keys).
+
+        """
+        keywords = {
+            'TableName': tablename,
+            'Item': self.dynamizer.encode_keys(item),
+            'ReturnValues': returns,
+            'ReturnConsumedCapacity': return_capacity,
+            'ReturnItemCollectionMetrics': return_item_collection_metrics,
+        }
+        values = build_expression_values(self.dynamizer, expr_values, kwargs)
+        if values:
+            keywords['ExpressionAttributeValues'] = values
+        if alias:
+            keywords['ExpressionAttributeNames'] = alias
+        if condition:
+            keywords['ConditionExpression'] = condition
+        if dry_run:
+            return dry_call('put_item', keywords)
+        result = self.call('put_item', **keywords)
+        if result:
+            return Result(self.dynamizer, result, 'Attributes')
+
     def get_item(self, tablename, key, attributes=None, consistent=False,
                  return_capacity=NONE):
         """
         Fetch a single item from a table
+
+        This uses the older version of the DynamoDB API.
+        See also: :meth:`~.get_item2`.
 
         Parameters
         ----------
@@ -415,13 +516,57 @@ class DynamoDBConnection(object):
             (default NONE)
 
         """
-        kwargs = {}
+        kwargs = {
+            'TableName': tablename,
+            'Key': self.dynamizer.encode_keys(key),
+            'ConsistentRead': consistent,
+            'ReturnConsumedCapacity': return_capacity,
+        }
         if attributes is not None:
             kwargs['AttributesToGet'] = attributes
-        key = self.dynamizer.encode_keys(key)
-        data = self.call('get_item', TableName=tablename, Key=key,
-                         ConsistentRead=consistent,
-                         ReturnConsumedCapacity=return_capacity, **kwargs)
+        data = self.call('get_item', **kwargs)
+        return Result(self.dynamizer, data, 'Item')
+
+    def get_item2(self, tablename, key, attributes=None, alias=None,
+                  consistent=False, return_capacity=NONE, dry_run=False):
+        """
+        Fetch a single item from a table
+
+        Parameters
+        ----------
+        tablename : str
+            Name of the table to fetch from
+        key : dict
+            Primary key dict specifying the hash key and, if applicable, the
+            range key of the item.
+        attributes : str or list, optional
+            See docs for ProjectionExpression. If list, it will be joined by
+            commas.
+        alias : dict, optional
+            See docs for ExpressionAttributeNames
+        consistent : bool, optional
+            Perform a strongly consistent read of the data (default False)
+        return_capacity : {NONE, INDEXES, TOTAL}, optional
+            INDEXES will return the consumed capacity for indexes, TOTAL will
+            return the consumed capacity for the table and the indexes.
+            (default NONE)
+
+        """
+        kwargs = {
+            'TableName': tablename,
+            'Key': self.dynamizer.encode_keys(key),
+            'ConsistentRead': consistent,
+            'ReturnConsumedCapacity': return_capacity,
+        }
+        if attributes is not None:
+            if not isinstance(attributes, six.string_types):
+                attributes = ', '.join(attributes)
+            kwargs['ProjectionExpression'] = attributes
+        if alias:
+            kwargs['ExpressionAttributeNames'] = alias
+        if dry_run:
+            return dry_call('get_item', kwargs)
+        data = self.call('get_item', **kwargs)
         return Result(self.dynamizer, data, 'Item')
 
     def delete_item(self, tablename, key, expected=None, returns=NONE,
@@ -477,7 +622,7 @@ class DynamoDBConnection(object):
 
     def delete_item2(self, tablename, key, expr_values=None, alias=None,
                      condition=None, returns=NONE, return_capacity=NONE,
-                     return_item_collection_metrics=NONE, **kwargs):
+                     return_item_collection_metrics=NONE, dry_run=False, **kwargs):
         """
         Delete an item from a table
 
@@ -527,11 +672,14 @@ class DynamoDBConnection(object):
             keywords['ExpressionAttributeNames'] = alias
         if condition:
             keywords['ConditionExpression'] = condition
+        if dry_run:
+            return dry_call('delete_item', keywords)
         result = self.call('delete_item', **keywords)
         if result:
             return Result(self.dynamizer, result, 'Attributes')
 
-    def batch_write(self, tablename):
+    def batch_write(self, tablename, return_capacity=NONE,
+                    return_item_collection_metrics=NONE, dry_run=False):
         """
         Perform a batch write on a table
 
@@ -549,10 +697,12 @@ class DynamoDBConnection(object):
                 batch.delete({'id': 'oldid'})
 
         """
-        return BatchWriter(self, tablename)
+        return BatchWriter(self, tablename, return_capacity=return_capacity,
+                           return_item_collection_metrics=return_item_collection_metrics,
+                           dry_run=dry_run)
 
     def batch_get(self, tablename, keys, attributes=None, consistent=False,
-                  return_capacity=NONE):
+                  return_capacity=NONE, dry_run=False):
         """
         Perform a batch get of many items in a table
 
@@ -573,9 +723,13 @@ class DynamoDBConnection(object):
             (default NONE)
 
         """
-        return GetResultSet(self, tablename, keys,
-                            consistent=consistent, attributes=attributes,
-                            return_capacity=return_capacity)
+        keys = [self.dynamizer.encode_keys(k) for k in keys]
+        ret = GetResultSet(self, tablename, keys,
+                           consistent=consistent, attributes=attributes,
+                           return_capacity=return_capacity)
+        if dry_run:
+            return dry_call('batch_get_item', ret.build_kwargs())
+        return ret
 
     def update_item(self, tablename, key, updates, returns=NONE,
                     return_capacity=NONE, expect_or=False, **kwargs):
@@ -647,7 +801,7 @@ class DynamoDBConnection(object):
 
     def update_item2(self, tablename, key, expression, expr_values=None, alias=None,
                      condition=None, returns=NONE, return_capacity=NONE,
-                     return_item_collection_metrics=NONE, **kwargs):
+                     return_item_collection_metrics=NONE, dry_run=False, **kwargs):
         """
         Update a single item in a table
 
@@ -700,6 +854,8 @@ class DynamoDBConnection(object):
             keywords['ExpressionAttributeNames'] = alias
         if condition:
             keywords['ConditionExpression'] = condition
+        if dry_run:
+            return dry_call('update_item', keywords)
         result = self.call('update_item', **keywords)
         if result:
             return Result(self.dynamizer, result, 'Attributes')
@@ -767,7 +923,7 @@ class DynamoDBConnection(object):
     def scan2(self, tablename, expr_values=None, alias=None, attributes=None,
               consistent=False, select=None, index=None, limit=None,
               return_capacity=NONE, filter=False, segment=None,
-              total_segments=None, **kwargs):
+              total_segments=None, dry_run=False, **kwargs):
         """
         Perform a full-table scan
 
@@ -846,7 +1002,9 @@ class DynamoDBConnection(object):
         if total_segments is not None:
             keywords['TotalSegments'] = total_segments
 
-        if select == COUNT:
+        if dry_run:
+            return dry_call('scan', keywords)
+        elif select == COUNT:
             return self.call('scan', **keywords)
         else:
             return ResultSet(self, 'Items', 'scan', **keywords)
@@ -933,7 +1091,7 @@ class DynamoDBConnection(object):
     def query2(self, tablename, key_condition_expr, expr_values=None,
                alias=None, attributes=None, consistent=False, select=None,
                index=None, limit=None, desc=False, return_capacity=NONE,
-               filter=None, **kwargs):
+               filter=None, dry_run=False, **kwargs):
         """
         Perform an index query on a table
 
@@ -1007,13 +1165,15 @@ class DynamoDBConnection(object):
         if filter:
             keywords['FilterExpression'] = filter
 
-        if select == COUNT:
+        if dry_run:
+            return dry_call('query', keywords)
+        elif select == COUNT:
             return self.call('query', **keywords)
         else:
             return ResultSet(self, 'Items', 'query', **keywords)
 
     def update_table(self, tablename, throughput=None, global_indexes=None,
-                     index_updates=None):
+                     index_updates=None, dry_run=False):
         """
         Update the throughput of a table and/or global indexes
 
@@ -1030,7 +1190,9 @@ class DynamoDBConnection(object):
             List of IndexUpdates to perform
 
         """
-        kwargs = {}
+        kwargs = {
+            'TableName': tablename
+        }
         all_attrs = set()
         if throughput is not None:
             kwargs['ProvisionedThroughput'] = throughput.schema()
@@ -1053,4 +1215,6 @@ class DynamoDBConnection(object):
         if all_attrs:
             attr_definitions = [attr.definition() for attr in all_attrs]
             kwargs['AttributeDefinitions'] = attr_definitions
-        return self.call('update_table', TableName=tablename, **kwargs)
+        if dry_run:
+            return dry_call('update_table', kwargs)
+        return self.call('update_table', **kwargs)

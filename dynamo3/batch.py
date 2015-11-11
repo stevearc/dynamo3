@@ -5,6 +5,8 @@ import logging
 import six
 
 from .types import is_null
+from .constants import MAX_WRITE_BATCH, NONE
+from .util import dry_call
 
 
 LOG = logging.getLogger(__name__)
@@ -197,23 +199,32 @@ class BatchWriter(object):
 
     """ Context manager for writing a large number of items to a table """
 
-    def __init__(self, connection, tablename):
+    def __init__(self, connection, tablename, return_capacity=NONE,
+                 return_item_collection_metrics=NONE, dry_run=False):
         self.connection = connection
         self.tablename = tablename
+        self.return_capacity = return_capacity
+        self.return_item_collection_metrics = return_item_collection_metrics
+        self.dry_run = dry_run
         self._to_put = []
         self._to_delete = []
         self._unprocessed = []
+        self._attempt = 0
+        self.calls = []
 
     def __enter__(self):
         return self
 
-    def __exit__(self, *_):
+    def __exit__(self, exc_type, *_):
+        # Don't try to flush remaining if we hit an exception
+        if exc_type is not None:
+            return
+        # Flush anything that's left.
         if self._to_put or self._to_delete:
-            # Flush anything that's left.
             self.flush()
 
+        # Finally, handle anything that wasn't processed.
         if self._unprocessed:
-            # Finally, handle anything that wasn't processed.
             self.resend_unprocessed()
 
     def put(self, data):
@@ -248,7 +259,7 @@ class BatchWriter(object):
 
     def should_flush(self):
         """ True if a flush is needed """
-        return len(self._to_put) + len(self._to_delete) == 25
+        return len(self._to_put) + len(self._to_delete) == MAX_WRITE_BATCH
 
     def flush(self):
         """ Flush pending items to Dynamo """
@@ -276,14 +287,22 @@ class BatchWriter(object):
             LOG.info("%d items were unprocessed. Storing for later.",
                      len(unprocessed))
             self._unprocessed.extend(unprocessed)
+            # Getting UnprocessedItems indicates that we are exceeding our
+            # throughput. So sleep for a bit.
+            self._attempt += 1
+            self.connection.exponential_sleep(self._attempt)
+        else:
+            # No UnprocessedItems means our request rate is fine, so we can
+            # reset the attempt number.
+            self._attempt = 0
 
     def resend_unprocessed(self):
         """ Resend all unprocessed items """
         LOG.info("Re-sending %d unprocessed items.", len(self._unprocessed))
 
         while self._unprocessed:
-            to_resend = self._unprocessed[:25]
-            self._unprocessed = self._unprocessed[25:]
+            to_resend = self._unprocessed[:MAX_WRITE_BATCH]
+            self._unprocessed = self._unprocessed[MAX_WRITE_BATCH:]
             LOG.info("Sending %d items", len(to_resend))
             resp = self._batch_write_item(to_resend)
             self._handle_unprocessed(resp)
@@ -291,7 +310,14 @@ class BatchWriter(object):
 
     def _batch_write_item(self, items):
         """ Make a BatchWriteItem call to Dynamo """
-        data = {
-            self.tablename: items,
+        kwargs = {
+            'RequestItems': {
+                self.tablename: items,
+            },
+            'ReturnConsumedCapacity': self.return_capacity,
+            'ReturnItemCollectionMetrics': self.return_item_collection_metrics,
         }
-        return self.connection.call('batch_write_item', RequestItems=data)
+        if self.dry_run:
+            self.calls.append(dry_call('batch_write_item', kwargs))
+            return {}
+        return self.connection.call('batch_write_item', **kwargs)

@@ -9,7 +9,7 @@ from six.moves.cPickle import dumps, loads  # pylint: disable=F0401,E0611
 from six.moves.urllib.parse import urlparse  # pylint: disable=F0401,E0611
 
 from dynamo3 import (DynamoDBConnection, Binary, DynamoKey, Dynamizer, STRING,
-                     ThroughputException, Table, GlobalIndex)
+                     ThroughputException, Table, GlobalIndex, DynamoDBError)
 
 
 try:
@@ -157,6 +157,23 @@ class TestMisc(BaseSystemTest):
         """ Deleting a missing table returns False """
         ret = self.dynamo.delete_table('foobar')
         self.assertTrue(not ret)
+
+    def test_connection_version(self):
+        """ Using a version will patch the old methods """
+        conn = DynamoDBConnection(self.dynamo.client)
+        conn.use_version(1)
+        self.assertNotEqual(conn.put_item, conn.put_item2)
+        conn.use_version(2)
+        self.assertEqual(conn.put_item, conn.put_item2)
+
+    def test_re_raise(self):
+        """ DynamoDBError can re-raise itself if missing exc_info """
+        err = DynamoDBError(400, Code='ErrCode', Message='Ouch', args={})
+        try:
+            err.re_raise()
+            self.assertTrue(False)
+        except DynamoDBError as e:
+            self.assertEqual(err, e)
 
 
 class TestDataTypes(BaseSystemTest):

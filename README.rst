@@ -9,8 +9,7 @@ Dynamo3
 .. |coverage| image:: https://coveralls.io/repos/stevearc/dynamo3/badge.png?branch=master
 .. _coverage: https://coveralls.io/r/stevearc/dynamo3?branch=master
 
-This is a stop-gap measure while `boto3 <http://github.com/boto/boto3>`_ is
-under development. I have kept the API mostly similar to boto (with a few
-improvements). This should only be used if you need to connect to DynamoDB
-using Python 3. It was created for `dql <http://github.com/mathcamp/dql>`_ and
-`flywheel <http://github.com/mathcamp/flywheel>`_.
+Dynamo3 is a library for querying DynamoDB. It is designed to be higher-level
+than boto (it's built on top of botocore), to make simple operations easier to
+perform and understand. It has some nice features like exponential backoff and
+automatic pagination built in.
