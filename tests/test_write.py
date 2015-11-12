@@ -138,7 +138,7 @@ class TestCreate(BaseSystemTest):
         """ dry_run=True """
         hash_key = DynamoKey('id', data_type=STRING)
         ret = self.dynamo.create_table('foobar', hash_key=hash_key, dry_run=True)
-        self.assertEqual(ret, ('CreateTable', ANY))
+        self.assertEqual(ret['TableName'], 'foobar')
 
 
 class TestUpdateTable(BaseSystemTest):
@@ -229,7 +229,7 @@ class TestUpdateTable(BaseSystemTest):
         """ dry_run=True """
         tp = Throughput(2, 1)
         ret = self.dynamo.update_table('foobar', throughput=tp, dry_run=True)
-        self.assertEqual(ret, ('UpdateTable', ANY))
+        self.assertEqual(ret['TableName'], 'foobar')
 
 
 class TestBatchWrite(BaseSystemTest):
@@ -328,7 +328,8 @@ class TestBatchWrite(BaseSystemTest):
         """ dry_run=True """
         with self.dynamo.batch_write('foobar', dry_run=True) as batch:
             batch.put({'id': 'a'})
-        self.assertEqual(batch.calls[0], ('BatchWriteItem', ANY))
+        self.assertEqual(batch.calls[0]['RequestItems']['foobar'],
+                         [{'PutRequest': {'Item': {'id': {'S': 'a'}}}}])
 
 
 class TestUpdateItem(BaseSystemTest):
@@ -575,7 +576,7 @@ class TestUpdateItem2(BaseSystemTest):
         """ dry_run=True """
         ret = self.dynamo.update_item2('foobar', {'id': 'a'}, 'SET foo = :bar',
                                        bar='bar', dry_run=True)
-        self.assertEqual(ret, ('UpdateItem', ANY))
+        self.assertEqual(ret['TableName'], 'foobar')
 
 
 class TestPutItem(BaseSystemTest):
@@ -716,7 +717,7 @@ class TestPutItem2(BaseSystemTest):
     def test_dry_run(self):
         """ dry_run=True """
         ret = self.dynamo.put_item2('foobar', {'id': 'a'}, dry_run=True)
-        self.assertEqual(ret, ('PutItem', ANY))
+        self.assertEqual(ret['TableName'], 'foobar')
 
 
 class TestDeleteItem(BaseSystemTest):
@@ -857,4 +858,4 @@ class TestDeleteItem2(BaseSystemTest):
     def test_dry_run(self):
         """ dry_run=True """
         ret = self.dynamo.delete_item2('foobar', {'id': 'a'}, dry_run=True)
-        self.assertEqual(ret, ('DeleteItem', ANY))
+        self.assertEqual(ret['TableName'], 'foobar')

@@ -462,7 +462,7 @@ class TestQuery2(BaseSystemTest):
     def test_dry_run(self):
         """ dry_run=True """
         ret = self.dynamo.query2('foobar', 'id = :id', id='a', dry_run=True)
-        self.assertEqual(ret, ('Query', ANY))
+        self.assertEqual(ret['TableName'], 'foobar')
 
 
 class TestScan(BaseSystemTest):
@@ -700,7 +700,9 @@ class TestScan2(BaseSystemTest):
                 batch.put({'id': str(i)})
         ret = self.dynamo.scan2('foobar', select='COUNT')
         self.assertEqual(ret['Count'], 3)
+        self.assertEqual(ret, 3)
         self.assertEqual(ret['ScannedCount'], 3)
+        self.assertEqual(ret.scanned_count, 3)
 
     def test_capacity(self):
         """ Can return consumed capacity """
@@ -895,7 +897,7 @@ class TestScan2(BaseSystemTest):
     def test_dry_run(self):
         """ dry_run=True """
         ret = self.dynamo.scan2('foobar', dry_run=True)
-        self.assertEqual(ret, ('Scan', ANY))
+        self.assertEqual(ret['TableName'], 'foobar')
 
 
 class TestBatchGet(BaseSystemTest):
@@ -963,6 +965,7 @@ class TestBatchGet(BaseSystemTest):
                 'foo': [],
             },
             'ConsumedCapacity': {
+                'TableName': 'foobar',
                 'CapacityUnits': 3,
                 'Table': {
                     'CapacityUnits': 1,
@@ -988,9 +991,9 @@ class TestBatchGet(BaseSystemTest):
 
     def test_dry_run(self):
         """ dry_run=True """
-        keys = [{'id': 'a'}, {'id': 'b'}]
+        keys = [{'id': 'a'}]
         ret = self.dynamo.batch_get('foobar', keys, dry_run=True)
-        self.assertEqual(ret, ('BatchGetItem', ANY))
+        self.assertEqual(ret['RequestItems']['foobar']['Keys'], [{'id': {'S': 'a'}}])
 
 
 class TestGetItem(BaseSystemTest):
@@ -1092,4 +1095,4 @@ class TestGetItem2(BaseSystemTest):
     def test_dry_run(self):
         """ dry_run=True """
         ret = self.dynamo.get_item2('foobar', {'id': 'a'}, dry_run=True)
-        self.assertEqual(ret, ('GetItem', ANY))
+        self.assertEqual(ret['Key'], {'id': {'S': 'a'}})

@@ -6,7 +6,7 @@ import six
 
 from .types import is_null
 from .constants import MAX_WRITE_BATCH, NONE
-from .util import dry_call
+from .result import ConsumedCapacity
 
 
 LOG = logging.getLogger(__name__)
@@ -211,6 +211,7 @@ class BatchWriter(object):
         self._unprocessed = []
         self._attempt = 0
         self.calls = []
+        self.consumed_capacity = None
 
     def __enter__(self):
         return self
@@ -270,17 +271,23 @@ class BatchWriter(object):
 
         for data in self._to_delete:
             items.append(encode_delete(self.connection.dynamizer, data))
-
-        resp = self._batch_write_item(items)
-        self._handle_unprocessed(resp)
-
+        self._write(items)
         self._to_put = []
         self._to_delete = []
 
-    def _handle_unprocessed(self, resp):
-        """ Requeue unprocessed items """
-        if resp.get('UnprocessedItems'):
-            unprocessed = resp['UnprocessedItems'].get(self.tablename, [])
+    def _write(self, items):
+        """ Perform a batch write and handle the response """
+        response = self._batch_write_item(items)
+        if 'ConsumedCapacity' in response:
+            cap = ConsumedCapacity.from_response(response['ConsumedCapacity'],
+                                                 False)
+            if self.consumed_capacity is None:
+                self.consumed_capacity = cap
+            else:
+                self.consumed_capacity += cap
+
+        if response.get('UnprocessedItems'):
+            unprocessed = response['UnprocessedItems'].get(self.tablename, [])
 
             # Some items have not been processed. Stow them for now &
             # re-attempt processing on ``__exit__``.
@@ -296,6 +303,8 @@ class BatchWriter(object):
             # reset the attempt number.
             self._attempt = 0
 
+        return response
+
     def resend_unprocessed(self):
         """ Resend all unprocessed items """
         LOG.info("Re-sending %d unprocessed items.", len(self._unprocessed))
@@ -304,8 +313,7 @@ class BatchWriter(object):
             to_resend = self._unprocessed[:MAX_WRITE_BATCH]
             self._unprocessed = self._unprocessed[MAX_WRITE_BATCH:]
             LOG.info("Sending %d items", len(to_resend))
-            resp = self._batch_write_item(to_resend)
-            self._handle_unprocessed(resp)
+            self._write(to_resend)
             LOG.info("%d unprocessed items left", len(self._unprocessed))
 
     def _batch_write_item(self, items):
@@ -318,6 +326,6 @@ class BatchWriter(object):
             'ReturnItemCollectionMetrics': self.return_item_collection_metrics,
         }
         if self.dry_run:
-            self.calls.append(dry_call('batch_write_item', kwargs))
+            self.calls.append(kwargs)
             return {}
         return self.connection.call('batch_write_item', **kwargs)

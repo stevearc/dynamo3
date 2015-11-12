@@ -12,9 +12,8 @@ from .batch import BatchWriter, encode_query_kwargs
 from .constants import NONE, COUNT, API_VERSIONS
 from .exception import translate_exception, DynamoDBError, ThroughputException
 from .fields import Throughput, Table
-from .result import ResultSet, GetResultSet, Result
+from .result import ResultSet, GetResultSet, Result, Count
 from .types import Dynamizer, is_null
-from .util import dry_call
 
 
 def build_expected(dynamizer, expected):
@@ -356,10 +355,10 @@ class DynamoDBConnection(object):
         kwargs['AttributeDefinitions'] = [attr.definition() for attr in
                                           all_attrs]
         if dry_run:
-            return dry_call('create_table', kwargs)
+            return kwargs
         return self.call('create_table', **kwargs)
 
-    def delete_table(self, tablename):
+    def delete_table(self, tablename, dry_run=False):
         """
         Delete a table
 
@@ -375,6 +374,8 @@ class DynamoDBConnection(object):
 
         """
         try:
+            if dry_run:
+                return {'TableName': tablename}
             self.call('delete_table', TableName=tablename)
             return True
         except DynamoDBError as e:
@@ -384,7 +385,8 @@ class DynamoDBConnection(object):
                 raise
 
     def put_item(self, tablename, item, expected=None, returns=NONE,
-                 return_capacity=NONE, expect_or=False, dry_run=False, **kwargs):
+                 return_capacity=NONE, expect_or=False, dry_run=False,
+                 **kwargs):
         """
         Store an item, overwriting existing data
 
@@ -431,7 +433,7 @@ class DynamoDBConnection(object):
                         ReturnValues=returns,
                         ReturnConsumedCapacity=return_capacity, **keywords)
         if ret:
-            return Result(self.dynamizer, ret, 'Attributes')
+            return Result(self.dynamizer, ret, 'Attributes', is_read=False)
 
     def put_item2(self, tablename, item, expr_values=None, alias=None,
                   condition=None, returns=NONE, return_capacity=NONE,
@@ -486,10 +488,10 @@ class DynamoDBConnection(object):
         if condition:
             keywords['ConditionExpression'] = condition
         if dry_run:
-            return dry_call('put_item', keywords)
+            return keywords
         result = self.call('put_item', **keywords)
         if result:
-            return Result(self.dynamizer, result, 'Attributes')
+            return Result(self.dynamizer, result, 'Attributes', is_read=False)
 
     def get_item(self, tablename, key, attributes=None, consistent=False,
                  return_capacity=NONE):
@@ -525,7 +527,7 @@ class DynamoDBConnection(object):
         if attributes is not None:
             kwargs['AttributesToGet'] = attributes
         data = self.call('get_item', **kwargs)
-        return Result(self.dynamizer, data, 'Item')
+        return Result(self.dynamizer, data, 'Item', is_read=True)
 
     def get_item2(self, tablename, key, attributes=None, alias=None,
                   consistent=False, return_capacity=NONE, dry_run=False):
@@ -565,9 +567,9 @@ class DynamoDBConnection(object):
         if alias:
             kwargs['ExpressionAttributeNames'] = alias
         if dry_run:
-            return dry_call('get_item', kwargs)
+            return kwargs
         data = self.call('get_item', **kwargs)
-        return Result(self.dynamizer, data, 'Item')
+        return Result(self.dynamizer, data, 'Item', is_read=True)
 
     def delete_item(self, tablename, key, expected=None, returns=NONE,
                     return_capacity=NONE, expect_or=False, **kwargs):
@@ -618,7 +620,7 @@ class DynamoDBConnection(object):
                         ReturnConsumedCapacity=return_capacity,
                         **keywords)
         if ret:
-            return Result(self.dynamizer, ret, 'Attributes')
+            return Result(self.dynamizer, ret, 'Attributes', is_read=False)
 
     def delete_item2(self, tablename, key, expr_values=None, alias=None,
                      condition=None, returns=NONE, return_capacity=NONE,
@@ -673,10 +675,10 @@ class DynamoDBConnection(object):
         if condition:
             keywords['ConditionExpression'] = condition
         if dry_run:
-            return dry_call('delete_item', keywords)
+            return keywords
         result = self.call('delete_item', **keywords)
         if result:
-            return Result(self.dynamizer, result, 'Attributes')
+            return Result(self.dynamizer, result, 'Attributes', is_read=False)
 
     def batch_write(self, tablename, return_capacity=NONE,
                     return_item_collection_metrics=NONE, dry_run=False):
@@ -728,7 +730,7 @@ class DynamoDBConnection(object):
                            consistent=consistent, attributes=attributes,
                            return_capacity=return_capacity)
         if dry_run:
-            return dry_call('batch_get_item', ret.build_kwargs())
+            return ret.build_kwargs()
         return ret
 
     def update_item(self, tablename, key, updates, returns=NONE,
@@ -797,7 +799,7 @@ class DynamoDBConnection(object):
                            ReturnConsumedCapacity=return_capacity,
                            **keywords)
         if result:
-            return Result(self.dynamizer, result, 'Attributes')
+            return Result(self.dynamizer, result, 'Attributes', is_read=False)
 
     def update_item2(self, tablename, key, expression, expr_values=None, alias=None,
                      condition=None, returns=NONE, return_capacity=NONE,
@@ -855,10 +857,10 @@ class DynamoDBConnection(object):
         if condition:
             keywords['ConditionExpression'] = condition
         if dry_run:
-            return dry_call('update_item', keywords)
+            return keywords
         result = self.call('update_item', **keywords)
         if result:
-            return Result(self.dynamizer, result, 'Attributes')
+            return Result(self.dynamizer, result, 'Attributes', is_read=False)
 
     def scan(self, tablename, attributes=None, count=False, limit=None,
              return_capacity=NONE, filter_or=False, **kwargs):
@@ -1003,9 +1005,9 @@ class DynamoDBConnection(object):
             keywords['TotalSegments'] = total_segments
 
         if dry_run:
-            return dry_call('scan', keywords)
+            return keywords
         elif select == COUNT:
-            return self.call('scan', **keywords)
+            return Count.from_response(self.call('scan', **keywords))
         else:
             return ResultSet(self, 'Items', 'scan', **keywords)
 
@@ -1084,7 +1086,7 @@ class DynamoDBConnection(object):
                                                         kwargs)
         if count:
             keywords['Select'] = COUNT
-            return self.call('query', **keywords)['Count']
+            return Count.from_response(self.call('query', **keywords))
         else:
             return ResultSet(self, 'Items', 'query', **keywords)
 
@@ -1166,9 +1168,9 @@ class DynamoDBConnection(object):
             keywords['FilterExpression'] = filter
 
         if dry_run:
-            return dry_call('query', keywords)
+            return keywords
         elif select == COUNT:
-            return self.call('query', **keywords)
+            return Count.from_response(self.call('query', **keywords))
         else:
             return ResultSet(self, 'Items', 'query', **keywords)
 
@@ -1216,5 +1218,5 @@ class DynamoDBConnection(object):
             attr_definitions = [attr.definition() for attr in all_attrs]
             kwargs['AttributeDefinitions'] = attr_definitions
         if dry_run:
-            return dry_call('update_table', kwargs)
+            return kwargs
         return self.call('update_table', **kwargs)

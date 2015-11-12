@@ -158,6 +158,11 @@ class TestMisc(BaseSystemTest):
         ret = self.dynamo.delete_table('foobar')
         self.assertTrue(not ret)
 
+    def test_delete_dry_run(self):
+        """ Delete table dry_run=True """
+        ret = self.dynamo.delete_table('foobar', dry_run=True)
+        self.assertEqual(ret, {'TableName': 'foobar'})
+
     def test_connection_version(self):
         """ Using a version will patch the old methods """
         conn = DynamoDBConnection(self.dynamo.client)
