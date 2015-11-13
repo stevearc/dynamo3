@@ -1,12 +1,10 @@
 """ Code for batch processing """
-import warnings
-
 import logging
 import six
 
 from .types import is_null
 from .constants import MAX_WRITE_BATCH, NONE
-from .util import dry_call
+from .result import ConsumedCapacity
 
 
 LOG = logging.getLogger(__name__)
@@ -37,6 +35,9 @@ class ItemUpdate(object):
 
     You should generally use the :meth:`~.put`, :meth:`~.add`, and
     :meth:`~.delete` methods instead of the constructor.
+
+    **DEPRECATED** This uses the old version of the dynamo API. It is
+    recommended to use :meth:`~dynamo3.connection.update_item2` instead.
 
     Parameters
     ----------
@@ -81,9 +82,6 @@ class ItemUpdate(object):
         self.action = action
         self.key = key
         self.value = value
-        if expected is not NO_ARG:
-            warnings.warn("Using deprecated argument 'expected' in "
-                          "ItemUpdate. Use kwargs instead.")
         self._expected = expected
         self._expect_kwargs = {}
         if len(kwargs) > 1:
@@ -200,17 +198,16 @@ class BatchWriter(object):
     """ Context manager for writing a large number of items to a table """
 
     def __init__(self, connection, tablename, return_capacity=NONE,
-                 return_item_collection_metrics=NONE, dry_run=False):
+                 return_item_collection_metrics=NONE):
         self.connection = connection
         self.tablename = tablename
         self.return_capacity = return_capacity
         self.return_item_collection_metrics = return_item_collection_metrics
-        self.dry_run = dry_run
         self._to_put = []
         self._to_delete = []
         self._unprocessed = []
         self._attempt = 0
-        self.calls = []
+        self.consumed_capacity = None
 
     def __enter__(self):
         return self
@@ -270,17 +267,21 @@ class BatchWriter(object):
 
         for data in self._to_delete:
             items.append(encode_delete(self.connection.dynamizer, data))
-
-        resp = self._batch_write_item(items)
-        self._handle_unprocessed(resp)
-
+        self._write(items)
         self._to_put = []
         self._to_delete = []
 
-    def _handle_unprocessed(self, resp):
-        """ Requeue unprocessed items """
-        if resp.get('UnprocessedItems'):
-            unprocessed = resp['UnprocessedItems'].get(self.tablename, [])
+    def _write(self, items):
+        """ Perform a batch write and handle the response """
+        response = self._batch_write_item(items)
+        if self.connection.last_consumed_capacity is not None:
+            # Comes back as a list from BatchWriteItem
+            self.consumed_capacity = \
+                sum(self.connection.last_consumed_capacity,
+                    self.consumed_capacity)
+
+        if response.get('UnprocessedItems'):
+            unprocessed = response['UnprocessedItems'].get(self.tablename, [])
 
             # Some items have not been processed. Stow them for now &
             # re-attempt processing on ``__exit__``.
@@ -296,6 +297,8 @@ class BatchWriter(object):
             # reset the attempt number.
             self._attempt = 0
 
+        return response
+
     def resend_unprocessed(self):
         """ Resend all unprocessed items """
         LOG.info("Re-sending %d unprocessed items.", len(self._unprocessed))
@@ -304,8 +307,7 @@ class BatchWriter(object):
             to_resend = self._unprocessed[:MAX_WRITE_BATCH]
             self._unprocessed = self._unprocessed[MAX_WRITE_BATCH:]
             LOG.info("Sending %d items", len(to_resend))
-            resp = self._batch_write_item(to_resend)
-            self._handle_unprocessed(resp)
+            self._write(to_resend)
             LOG.info("%d unprocessed items left", len(self._unprocessed))
 
     def _batch_write_item(self, items):
@@ -317,7 +319,4 @@ class BatchWriter(object):
             'ReturnConsumedCapacity': self.return_capacity,
             'ReturnItemCollectionMetrics': self.return_item_collection_metrics,
         }
-        if self.dry_run:
-            self.calls.append(dry_call('batch_write_item', kwargs))
-            return {}
         return self.connection.call('batch_write_item', **kwargs)

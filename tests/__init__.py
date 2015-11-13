@@ -4,12 +4,13 @@ from __future__ import unicode_literals
 import six
 from botocore.exceptions import ClientError
 from decimal import Decimal
-from mock import patch
+from mock import patch, MagicMock, ANY
 from six.moves.cPickle import dumps, loads  # pylint: disable=F0401,E0611
 from six.moves.urllib.parse import urlparse  # pylint: disable=F0401,E0611
 
 from dynamo3 import (DynamoDBConnection, Binary, DynamoKey, Dynamizer, STRING,
                      ThroughputException, Table, GlobalIndex, DynamoDBError)
+from dynamo3.result import add_dicts, Count, Capacity, ConsumedCapacity
 
 
 try:
@@ -47,6 +48,9 @@ class BaseSystemTest(unittest.TestCase):
 class TestMisc(BaseSystemTest):
 
     """ Tests that don't fit anywhere else """
+    def tearDown(self):
+        super(TestMisc, self).tearDown()
+        self.dynamo.default_return_capacity = False
 
     def test_connection_host(self):
         """ Connection can access host of endpoint """
@@ -158,14 +162,6 @@ class TestMisc(BaseSystemTest):
         ret = self.dynamo.delete_table('foobar')
         self.assertTrue(not ret)
 
-    def test_connection_version(self):
-        """ Using a version will patch the old methods """
-        conn = DynamoDBConnection(self.dynamo.client)
-        conn.use_version(1)
-        self.assertNotEqual(conn.put_item, conn.put_item2)
-        conn.use_version(2)
-        self.assertEqual(conn.put_item, conn.put_item2)
-
     def test_re_raise(self):
         """ DynamoDBError can re-raise itself if missing exc_info """
         err = DynamoDBError(400, Code='ErrCode', Message='Ouch', args={})
@@ -174,6 +170,16 @@ class TestMisc(BaseSystemTest):
             self.assertTrue(False)
         except DynamoDBError as e:
             self.assertEqual(err, e)
+
+    def test_default_return_capacity(self):
+        """ When default_return_capacity=True, always return capacity """
+        self.dynamo.default_return_capacity = True
+        with patch.object(self.dynamo, 'call') as call:
+            rs = self.dynamo.scan('foobar')
+            list(rs)
+        call.assert_called_with('scan', TableName='foobar',
+                                ReturnConsumedCapacity='INDEXES',
+                                ExclusiveStartKey=ANY)
 
 
 class TestDataTypes(BaseSystemTest):
@@ -368,3 +374,183 @@ class TestDynamizer(unittest.TestCase):
         dynamizer = Dynamizer()
         with self.assertRaises(ValueError):
             dynamizer.encode(datetime.utcnow())
+
+
+class TestResultModels(unittest.TestCase):
+    """ Tests for the model classes in results.py """
+
+    def test_add_dicts_base_case(self):
+        """ add_dict where one argument is None returns the other """
+        f = object()
+        self.assertEqual(add_dicts(f, None), f)
+        self.assertEqual(add_dicts(None, f), f)
+
+    def test_add_dicts(self):
+        """ Merge two dicts of values together """
+        a = {
+            'a': 1,
+            'b': 2,
+        }
+        b = {
+            'a': 3,
+            'c': 4,
+        }
+        ret = add_dicts(a, b)
+        self.assertEqual(ret, {
+            'a': 4,
+            'b': 2,
+            'c': 4,
+        })
+
+    def test_count_magic_lookup(self):
+        """ Count converts attrs into keys for response """
+        count = Count(0, {'A': 2})
+        self.assertEqual(count.a, 2)
+        with self.assertRaises(AttributeError):
+            getattr(count, 'b')
+
+    def test_count_repr(self):
+        """ Count repr """
+        count = Count(0)
+        self.assertEqual(repr(count), "Count(0)")
+
+    def test_capacity_factories(self):
+        """ Capacity.create_(read|write) factories """
+        cap = Capacity.create_read({'CapacityUnits': 3})
+        self.assertEqual(cap.read, 3)
+        self.assertEqual(cap.write, 0)
+
+        cap = Capacity.create_write({'CapacityUnits': 3})
+        self.assertEqual(cap.write, 3)
+        self.assertEqual(cap.read, 0)
+
+    def test_capacity_math(self):
+        """ Capacity addition and equality """
+        cap = Capacity(2, 4)
+        s = set([cap])
+        self.assertIn(Capacity(2, 4), s)
+        self.assertNotEqual(Capacity(1, 4), cap)
+        self.assertEqual(Capacity(1, 1) + Capacity(2, 2), Capacity(3, 3))
+
+    def test_capacity_format(self):
+        """ String formatting for Capacity """
+        c = Capacity(1, 3)
+        self.assertEqual(str(c), "R:1.0 W:3.0")
+        c = Capacity(0, 0)
+        self.assertEqual(str(c), "0")
+
+    def test_total_consumed_capacity(self):
+        """ ConsumedCapacity can parse results with only Total """
+        response = {
+            'TableName': 'foobar',
+            'CapacityUnits': 4,
+        }
+        cap = ConsumedCapacity.from_response(response, True)
+        self.assertEqual(cap.total.read, 4)
+        self.assertIsNone(cap.table_capacity)
+
+    def test_consumed_capacity_equality(self):
+        """ ConsumedCapacity addition and equality """
+        cap = ConsumedCapacity('foobar', Capacity(0, 10), Capacity(0, 2), {
+            'l-index': Capacity(0, 4),
+        }, {
+            'g-index': Capacity(0, 3),
+        })
+        c2 = ConsumedCapacity('foobar', Capacity(0, 10), Capacity(0, 2), {
+            'l-index': Capacity(0, 4),
+            'l-index2': Capacity(0, 7),
+        })
+
+        self.assertNotEqual(cap, c2)
+        c3 = ConsumedCapacity('foobar', Capacity(0, 10), Capacity(0, 2), {
+            'l-index': Capacity(0, 4),
+        }, {
+            'g-index': Capacity(0, 3),
+        })
+        self.assertIn(cap, set([c3]))
+        combined = cap + c2
+        self.assertEqual(cap + c2, ConsumedCapacity('foobar', Capacity(0, 20), Capacity(0, 4), {
+            'l-index': Capacity(0, 8),
+            'l-index2': Capacity(0, 7),
+        }, {
+            'g-index': Capacity(0, 3),
+        }))
+        self.assertIn(str(Capacity(0, 3)), str(combined))
+
+    def test_add_different_tables(self):
+        """ Cannot add ConsumedCapacity of two different tables """
+        c1 = ConsumedCapacity('foobar', Capacity(1, 28))
+        c2 = ConsumedCapacity('boofar', Capacity(3, 0))
+        with self.assertRaises(TypeError):
+            c1 += c2
+
+
+class TestHooks(BaseSystemTest):
+    """ Tests for connection callback hooks """
+
+    def tearDown(self):
+        super(TestHooks, self).tearDown()
+        for hooks in six.itervalues(self.dynamo._hooks):
+            while hooks:
+                hooks.pop()
+
+    def test_precall(self):
+        """ precall hooks are called before an API call """
+        hook = MagicMock()
+        self.dynamo.subscribe('precall', hook)
+
+        def throw(**_):
+            """ Throw an exception to terminate the request """
+            raise Exception()
+        with patch.object(self.dynamo, 'client') as client:
+            client.describe_table.side_effect = throw
+            with self.assertRaises(Exception):
+                self.dynamo.describe_table('foobar')
+        hook.assert_called_with(self.dynamo, 'describe_table', {'TableName': 'foobar'})
+
+    def test_postcall(self):
+        """ postcall hooks are called after API call """
+        hash_key = DynamoKey('id')
+        self.dynamo.create_table('foobar', hash_key=hash_key)
+        calls = []
+
+        def hook(*args):
+            """ Log the call into a list """
+            calls.append(args)
+        self.dynamo.subscribe('postcall', hook)
+        self.dynamo.describe_table('foobar')
+        self.assertEqual(len(calls), 1)
+        args = calls[0]
+        self.assertEqual(len(args), 4)
+        conn, command, kwargs, response = args
+        self.assertEqual(conn, self.dynamo)
+        self.assertEqual(command, 'describe_table')
+        self.assertEqual(kwargs['TableName'], 'foobar')
+        self.assertEqual(response['Table']['TableName'], 'foobar')
+
+    def test_capacity(self):
+        """ capacity hooks are called whenever response has ConsumedCapacity """
+        hash_key = DynamoKey('id')
+        self.dynamo.create_table('foobar', hash_key=hash_key)
+        hook = MagicMock()
+        self.dynamo.subscribe('capacity', hook)
+        with patch.object(self.dynamo, 'client') as client:
+            client.scan.return_value = {
+                'Items': [],
+                'ConsumedCapacity': {
+                    'TableName': 'foobar',
+                    'CapacityUnits': 4,
+                }
+            }
+            rs = self.dynamo.scan('foobar')
+            list(rs)
+        cap = ConsumedCapacity('foobar', Capacity(4, 0))
+        hook.assert_called_with(self.dynamo, 'scan', ANY, ANY, cap)
+
+    def test_subscribe(self):
+        """ Can subscribe and unsubscribe from hooks """
+        hook = object()
+        self.dynamo.subscribe('precall', hook)
+        self.assertEqual(len(self.dynamo._hooks['precall']), 1)
+        self.dynamo.unsubscribe('precall', hook)
+        self.assertEqual(len(self.dynamo._hooks['precall']), 0)
