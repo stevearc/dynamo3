@@ -9,6 +9,7 @@ from dynamo3 import (STRING, NUMBER, DynamoKey, LocalIndex, GlobalIndex, Table,
                      Throughput, ItemUpdate, ALL_NEW, ALL_OLD, TOTAL,
                      CheckFailed, IndexUpdate)
 from dynamo3.batch import BatchWriter
+from dynamo3.result import Capacity
 
 
 class TestCreate(BaseSystemTest):
@@ -323,6 +324,36 @@ class TestBatchWrite(BaseSystemTest):
             pass
         ret = list(self.dynamo.scan('foobar'))
         self.assertEqual(len(ret), 0)
+
+    def test_capacity(self):
+        """ Can return consumed capacity """
+        conn = MagicMock()
+        conn.call.return_value = {
+            'Responses': {
+                'foo': [],
+            },
+            'ConsumedCapacity': [{
+                'TableName': 'foobar',
+                'CapacityUnits': 3,
+                'Table': {
+                    'CapacityUnits': 1,
+                },
+                'LocalSecondaryIndexes': {
+                    'l-index': {
+                        'CapacityUnits': 1,
+                    },
+                },
+                'GlobalSecondaryIndexes': {
+                    'g-index': {
+                        'CapacityUnits': 1,
+                    },
+                },
+            }],
+        }
+        batch = BatchWriter(conn, 'foobar', return_capacity='INDEXES')
+        with batch:
+            batch.put({'id': 'a'})
+        self.assertEqual(batch.consumed_capacity.total, Capacity(0, 3))
 
     def test_dry_run(self):
         """ dry_run=True """

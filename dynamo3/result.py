@@ -180,9 +180,7 @@ class ConsumedCapacity(object):
         return ConsumedCapacity(self.tablename, **kwargs)
 
     def __str__(self):
-        lines = [
-            "Total: %s" % self.total,
-        ]
+        lines = []
         if self.table_capacity:
             lines.append("Table: %s" % self.table_capacity)
         if self.local_index_capacity:
@@ -191,6 +189,7 @@ class ConsumedCapacity(object):
         if self.global_index_capacity:
             for name, cap in six.iteritems(self.global_index_capacity):
                 lines.append("Global index '%s': %s" % (name, cap))
+        lines.append("Total: %s" % self.total)
         return '\n'.join(lines)
 
 
@@ -204,6 +203,7 @@ class PagedIterator(six.Iterator):
         self.table_capacity = 0
         self.indexes = {}
         self.global_indexes = {}
+        self.consumed_capacity = None
 
     @property
     def can_fetch_more(self):  # pragma: no cover
@@ -216,15 +216,29 @@ class PagedIterator(six.Iterator):
 
     def _update_capacity(self, data):
         """ Update the consumed capacity metrics """
-        cap = data.get('ConsumedCapacity', {})
-        self.capacity += cap.get('CapacityUnits', 0)
-        self.table_capacity += cap.get('Table', {}).get('CapacityUnits', 0)
-        for k, v in six.iteritems(cap.get('LocalSecondaryIndexes', {})):
-            self.indexes.setdefault(k, 0)
-            self.indexes[k] += v['CapacityUnits']
-        for k, v in six.iteritems(cap.get('GlobalSecondaryIndexes', {})):
-            self.global_indexes.setdefault(k, 0)
-            self.global_indexes[k] += v['CapacityUnits']
+        if 'ConsumedCapacity' in data:
+            consumed = data['ConsumedCapacity']
+            if not isinstance(consumed, list):
+                consumed = [consumed]
+            for cap in consumed:
+                capacity = ConsumedCapacity.from_response(cap, True)
+                if self.consumed_capacity is None:
+                    self.consumed_capacity = capacity
+                else:
+                    self.consumed_capacity += capacity
+
+                # This is all for backwards compatibility
+                self.capacity += cap.get('CapacityUnits', 0)
+                self.table_capacity += cap.get('Table',
+                                               {}).get('CapacityUnits', 0)
+                local_indexes = cap.get('LocalSecondaryIndexes', {})
+                for k, v in six.iteritems(local_indexes):
+                    self.indexes.setdefault(k, 0)
+                    self.indexes[k] += v['CapacityUnits']
+                global_indexes = cap.get('GlobalSecondaryIndexes', {})
+                for k, v in six.iteritems(global_indexes):
+                    self.global_indexes.setdefault(k, 0)
+                    self.global_indexes[k] += v['CapacityUnits']
 
     def __iter__(self):
         return self
@@ -251,7 +265,6 @@ class ResultSet(PagedIterator):
         self.args = args
         self.kwargs = kwargs
         self.last_evaluated_key = None
-        self.consumed_capacity = None
 
     @property
     def can_fetch_more(self):
@@ -262,12 +275,6 @@ class ResultSet(PagedIterator):
     def fetch(self):
         """ Fetch more results from Dynamo """
         data = self.connection.call(*self.args, **self.kwargs)
-        if 'ConsumedCapacity' in data:
-            cap = ConsumedCapacity.from_response(data['ConsumedCapacity'], True)
-            if self.consumed_capacity is None:
-                self.consumed_capacity = cap
-            else:
-                self.consumed_capacity += cap
         self.last_evaluated_key = data.get('LastEvaluatedKey')
         if self.last_evaluated_key is not None:
             self.kwargs['ExclusiveStartKey'] = self.last_evaluated_key
@@ -298,7 +305,6 @@ class GetResultSet(PagedIterator):
         self.consistent = consistent
         self.attributes = attributes
         self.return_capacity = return_capacity
-        self.consumed_capacity = None
         self._attempt = 0
 
     @property
@@ -323,12 +329,6 @@ class GetResultSet(PagedIterator):
         """ Fetch a set of items from their keys """
         kwargs = self.build_kwargs()
         data = self.connection.call('batch_get_item', **kwargs)
-        if 'ConsumedCapacity' in data:
-            cap = ConsumedCapacity.from_response(data['ConsumedCapacity'], True)
-            if self.consumed_capacity is None:
-                self.consumed_capacity = cap
-            else:
-                self.consumed_capacity += cap
         if 'UnprocessedKeys' in data:
             for items in six.itervalues(data['UnprocessedKeys']):
                 self.keys.extend(items['Keys'])

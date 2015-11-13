@@ -279,12 +279,12 @@ class BatchWriter(object):
         """ Perform a batch write and handle the response """
         response = self._batch_write_item(items)
         if 'ConsumedCapacity' in response:
-            cap = ConsumedCapacity.from_response(response['ConsumedCapacity'],
-                                                 False)
-            if self.consumed_capacity is None:
-                self.consumed_capacity = cap
-            else:
-                self.consumed_capacity += cap
+            for consumed in response['ConsumedCapacity']:
+                cap = ConsumedCapacity.from_response(consumed, False)
+                if self.consumed_capacity is None:
+                    self.consumed_capacity = cap
+                else:
+                    self.consumed_capacity += cap
 
         if response.get('UnprocessedItems'):
             unprocessed = response['UnprocessedItems'].get(self.tablename, [])

@@ -964,7 +964,7 @@ class TestBatchGet(BaseSystemTest):
             'Responses': {
                 'foo': [],
             },
-            'ConsumedCapacity': {
+            'ConsumedCapacity': [{
                 'TableName': 'foobar',
                 'CapacityUnits': 3,
                 'Table': {
@@ -980,7 +980,7 @@ class TestBatchGet(BaseSystemTest):
                         'CapacityUnits': 1,
                     },
                 },
-            },
+            }],
         }
         rs = GetResultSet(conn, 'foo', [{'id': 'a'}])
         list(rs)
