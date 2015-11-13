@@ -377,6 +377,7 @@ class TestDynamizer(unittest.TestCase):
 
 
 class TestResultModels(unittest.TestCase):
+    """ Tests for the model classes in results.py """
 
     def test_add_dicts_base_case(self):
         """ add_dict where one argument is None returns the other """
@@ -385,6 +386,7 @@ class TestResultModels(unittest.TestCase):
         self.assertEqual(add_dicts(None, f), f)
 
     def test_add_dicts(self):
+        """ Merge two dicts of values together """
         a = {
             'a': 1,
             'b': 2,
@@ -405,7 +407,7 @@ class TestResultModels(unittest.TestCase):
         count = Count(0, {'A': 2})
         self.assertEqual(count.a, 2)
         with self.assertRaises(AttributeError):
-            count.b
+            getattr(count, 'b')
 
     def test_count_repr(self):
         """ Count repr """
@@ -480,10 +482,12 @@ class TestResultModels(unittest.TestCase):
         c1 = ConsumedCapacity('foobar', Capacity(1, 28))
         c2 = ConsumedCapacity('boofar', Capacity(3, 0))
         with self.assertRaises(TypeError):
-            c1 + c2
+            c1 += c2
 
 
 class TestHooks(BaseSystemTest):
+    """ Tests for connection callback hooks """
+
     def tearDown(self):
         super(TestHooks, self).tearDown()
         for hooks in six.itervalues(self.dynamo._hooks):
@@ -494,7 +498,9 @@ class TestHooks(BaseSystemTest):
         """ precall hooks are called before an API call """
         hook = MagicMock()
         self.dynamo.subscribe('precall', hook)
+
         def throw(**_):
+            """ Throw an exception to terminate the request """
             raise Exception()
         with patch.object(self.dynamo, 'client') as client:
             client.describe_table.side_effect = throw
@@ -507,7 +513,9 @@ class TestHooks(BaseSystemTest):
         hash_key = DynamoKey('id')
         self.dynamo.create_table('foobar', hash_key=hash_key)
         calls = []
+
         def hook(*args):
+            """ Log the call into a list """
             calls.append(args)
         self.dynamo.subscribe('postcall', hook)
         self.dynamo.describe_table('foobar')

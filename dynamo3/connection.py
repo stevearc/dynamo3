@@ -14,7 +14,6 @@ from .result import ResultSet, GetResultSet, Result, Count, ConsumedCapacity
 from .types import Dynamizer, is_null
 
 
-
 def build_expected(dynamizer, expected):
     """ Build the Expected parameters from a dict """
     ret = {}
@@ -258,9 +257,23 @@ class DynamoDBConnection(object):
             time.sleep(0.1 * 2 ** attempt)
 
     def subscribe(self, event, hook):
+        """
+        Subscribe a callback to an event
+
+        Parameters
+        ----------
+        event : str
+            Available events are 'precall', 'postcall', and 'capacity'.
+            precall is called with: (connection, command, query_kwargs)
+            postcall is called with: (connection, command, query_kwargs, response)
+            capacity is called with: (connection, command, query_kwargs, response, capacity)
+        hook : callable
+
+        """
         self._hooks[event].append(hook)
 
     def unsubscribe(self, event, hook):
+        """ Unsubscribe a hook from an event """
         self._hooks[event].remove(hook)
 
     def _default_capacity(self, value):
