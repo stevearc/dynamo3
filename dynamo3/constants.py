@@ -1,5 +1,4 @@
 """ Constant values """
-API_VERSIONS = (1, 2)
 
 # Data types
 NUMBER = 'N'

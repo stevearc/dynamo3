@@ -9,7 +9,7 @@ import six
 from botocore.exceptions import ClientError
 
 from .batch import BatchWriter, encode_query_kwargs
-from .constants import NONE, COUNT, API_VERSIONS
+from .constants import NONE, COUNT
 from .exception import translate_exception, DynamoDBError, ThroughputException
 from .fields import Throughput, Table
 from .result import ResultSet, GetResultSet, Result, Count
@@ -68,38 +68,6 @@ class DynamoDBConnection(object):
         self.client = client
         self.dynamizer = dynamizer
         self.request_retries = 10
-        self.version = API_VERSIONS[0]
-
-    def use_version(self, version):
-        """
-        Use a specific version of the DynamoDBConnection API.
-
-        There are some methods with multiple implementations that use different
-        versions of the DynamoDB API (for example: :meth:`~.query` and
-        :meth:`~.query2`).
-
-        """
-        assert version in API_VERSIONS
-        pattern = re.compile(r'^(.+)([0-9]+)$')
-        methods = inspect.getmembers(self, inspect.ismethod)
-        # Ignore the private methods
-        methods = [(name, meth) for (name, meth) in methods
-                   if not name.startswith('_')]
-        versioned_methods = {}
-        for name, method in methods:
-            match = pattern.match(name)
-            if not match:
-                continue
-            base_name = match.group(1)
-            ver = int(match.group(2))
-            if ver > version:
-                continue
-            versioned_methods.setdefault(base_name, (method, ver))
-            if ver > versioned_methods[base_name][1]:
-                versioned_methods[base_name] = (name, ver)
-        for base_name, (method, _) in six.iteritems(versioned_methods):
-            setattr(self, base_name, method)
-        self.version = version
 
     @property
     def host(self):

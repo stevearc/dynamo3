@@ -163,14 +163,6 @@ class TestMisc(BaseSystemTest):
         ret = self.dynamo.delete_table('foobar', dry_run=True)
         self.assertEqual(ret, {'TableName': 'foobar'})
 
-    def test_connection_version(self):
-        """ Using a version will patch the old methods """
-        conn = DynamoDBConnection(self.dynamo.client)
-        conn.use_version(1)
-        self.assertNotEqual(conn.put_item, conn.put_item2)
-        conn.use_version(2)
-        self.assertEqual(conn.put_item, conn.put_item2)
-
     def test_re_raise(self):
         """ DynamoDBError can re-raise itself if missing exc_info """
         err = DynamoDBError(400, Code='ErrCode', Message='Ouch', args={})
