@@ -1,7 +1,7 @@
 """ Test the write functions of Dynamo """
 from __future__ import unicode_literals
 
-from mock import MagicMock, call, ANY
+from mock import MagicMock, call, ANY, patch
 from six.moves import xrange as _xrange  # pylint: disable=F0401
 
 from . import BaseSystemTest, is_number
@@ -135,12 +135,6 @@ class TestCreate(BaseSystemTest):
         desc = self.dynamo.describe_table('foobar')
         self.assertEqual(desc, table)
 
-    def test_dry_run(self):
-        """ dry_run=True """
-        hash_key = DynamoKey('id', data_type=STRING)
-        ret = self.dynamo.create_table('foobar', hash_key=hash_key, dry_run=True)
-        self.assertEqual(ret['TableName'], 'foobar')
-
 
 class TestUpdateTable(BaseSystemTest):
 
@@ -226,12 +220,6 @@ class TestUpdateTable(BaseSystemTest):
         self.assertNotEqual(IndexUpdate.delete('foo'),
                             IndexUpdate.delete('bar'))
 
-    def test_dry_run(self):
-        """ dry_run=True """
-        tp = Throughput(2, 1)
-        ret = self.dynamo.update_table('foobar', throughput=tp, dry_run=True)
-        self.assertEqual(ret['TableName'], 'foobar')
-
 
 class TestBatchWrite(BaseSystemTest):
 
@@ -286,6 +274,7 @@ class TestBatchWrite(BaseSystemTest):
     def test_handle_unprocessed(self):
         """ Retry all unprocessed items """
         conn = MagicMock()
+        conn.last_consumed_capacity = None
         writer = BatchWriter(conn, 'foo')
         key1, key2 = object(), object()
         unprocessed = [[key1], [key2], []]
@@ -327,8 +316,7 @@ class TestBatchWrite(BaseSystemTest):
 
     def test_capacity(self):
         """ Can return consumed capacity """
-        conn = MagicMock()
-        conn.call.return_value = {
+        ret = {
             'Responses': {
                 'foo': [],
             },
@@ -350,17 +338,12 @@ class TestBatchWrite(BaseSystemTest):
                 },
             }],
         }
-        batch = BatchWriter(conn, 'foobar', return_capacity='INDEXES')
-        with batch:
-            batch.put({'id': 'a'})
+        with patch.object(self.dynamo.client, 'batch_write_item', return_value=ret):
+            batch = self.dynamo.batch_write('foobar',
+                                            return_capacity='INDEXES')
+            with batch:
+                batch.put({'id': 'a'})
         self.assertEqual(batch.consumed_capacity.total, Capacity(0, 3))
-
-    def test_dry_run(self):
-        """ dry_run=True """
-        with self.dynamo.batch_write('foobar', dry_run=True) as batch:
-            batch.put({'id': 'a'})
-        self.assertEqual(batch.calls[0]['RequestItems']['foobar'],
-                         [{'PutRequest': {'Item': {'id': {'S': 'a'}}}}])
 
 
 class TestUpdateItem(BaseSystemTest):
@@ -603,12 +586,6 @@ class TestUpdateItem2(BaseSystemTest):
         item = list(self.dynamo.scan('foobar'))[0]
         self.assertEqual(item, {'id': 'a', 'foo': 10})
 
-    def test_dry_run(self):
-        """ dry_run=True """
-        ret = self.dynamo.update_item2('foobar', {'id': 'a'}, 'SET foo = :bar',
-                                       bar='bar', dry_run=True)
-        self.assertEqual(ret['TableName'], 'foobar')
-
 
 class TestPutItem(BaseSystemTest):
 
@@ -745,11 +722,6 @@ class TestPutItem2(BaseSystemTest):
         self.assertTrue(isinstance(ret.indexes, dict))
         self.assertTrue(isinstance(ret.global_indexes, dict))
 
-    def test_dry_run(self):
-        """ dry_run=True """
-        ret = self.dynamo.put_item2('foobar', {'id': 'a'}, dry_run=True)
-        self.assertEqual(ret['TableName'], 'foobar')
-
 
 class TestDeleteItem(BaseSystemTest):
 
@@ -885,8 +857,3 @@ class TestDeleteItem2(BaseSystemTest):
         self.dynamo.delete_item2(
             'foobar', {'id': 'a'},
             condition='foo < :foo OR NOT attribute_exists(baz)', foo=4)
-
-    def test_dry_run(self):
-        """ dry_run=True """
-        ret = self.dynamo.delete_item2('foobar', {'id': 'a'}, dry_run=True)
-        self.assertEqual(ret['TableName'], 'foobar')

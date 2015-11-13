@@ -1,6 +1,13 @@
 Changelog
 =========
 
+0.4.3
+-----
+* Bug fix: getting ConsumedCapacity doesn't crash for BatchGetItem and BatchWriteItem
+* Feature: connection.default_return_capacity
+* Feature: hooks for ``precall``, ``postcall``, and ``capacity``
+* Better handling of ConsumedCapacity results
+
 0.4.2
 -----
 * Feature: New methods to take advantage of the newer expression API. See get_item2, put_item2.

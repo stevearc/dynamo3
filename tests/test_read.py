@@ -5,7 +5,7 @@ from six.moves import xrange as _xrange  # pylint: disable=F0401
 
 from . import BaseSystemTest, is_number
 from dynamo3 import STRING, NUMBER, DynamoKey, LocalIndex, GlobalIndex, TOTAL
-from dynamo3.result import Result, GetResultSet
+from dynamo3.result import Result, GetResultSet, ResultSet, Capacity
 from mock import MagicMock, ANY
 
 
@@ -459,11 +459,6 @@ class TestQuery2(BaseSystemTest):
                                      id='a', a='a', b='a')
         self.assertItemsEqual(list(results), [a, b])
 
-    def test_dry_run(self):
-        """ dry_run=True """
-        ret = self.dynamo.query2('foobar', 'id = :id', id='a', dry_run=True)
-        self.assertEqual(ret['TableName'], 'foobar')
-
 
 class TestScan(BaseSystemTest):
 
@@ -506,14 +501,33 @@ class TestScan(BaseSystemTest):
 
     def test_capacity(self):
         """ Can return consumed capacity """
-        self.make_table()
-        self.dynamo.put_item('foobar', {'id': 'a'})
-        ret = self.dynamo.scan('foobar', return_capacity=TOTAL)
-        list(ret)
-        self.assertTrue(is_number(ret.capacity))
-        self.assertTrue(is_number(ret.table_capacity))
-        self.assertTrue(isinstance(ret.indexes, dict))
-        self.assertTrue(isinstance(ret.global_indexes, dict))
+        conn = MagicMock()
+        conn.call.return_value = {
+            'Responses': [],
+            'ConsumedCapacity': {
+                'TableName': 'foobar',
+                'CapacityUnits': 3,
+                'Table': {
+                    'CapacityUnits': 1,
+                },
+                'LocalSecondaryIndexes': {
+                    'l-index': {
+                        'CapacityUnits': 1,
+                    },
+                },
+                'GlobalSecondaryIndexes': {
+                    'g-index': {
+                        'CapacityUnits': 1,
+                    },
+                },
+            },
+        }
+        rs = ResultSet(conn, 'Responses')
+        list(rs)
+        self.assertEqual(rs.capacity, 3)
+        self.assertEqual(rs.table_capacity, 1)
+        self.assertEqual(rs.indexes, {'l-index': 1})
+        self.assertEqual(rs.global_indexes, {'g-index': 1})
 
     def test_eq(self):
         """ Can scan with EQ constraint """
@@ -894,11 +908,6 @@ class TestScan2(BaseSystemTest):
                               [{'id': 'a'}, {'id': 'b'},
                                {'id': 'c'}, {'id': 'd'}])
 
-    def test_dry_run(self):
-        """ dry_run=True """
-        ret = self.dynamo.scan2('foobar', dry_run=True)
-        self.assertEqual(ret['TableName'], 'foobar')
-
 
 class TestBatchGet(BaseSystemTest):
 
@@ -988,12 +997,6 @@ class TestBatchGet(BaseSystemTest):
         self.assertEqual(rs.table_capacity, 1)
         self.assertEqual(rs.indexes, {'l-index': 1})
         self.assertEqual(rs.global_indexes, {'g-index': 1})
-
-    def test_dry_run(self):
-        """ dry_run=True """
-        keys = [{'id': 'a'}]
-        ret = self.dynamo.batch_get('foobar', keys, dry_run=True)
-        self.assertEqual(ret['RequestItems']['foobar']['Keys'], [{'id': {'S': 'a'}}])
 
 
 class TestGetItem(BaseSystemTest):
@@ -1091,8 +1094,3 @@ class TestGetItem2(BaseSystemTest):
         response = {'Item': self.dynamo.dynamizer.encode_keys(d)}
         result = Result(self.dynamo.dynamizer, response, 'Item')
         self.assertNotEqual(repr(result), repr(d))
-
-    def test_dry_run(self):
-        """ dry_run=True """
-        ret = self.dynamo.get_item2('foobar', {'id': 'a'}, dry_run=True)
-        self.assertEqual(ret['Key'], {'id': {'S': 'a'}})

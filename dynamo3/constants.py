@@ -38,6 +38,8 @@ MAX_GET_BATCH = 100
 # Maximum number of items in a BatchWriteItem request
 MAX_WRITE_BATCH = 25
 
+READ_COMMANDS = set(['batch_get_item', 'get_item', 'query', 'scan'])
+
 # Last fetched on 2015-11-10
 # http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ReservedWords.html
 RESERVED_WORDS = set([

@@ -11,7 +11,8 @@ def add_dicts(d1, d2):
         return d2
     if d2 is None:
         return d1
-    keys = set(d1) + set(d2)
+    keys = set(d1)
+    keys.update(set(d2))
     ret = {}
     for key in keys:
         v1 = d1.get(key)
@@ -29,19 +30,16 @@ class Count(int):
 
     """ Wrapper for response to query with Select=COUNT """
 
-    def __new__(cls, count, response=None):
+    def __new__(cls, count, response=None, consumed_capacity=None):
         ret = super(Count, cls).__new__(cls, count)
         ret.response = response or {}
-        ret.consumed_capacity = None
-        if 'ConsumedCapacity' in response:
-            ret.consumed_capacity = ConsumedCapacity.from_response(
-                response['ConsumedCapacity'], True)
+        ret.consumed_capacity = consumed_capacity
         return ret
 
     @classmethod
-    def from_response(cls, response):
+    def from_response(cls, response, consumed_capacity=None):
         """ Factory method """
-        return cls(response['Count'], response)
+        return cls(response['Count'], response, consumed_capacity)
 
     def __getitem__(self, name):
         return self.response[name]
@@ -150,7 +148,7 @@ class ConsumedCapacity(object):
         return cls(**kwargs)
 
     def __hash__(self):
-        return hash(self.tablename) + self.total
+        return hash(self.tablename) + hash(self.total)
 
     def __eq__(self, other):
         properties = ['tablename', 'total', 'table_capacity',
@@ -163,9 +161,15 @@ class ConsumedCapacity(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __radd__(self, other):
+        return self.__add__(other)
+
     def __add__(self, other):
+        # Handle identity cases when added to empty values
+        if other is None:
+            return self
         if self.tablename != other.tablename:
-            raise ValueError("Cannot add capacities from different tables")
+            raise TypeError("Cannot add capacities from different tables")
         kwargs = {
             'total': self.total + other.total,
         }
@@ -203,7 +207,6 @@ class PagedIterator(six.Iterator):
         self.table_capacity = 0
         self.indexes = {}
         self.global_indexes = {}
-        self.consumed_capacity = None
 
     @property
     def can_fetch_more(self):  # pragma: no cover
@@ -217,17 +220,11 @@ class PagedIterator(six.Iterator):
     def _update_capacity(self, data):
         """ Update the consumed capacity metrics """
         if 'ConsumedCapacity' in data:
+            # This is all for backwards compatibility
             consumed = data['ConsumedCapacity']
             if not isinstance(consumed, list):
                 consumed = [consumed]
             for cap in consumed:
-                capacity = ConsumedCapacity.from_response(cap, True)
-                if self.consumed_capacity is None:
-                    self.consumed_capacity = capacity
-                else:
-                    self.consumed_capacity += capacity
-
-                # This is all for backwards compatibility
                 self.capacity += cap.get('CapacityUnits', 0)
                 self.table_capacity += cap.get('Table',
                                                {}).get('CapacityUnits', 0)
@@ -265,6 +262,7 @@ class ResultSet(PagedIterator):
         self.args = args
         self.kwargs = kwargs
         self.last_evaluated_key = None
+        self.consumed_capacity = None
 
     @property
     def can_fetch_more(self):
@@ -281,6 +279,8 @@ class ResultSet(PagedIterator):
         else:
             self.kwargs.pop('ExclusiveStartKey', None)
         self._update_capacity(data)
+        if self.connection.last_consumed_capacity is not None:
+            self.consumed_capacity += self.connection.last_consumed_capacity
         return iter(data[self.response_key])
 
     def __next__(self):
@@ -306,6 +306,7 @@ class GetResultSet(PagedIterator):
         self.attributes = attributes
         self.return_capacity = return_capacity
         self._attempt = 0
+        self.consumed_capacity = None
 
     @property
     def can_fetch_more(self):
@@ -341,6 +342,11 @@ class GetResultSet(PagedIterator):
             # reset the attempt number.
             self._attempt = 0
         self._update_capacity(data)
+        if self.connection.last_consumed_capacity is not None:
+            # Comes back as a list from BatchWriteItem
+            self.consumed_capacity = \
+                sum(self.connection.last_consumed_capacity,
+                    self.consumed_capacity)
         return iter(data['Responses'][self.tablename])
 
     def __next__(self):
@@ -366,15 +372,12 @@ class Result(dict):
 
     """
 
-    def __init__(self, dynamizer, response, item_key, is_read=True):
+    def __init__(self, dynamizer, response, item_key, consumed_capacity=None):
         super(Result, self).__init__()
         for k, v in six.iteritems(response.get(item_key, {})):
             self[k] = dynamizer.decode(v)
 
-        self.consumed_capacity = None
-        if 'ConsumedCapacity' in response:
-            self.consumed_capacity = ConsumedCapacity.from_response(
-                response['ConsumedCapacity'], is_read)
+        self.consumed_capacity = consumed_capacity
 
         # All this shit is for backwards compatibility
         cap = response.get('ConsumedCapacity', {})

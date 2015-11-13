@@ -1,6 +1,4 @@
 """ Code for batch processing """
-import warnings
-
 import logging
 import six
 
@@ -37,6 +35,9 @@ class ItemUpdate(object):
 
     You should generally use the :meth:`~.put`, :meth:`~.add`, and
     :meth:`~.delete` methods instead of the constructor.
+
+    **DEPRECATED** This uses the old version of the dynamo API. It is
+    recommended to use :meth:`~dynamo3.connection.update_item2` instead.
 
     Parameters
     ----------
@@ -81,9 +82,6 @@ class ItemUpdate(object):
         self.action = action
         self.key = key
         self.value = value
-        if expected is not NO_ARG:
-            warnings.warn("Using deprecated argument 'expected' in "
-                          "ItemUpdate. Use kwargs instead.")
         self._expected = expected
         self._expect_kwargs = {}
         if len(kwargs) > 1:
@@ -200,17 +198,15 @@ class BatchWriter(object):
     """ Context manager for writing a large number of items to a table """
 
     def __init__(self, connection, tablename, return_capacity=NONE,
-                 return_item_collection_metrics=NONE, dry_run=False):
+                 return_item_collection_metrics=NONE):
         self.connection = connection
         self.tablename = tablename
         self.return_capacity = return_capacity
         self.return_item_collection_metrics = return_item_collection_metrics
-        self.dry_run = dry_run
         self._to_put = []
         self._to_delete = []
         self._unprocessed = []
         self._attempt = 0
-        self.calls = []
         self.consumed_capacity = None
 
     def __enter__(self):
@@ -278,13 +274,11 @@ class BatchWriter(object):
     def _write(self, items):
         """ Perform a batch write and handle the response """
         response = self._batch_write_item(items)
-        if 'ConsumedCapacity' in response:
-            for consumed in response['ConsumedCapacity']:
-                cap = ConsumedCapacity.from_response(consumed, False)
-                if self.consumed_capacity is None:
-                    self.consumed_capacity = cap
-                else:
-                    self.consumed_capacity += cap
+        if self.connection.last_consumed_capacity is not None:
+            # Comes back as a list from BatchWriteItem
+            self.consumed_capacity = \
+                sum(self.connection.last_consumed_capacity,
+                    self.consumed_capacity)
 
         if response.get('UnprocessedItems'):
             unprocessed = response['UnprocessedItems'].get(self.tablename, [])
@@ -325,7 +319,4 @@ class BatchWriter(object):
             'ReturnConsumedCapacity': self.return_capacity,
             'ReturnItemCollectionMetrics': self.return_item_collection_metrics,
         }
-        if self.dry_run:
-            self.calls.append(kwargs)
-            return {}
         return self.connection.call('batch_write_item', **kwargs)
