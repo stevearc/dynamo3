@@ -237,7 +237,7 @@ class DynamoDBConnection(object):
             consumed = data['ConsumedCapacity']
             if isinstance(consumed, list):
                 all_caps = [ConsumedCapacity.from_response(cap, is_read)
-                              for cap in consumed]
+                            for cap in consumed]
                 data['consumed_capacity'] = all_caps
             else:
                 capacity = ConsumedCapacity.from_response(consumed, is_read)
