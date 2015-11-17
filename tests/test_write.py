@@ -274,7 +274,6 @@ class TestBatchWrite(BaseSystemTest):
     def test_handle_unprocessed(self):
         """ Retry all unprocessed items """
         conn = MagicMock()
-        conn.last_consumed_capacity = None
         writer = BatchWriter(conn, 'foo')
         key1, key2 = object(), object()
         unprocessed = [[key1], [key2], []]

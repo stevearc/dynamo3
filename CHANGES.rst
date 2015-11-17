@@ -1,6 +1,10 @@
 Changelog
 =========
 
+0.4.4
+-----
+* Make connection stateless again. Puts consumed_capacity into response object and fixes mystery crash.
+
 0.4.3
 -----
 * Bug fix: getting ConsumedCapacity doesn't crash for BatchGetItem and BatchWriteItem

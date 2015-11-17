@@ -70,7 +70,6 @@ class DynamoDBConnection(object):
         self.dynamizer = dynamizer
         self.request_retries = 10
         self.default_return_capacity = False
-        self.last_consumed_capacity = None
         self._hooks = {
             'precall': [],
             'postcall': [],
@@ -217,7 +216,6 @@ class DynamoDBConnection(object):
         for hook in self._hooks['precall']:
             hook(self, command, kwargs)
         op = getattr(self.client, command)
-        self.last_consumed_capacity = None
         attempt = 0
         while True:
             try:
@@ -238,14 +236,13 @@ class DynamoDBConnection(object):
             is_read = command in READ_COMMANDS
             consumed = data['ConsumedCapacity']
             if isinstance(consumed, list):
-                self.last_consumed_capacity = \
-                    [ConsumedCapacity.from_response(cap, is_read) for cap in
-                     consumed]
-                all_caps = self.last_consumed_capacity
+                all_caps = [ConsumedCapacity.from_response(cap, is_read)
+                            for cap in consumed]
+                data['consumed_capacity'] = all_caps
             else:
-                self.last_consumed_capacity = \
-                    ConsumedCapacity.from_response(consumed, is_read)
-                all_caps = [self.last_consumed_capacity]
+                capacity = ConsumedCapacity.from_response(consumed, is_read)
+                data['consumed_capacity'] = capacity
+                all_caps = [capacity]
             for hook in self._hooks['capacity']:
                 for cap in all_caps:
                     hook(self, command, kwargs, data, cap)
@@ -451,8 +448,7 @@ class DynamoDBConnection(object):
         ret = self.call('put_item', TableName=tablename, Item=item,
                         ReturnValues=returns, **keywords)
         if ret:
-            return Result(self.dynamizer, ret, 'Attributes',
-                          self.last_consumed_capacity)
+            return Result(self.dynamizer, ret, 'Attributes')
 
     def put_item2(self, tablename, item, expr_values=None, alias=None,
                   condition=None, returns=NONE, return_capacity=None,
@@ -507,8 +503,7 @@ class DynamoDBConnection(object):
             keywords['ConditionExpression'] = condition
         result = self.call('put_item', **keywords)
         if result:
-            return Result(self.dynamizer, result, 'Attributes',
-                          self.last_consumed_capacity)
+            return Result(self.dynamizer, result, 'Attributes')
 
     def get_item(self, tablename, key, attributes=None, consistent=False,
                  return_capacity=None):
@@ -544,8 +539,7 @@ class DynamoDBConnection(object):
         if attributes is not None:
             kwargs['AttributesToGet'] = attributes
         data = self.call('get_item', **kwargs)
-        return Result(self.dynamizer, data, 'Item',
-                      self.last_consumed_capacity)
+        return Result(self.dynamizer, data, 'Item')
 
     def get_item2(self, tablename, key, attributes=None, alias=None,
                   consistent=False, return_capacity=None):
@@ -585,8 +579,7 @@ class DynamoDBConnection(object):
         if alias:
             kwargs['ExpressionAttributeNames'] = alias
         data = self.call('get_item', **kwargs)
-        return Result(self.dynamizer, data, 'Item',
-                      self.last_consumed_capacity)
+        return Result(self.dynamizer, data, 'Item')
 
     def delete_item(self, tablename, key, expected=None, returns=NONE,
                     return_capacity=None, expect_or=False, **kwargs):
@@ -635,8 +628,7 @@ class DynamoDBConnection(object):
         ret = self.call('delete_item', TableName=tablename, Key=key,
                         ReturnValues=returns, **keywords)
         if ret:
-            return Result(self.dynamizer, ret, 'Attributes',
-                          self.last_consumed_capacity)
+            return Result(self.dynamizer, ret, 'Attributes')
 
     def delete_item2(self, tablename, key, expr_values=None, alias=None,
                      condition=None, returns=NONE, return_capacity=None,
@@ -692,8 +684,7 @@ class DynamoDBConnection(object):
             keywords['ConditionExpression'] = condition
         result = self.call('delete_item', **keywords)
         if result:
-            return Result(self.dynamizer, result, 'Attributes',
-                          self.last_consumed_capacity)
+            return Result(self.dynamizer, result, 'Attributes')
 
     def batch_write(self, tablename, return_capacity=None,
                     return_item_collection_metrics=NONE):
@@ -821,8 +812,7 @@ class DynamoDBConnection(object):
                            ReturnValues=returns,
                            **keywords)
         if result:
-            return Result(self.dynamizer, result, 'Attributes',
-                          self.last_consumed_capacity)
+            return Result(self.dynamizer, result, 'Attributes')
 
     def update_item2(self, tablename, key, expression, expr_values=None, alias=None,
                      condition=None, returns=NONE, return_capacity=None,
@@ -881,8 +871,7 @@ class DynamoDBConnection(object):
             keywords['ConditionExpression'] = condition
         result = self.call('update_item', **keywords)
         if result:
-            return Result(self.dynamizer, result, 'Attributes',
-                          self.last_consumed_capacity)
+            return Result(self.dynamizer, result, 'Attributes')
 
     def scan(self, tablename, attributes=None, count=False, limit=None,
              return_capacity=None, filter_or=False, **kwargs):
@@ -1027,8 +1016,7 @@ class DynamoDBConnection(object):
             keywords['TotalSegments'] = total_segments
 
         if select == COUNT:
-            return Count.from_response(self.call('scan', **keywords),
-                                       self.last_consumed_capacity)
+            return Count.from_response(self.call('scan', **keywords))
         else:
             return ResultSet(self, 'Items', 'scan', **keywords)
 
@@ -1107,8 +1095,7 @@ class DynamoDBConnection(object):
                                                         kwargs)
         if count:
             keywords['Select'] = COUNT
-            return Count.from_response(self.call('query', **keywords),
-                                       self.last_consumed_capacity)
+            return Count.from_response(self.call('query', **keywords))
         else:
             return ResultSet(self, 'Items', 'query', **keywords)
 
@@ -1190,8 +1177,7 @@ class DynamoDBConnection(object):
             keywords['FilterExpression'] = filter
 
         if select == COUNT:
-            return Count.from_response(self.call('query', **keywords),
-                                       self.last_consumed_capacity)
+            return Count.from_response(self.call('query', **keywords))
         else:
             return ResultSet(self, 'Items', 'query', **keywords)
 
