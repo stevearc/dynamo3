@@ -30,16 +30,16 @@ class Count(int):
 
     """ Wrapper for response to query with Select=COUNT """
 
-    def __new__(cls, count, response=None, consumed_capacity=None):
+    def __new__(cls, count, response=None):
         ret = super(Count, cls).__new__(cls, count)
         ret.response = response or {}
-        ret.consumed_capacity = consumed_capacity
+        ret.consumed_capacity = ret.response.get('consumed_capacity')
         return ret
 
     @classmethod
-    def from_response(cls, response, consumed_capacity=None):
+    def from_response(cls, response):
         """ Factory method """
-        return cls(response['Count'], response, consumed_capacity)
+        return cls(response['Count'], response)
 
     def __getitem__(self, name):
         return self.response[name]
@@ -279,8 +279,8 @@ class ResultSet(PagedIterator):
         else:
             self.kwargs.pop('ExclusiveStartKey', None)
         self._update_capacity(data)
-        if self.connection.last_consumed_capacity is not None:
-            self.consumed_capacity += self.connection.last_consumed_capacity
+        if 'consumed_capacity' in data:
+            self.consumed_capacity += data['consumed_capacity']
         return iter(data[self.response_key])
 
     def __next__(self):
@@ -342,11 +342,10 @@ class GetResultSet(PagedIterator):
             # reset the attempt number.
             self._attempt = 0
         self._update_capacity(data)
-        if self.connection.last_consumed_capacity is not None:
+        if 'consumed_capacity' in data:
             # Comes back as a list from BatchWriteItem
             self.consumed_capacity = \
-                sum(self.connection.last_consumed_capacity,
-                    self.consumed_capacity)
+                sum(data['consumed_capacity'], self.consumed_capacity)
         return iter(data['Responses'][self.tablename])
 
     def __next__(self):
@@ -372,12 +371,12 @@ class Result(dict):
 
     """
 
-    def __init__(self, dynamizer, response, item_key, consumed_capacity=None):
+    def __init__(self, dynamizer, response, item_key):
         super(Result, self).__init__()
         for k, v in six.iteritems(response.get(item_key, {})):
             self[k] = dynamizer.decode(v)
 
-        self.consumed_capacity = consumed_capacity
+        self.consumed_capacity = response.get('consumed_capacity')
 
         # All this shit is for backwards compatibility
         cap = response.get('ConsumedCapacity', {})

@@ -274,11 +274,10 @@ class BatchWriter(object):
     def _write(self, items):
         """ Perform a batch write and handle the response """
         response = self._batch_write_item(items)
-        if self.connection.last_consumed_capacity is not None:
+        if 'consumed_capacity' in response:
             # Comes back as a list from BatchWriteItem
             self.consumed_capacity = \
-                sum(self.connection.last_consumed_capacity,
-                    self.consumed_capacity)
+                sum(response['consumed_capacity'], self.consumed_capacity)
 
         if response.get('UnprocessedItems'):
             unprocessed = response['UnprocessedItems'].get(self.tablename, [])
