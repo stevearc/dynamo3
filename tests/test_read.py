@@ -5,8 +5,8 @@ from six.moves import xrange as _xrange  # pylint: disable=F0401
 
 from . import BaseSystemTest, is_number
 from dynamo3 import STRING, NUMBER, DynamoKey, LocalIndex, GlobalIndex, TOTAL
-from dynamo3.result import Result, GetResultSet, ResultSet, Capacity
-from mock import MagicMock, ANY
+from dynamo3.result import Result, GetResultSet, ResultSet, ConsumedCapacity
+from mock import MagicMock
 
 
 class TestQuery(BaseSystemTest):
@@ -945,6 +945,14 @@ class TestBatchGet(BaseSystemTest):
                                          attributes=['id']))
         self.assertItemsEqual(ret, [{'id': 'a'}])
 
+    def test_alias_attributes(self):
+        """ Can alias the names of certain attributes """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'foo': 'bar'})
+        ret = self.dynamo.batch_get('foobar', [{'id': 'a'}],
+                                    attributes=['#f'], alias={'#f': 'id'})
+        self.assertItemsEqual(list(ret), [{'id': 'a'}])
+
     def test_handle_unprocessed(self):
         """ Batch get retries unprocessed keys """
         conn = MagicMock()
@@ -969,7 +977,7 @@ class TestBatchGet(BaseSystemTest):
     def test_capacity(self):
         """ Can return consumed capacity """
         conn = MagicMock()
-        conn.call.return_value = {
+        response = {
             'Responses': {
                 'foo': [],
             },
@@ -991,12 +999,17 @@ class TestBatchGet(BaseSystemTest):
                 },
             }],
         }
+        capacity = ConsumedCapacity.from_response(
+            response['ConsumedCapacity'][0], True)
+        response['consumed_capacity'] = [capacity]
+        conn.call.return_value = response
         rs = GetResultSet(conn, 'foo', [{'id': 'a'}])
         list(rs)
         self.assertEqual(rs.capacity, 3)
         self.assertEqual(rs.table_capacity, 1)
         self.assertEqual(rs.indexes, {'l-index': 1})
         self.assertEqual(rs.global_indexes, {'g-index': 1})
+        self.assertEqual(rs.consumed_capacity, capacity)
 
 
 class TestGetItem(BaseSystemTest):

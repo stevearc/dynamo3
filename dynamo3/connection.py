@@ -716,8 +716,8 @@ class DynamoDBConnection(object):
         return BatchWriter(self, tablename, return_capacity=return_capacity,
                            return_item_collection_metrics=return_item_collection_metrics)
 
-    def batch_get(self, tablename, keys, attributes=None, consistent=False,
-                  return_capacity=None):
+    def batch_get(self, tablename, keys, attributes=None, alias=None,
+                  consistent=False, return_capacity=None):
         """
         Perform a batch get of many items in a table
 
@@ -728,8 +728,11 @@ class DynamoDBConnection(object):
         keys : list or iterable
             List or iterable of primary key dicts that specify the hash key and
             the optional range key of each item to fetch
-        attributes : list, optional
-            If present, only fetch these attributes from the item
+        attributes : str or list, optional
+            See docs for ProjectionExpression. If list, it will be joined by
+            commas.
+        alias : dict, optional
+            See docs for ExpressionAttributeNames
         consistent : bool, optional
             Perform a strongly consistent read of the data (default False)
         return_capacity : {NONE, INDEXES, TOTAL}, optional
@@ -742,7 +745,7 @@ class DynamoDBConnection(object):
         return_capacity = self._default_capacity(return_capacity)
         ret = GetResultSet(self, tablename, keys,
                            consistent=consistent, attributes=attributes,
-                           return_capacity=return_capacity)
+                           alias=alias, return_capacity=return_capacity)
         return ret
 
     def update_item(self, tablename, key, updates, returns=NONE,
