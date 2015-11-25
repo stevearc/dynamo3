@@ -1,6 +1,10 @@
 Changelog
 =========
 
+0.4.5
+-----
+* batch_get supports ``alias`` arg for ExpressionAttributeNames
+
 0.4.4
 -----
 * Make connection stateless again. Puts consumed_capacity into response object and fixes mystery crash.

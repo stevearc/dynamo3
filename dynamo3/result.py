@@ -297,13 +297,17 @@ class GetResultSet(PagedIterator):
     """ Iterator that pages the results of a BatchGetItem """
 
     def __init__(self, connection, tablename, keys, consistent=False,
-                 attributes=None, return_capacity=NONE):
+                 attributes=None, alias=None, return_capacity=NONE):
         super(GetResultSet, self).__init__()
         self.connection = connection
         self.tablename = tablename
         self.keys = keys
         self.consistent = consistent
+        if attributes is not None:
+            if not isinstance(attributes, six.string_types):
+                attributes = ', '.join(attributes)
         self.attributes = attributes
+        self.alias = alias
         self.return_capacity = return_capacity
         self._attempt = 0
         self.consumed_capacity = None
@@ -317,7 +321,9 @@ class GetResultSet(PagedIterator):
         keys, self.keys = self.keys[:MAX_GET_BATCH], self.keys[MAX_GET_BATCH:]
         query = {'ConsistentRead': self.consistent}
         if self.attributes is not None:
-            query['AttributesToGet'] = self.attributes
+            query['ProjectionExpression'] = self.attributes
+        if self.alias:
+            query['ExpressionAttributeNames'] = self.alias
         query['Keys'] = keys
         return {
             'RequestItems': {
