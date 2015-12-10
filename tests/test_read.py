@@ -327,8 +327,8 @@ class TestQuery2(BaseSystemTest):
             for i in _xrange(3):
                 batch.put({'id': 'a', 'num': i})
         ret = self.dynamo.query2('foobar', 'id = :id', select='COUNT', id='a')
-        self.assertEqual(ret['Count'], 3)
-        self.assertEqual(ret['ScannedCount'], 3)
+        self.assertEqual(ret, 3)
+        self.assertEqual(ret.scanned_count, 3)
 
     def test_capacity(self):
         """ Can return consumed capacity """
@@ -713,10 +713,23 @@ class TestScan2(BaseSystemTest):
             for i in _xrange(3):
                 batch.put({'id': str(i)})
         ret = self.dynamo.scan2('foobar', select='COUNT')
-        self.assertEqual(ret['Count'], 3)
+        self.assertEqual(ret.count, 3)
         self.assertEqual(ret, 3)
-        self.assertEqual(ret['ScannedCount'], 3)
         self.assertEqual(ret.scanned_count, 3)
+
+    def test_count_page(self):
+        """ Count queries should page the results """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a'})
+        self.dynamo.put_item('foobar', {'id': 'b'})
+
+        def key_hook(connection, command, kwargs, data):
+            """ Inject a fake LastEvaluatedKey and unsubscribe """
+            data['LastEvaluatedKey'] = {'id': {'S': 'b'}}
+            self.dynamo.unsubscribe('postcall', key_hook)
+        self.dynamo.subscribe('postcall', key_hook)
+        ret = self.dynamo.scan2('foobar', select='COUNT')
+        self.assertEqual(ret, 3)
 
     def test_capacity(self):
         """ Can return consumed capacity """

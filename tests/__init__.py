@@ -402,17 +402,49 @@ class TestResultModels(unittest.TestCase):
             'c': 4,
         })
 
-    def test_count_magic_lookup(self):
-        """ Count converts attrs into keys for response """
-        count = Count(0, {'A': 2})
-        self.assertEqual(count.a, 2)
-        with self.assertRaises(AttributeError):
-            getattr(count, 'b')
-
     def test_count_repr(self):
         """ Count repr """
-        count = Count(0)
+        count = Count(0, 0)
         self.assertEqual(repr(count), "Count(0)")
+
+    def test_count_addition(self):
+        """ Count addition """
+        count = Count(4, 2)
+        self.assertEqual(count + 5, 9)
+
+    def test_count_subtraction(self):
+        """ Count subtraction """
+        count = Count(4, 2)
+        self.assertEqual(count - 2, 2)
+
+    def test_count_multiplication(self):
+        """ Count multiplication """
+        count = Count(4, 2)
+        self.assertEqual(2 * count, 8)
+
+    def test_count_division(self):
+        """ Count division """
+        count = Count(4, 2)
+        self.assertEqual(count / 2, 2)
+
+    def test_count_add_none_capacity(self):
+        """ Count addition with one None consumed_capacity """
+        cap = Capacity.create_read({'CapacityUnits': 3})
+        count = Count(4, 2)
+        count2 = Count(5, 3, cap)
+        ret = count + count2
+        self.assertEqual(ret, 9)
+        self.assertEqual(ret.scanned_count, 5)
+        self.assertEqual(ret.consumed_capacity, cap)
+
+    def test_count_add_capacity(self):
+        """ Count addition with consumed_capacity """
+        count = Count(4, 2, Capacity.create_read({'CapacityUnits': 3}))
+        count2 = Count(5, 3, Capacity.create_read({'CapacityUnits': 2}))
+        ret = count + count2
+        self.assertEqual(ret, 9)
+        self.assertEqual(ret.scanned_count, 5)
+        self.assertEqual(ret.consumed_capacity.read, 5)
 
     def test_capacity_factories(self):
         """ Capacity.create_(read|write) factories """

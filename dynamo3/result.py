@@ -2,7 +2,6 @@
 import six
 
 from .constants import NONE, MAX_GET_BATCH
-from .util import snake_to_camel
 
 
 def add_dicts(d1, d2):
@@ -30,28 +29,36 @@ class Count(int):
 
     """ Wrapper for response to query with Select=COUNT """
 
-    def __new__(cls, count, response=None):
+    def __new__(cls, count, scanned_count, consumed_capacity=None):
         ret = super(Count, cls).__new__(cls, count)
-        ret.response = response or {}
-        ret.consumed_capacity = ret.response.get('consumed_capacity')
+        ret.count = count
+        ret.scanned_count = scanned_count
+        ret.consumed_capacity = consumed_capacity
         return ret
 
     @classmethod
     def from_response(cls, response):
         """ Factory method """
-        return cls(response['Count'], response)
+        return cls(response['Count'], response['ScannedCount'],
+                   response.get('consumed_capacity'))
 
-    def __getitem__(self, name):
-        return self.response[name]
+    def __add__(self, other):
+        if other is None:
+            return self
+        if not isinstance(other, Count):
+            return self.count + other
+        if self.consumed_capacity is None:
+            capacity = other.consumed_capacity
+        else:
+            capacity = self.consumed_capacity + other.consumed_capacity
+        return Count(self.count + other.count, self.scanned_count +
+                     other.scanned_count, capacity)
 
-    def __getattr__(self, name):
-        camel_name = snake_to_camel(name)
-        if camel_name in self.response:
-            return self.response[camel_name]
-        return super(Count, self).__getattribute__(name)
+    def __radd__(self, other):
+        return self.__add__(other)
 
     def __repr__(self):
-        return "Count(%s)" % self
+        return "Count(%d)" % self
 
 
 @six.python_2_unicode_compatible

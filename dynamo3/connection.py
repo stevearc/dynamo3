@@ -281,6 +281,19 @@ class DynamoDBConnection(object):
             return INDEXES
         return NONE
 
+    def _count(self, method, keywords):
+        """ Do a scan or query and aggregate the results into a Count """
+        has_more = True
+        count = None
+        while has_more:
+            response = self.call(method, **keywords)
+            count += Count.from_response(response)
+            last_evaluated_key = response.get('LastEvaluatedKey')
+            has_more = last_evaluated_key is not None
+            if has_more:
+                keywords['ExclusiveStartKey'] = last_evaluated_key
+        return count
+
     def list_tables(self, limit=100):
         """
         List all tables.
@@ -1019,7 +1032,7 @@ class DynamoDBConnection(object):
             keywords['TotalSegments'] = total_segments
 
         if select == COUNT:
-            return Count.from_response(self.call('scan', **keywords))
+            return self._count('scan', keywords)
         else:
             return ResultSet(self, 'Items', 'scan', **keywords)
 
@@ -1098,7 +1111,7 @@ class DynamoDBConnection(object):
                                                         kwargs)
         if count:
             keywords['Select'] = COUNT
-            return Count.from_response(self.call('query', **keywords))
+            return self._count('query', keywords)
         else:
             return ResultSet(self, 'Items', 'query', **keywords)
 
@@ -1180,7 +1193,7 @@ class DynamoDBConnection(object):
             keywords['FilterExpression'] = filter
 
         if select == COUNT:
-            return Count.from_response(self.call('query', **keywords))
+            return self._count('query', keywords)
         else:
             return ResultSet(self, 'Items', 'query', **keywords)
 
