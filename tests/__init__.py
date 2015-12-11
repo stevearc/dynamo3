@@ -43,6 +43,7 @@ class BaseSystemTest(unittest.TestCase):
         super(BaseSystemTest, self).tearDown()
         for tablename in self.dynamo.list_tables():
             self.dynamo.delete_table(tablename)
+        self.dynamo.clear_hooks()
 
 
 class TestMisc(BaseSystemTest):
@@ -180,6 +181,14 @@ class TestMisc(BaseSystemTest):
         call.assert_called_with('scan', TableName='foobar',
                                 ReturnConsumedCapacity='INDEXES',
                                 ExclusiveStartKey=ANY)
+
+    def test_list_tables_page(self):
+        """ Call to ListTables should page results """
+        hash_key = DynamoKey('id')
+        for i in range(120):
+            self.dynamo.create_table('table%d' % i, hash_key=hash_key)
+        tables = list(self.dynamo.list_tables(110))
+        self.assertEqual(len(tables), 110)
 
 
 class TestDataTypes(BaseSystemTest):
@@ -402,17 +411,49 @@ class TestResultModels(unittest.TestCase):
             'c': 4,
         })
 
-    def test_count_magic_lookup(self):
-        """ Count converts attrs into keys for response """
-        count = Count(0, {'A': 2})
-        self.assertEqual(count.a, 2)
-        with self.assertRaises(AttributeError):
-            getattr(count, 'b')
-
     def test_count_repr(self):
         """ Count repr """
-        count = Count(0)
+        count = Count(0, 0)
         self.assertEqual(repr(count), "Count(0)")
+
+    def test_count_addition(self):
+        """ Count addition """
+        count = Count(4, 2)
+        self.assertEqual(count + 5, 9)
+
+    def test_count_subtraction(self):
+        """ Count subtraction """
+        count = Count(4, 2)
+        self.assertEqual(count - 2, 2)
+
+    def test_count_multiplication(self):
+        """ Count multiplication """
+        count = Count(4, 2)
+        self.assertEqual(2 * count, 8)
+
+    def test_count_division(self):
+        """ Count division """
+        count = Count(4, 2)
+        self.assertEqual(count / 2, 2)
+
+    def test_count_add_none_capacity(self):
+        """ Count addition with one None consumed_capacity """
+        cap = Capacity.create_read({'CapacityUnits': 3})
+        count = Count(4, 2)
+        count2 = Count(5, 3, cap)
+        ret = count + count2
+        self.assertEqual(ret, 9)
+        self.assertEqual(ret.scanned_count, 5)
+        self.assertEqual(ret.consumed_capacity, cap)
+
+    def test_count_add_capacity(self):
+        """ Count addition with consumed_capacity """
+        count = Count(4, 2, Capacity.create_read({'CapacityUnits': 3}))
+        count2 = Count(5, 3, Capacity.create_read({'CapacityUnits': 2}))
+        ret = count + count2
+        self.assertEqual(ret, 9)
+        self.assertEqual(ret.scanned_count, 5)
+        self.assertEqual(ret.consumed_capacity.read, 5)
 
     def test_capacity_factories(self):
         """ Capacity.create_(read|write) factories """

@@ -2,7 +2,6 @@
 import six
 
 from .constants import NONE, MAX_GET_BATCH
-from .util import snake_to_camel
 
 
 def add_dicts(d1, d2):
@@ -30,28 +29,36 @@ class Count(int):
 
     """ Wrapper for response to query with Select=COUNT """
 
-    def __new__(cls, count, response=None):
+    def __new__(cls, count, scanned_count, consumed_capacity=None):
         ret = super(Count, cls).__new__(cls, count)
-        ret.response = response or {}
-        ret.consumed_capacity = ret.response.get('consumed_capacity')
+        ret.count = count
+        ret.scanned_count = scanned_count
+        ret.consumed_capacity = consumed_capacity
         return ret
 
     @classmethod
     def from_response(cls, response):
         """ Factory method """
-        return cls(response['Count'], response)
+        return cls(response['Count'], response['ScannedCount'],
+                   response.get('consumed_capacity'))
 
-    def __getitem__(self, name):
-        return self.response[name]
+    def __add__(self, other):
+        if other is None:
+            return self
+        if not isinstance(other, Count):
+            return self.count + other
+        if self.consumed_capacity is None:
+            capacity = other.consumed_capacity
+        else:
+            capacity = self.consumed_capacity + other.consumed_capacity
+        return Count(self.count + other.count, self.scanned_count +
+                     other.scanned_count, capacity)
 
-    def __getattr__(self, name):
-        camel_name = snake_to_camel(name)
-        if camel_name in self.response:
-            return self.response[camel_name]
-        return super(Count, self).__getattribute__(name)
+    def __radd__(self, other):
+        return self.__add__(other)
 
     def __repr__(self):
-        return "Count(%s)" % self
+        return "Count(%d)" % self
 
 
 @six.python_2_unicode_compatible
@@ -255,10 +262,11 @@ class ResultSet(PagedIterator):
 
     """ Iterator that pages results from Dynamo """
 
-    def __init__(self, connection, response_key=None, *args, **kwargs):
+    def __init__(self, connection, limit, *args, **kwargs):
         super(ResultSet, self).__init__()
         self.connection = connection
-        self.response_key = response_key
+        # The limit will be mutated, so copy it and leave the original intact
+        self.limit = limit.copy()
         self.args = args
         self.kwargs = kwargs
         self.last_evaluated_key = None
@@ -267,29 +275,25 @@ class ResultSet(PagedIterator):
     @property
     def can_fetch_more(self):
         """ True if there are more results on the server """
-        return (self.last_evaluated_key is not None and
-                self.kwargs.get('Limit') != 0)
+        return (self.last_evaluated_key is not None and not self.limit.complete)
 
     def fetch(self):
         """ Fetch more results from Dynamo """
+        self.limit.set_request_args(self.kwargs)
         data = self.connection.call(*self.args, **self.kwargs)
+        self.limit.post_fetch(data)
         self.last_evaluated_key = data.get('LastEvaluatedKey')
-        if self.last_evaluated_key is not None:
-            self.kwargs['ExclusiveStartKey'] = self.last_evaluated_key
-        else:
+        if self.last_evaluated_key is None:
             self.kwargs.pop('ExclusiveStartKey', None)
+        else:
+            self.kwargs['ExclusiveStartKey'] = self.last_evaluated_key
         self._update_capacity(data)
         if 'consumed_capacity' in data:
             self.consumed_capacity += data['consumed_capacity']
-        return iter(data[self.response_key])
-
-    def __next__(self):
-        result = super(ResultSet, self).__next__()
-        if 'Limit' in self.kwargs:
-            self.kwargs['Limit'] -= 1
-        if isinstance(result, dict):
-            return self.connection.dynamizer.decode_keys(result)
-        return result
+        for raw_item in data['Items']:
+            item = self.connection.dynamizer.decode_keys(raw_item)
+            if self.limit.accept(item):
+                yield item
 
 
 class GetResultSet(PagedIterator):
@@ -359,6 +363,38 @@ class GetResultSet(PagedIterator):
         return self.connection.dynamizer.decode_keys(result)
 
 
+class TableResultSet(PagedIterator):
+
+    """ Iterator that pages table names from ListTables """
+
+    def __init__(self, connection, limit=None):
+        super(TableResultSet, self).__init__()
+        self.connection = connection
+        self.limit = limit
+        self.last_evaluated_table_name = None
+
+    @property
+    def can_fetch_more(self):
+        if self.last_evaluated_table_name is None:
+            return False
+        return self.limit is None or self.limit > 0
+
+    def fetch(self):
+        kwargs = {}
+        if self.limit is None:
+            kwargs['Limit'] = 100
+        else:
+            kwargs['Limit'] = min(self.limit, 100)
+        if self.last_evaluated_table_name is not None:
+            kwargs['ExclusiveStartTableName'] = self.last_evaluated_table_name
+        data = self.connection.call('list_tables', **kwargs)
+        self.last_evaluated_table_name = data.get('LastEvaluatedTableName')
+        tables = data['TableNames']
+        if self.limit is not None:
+            self.limit -= len(tables)
+        return iter(tables)
+
+
 class Result(dict):
 
     """
@@ -399,3 +435,57 @@ class Result(dict):
 
     def __repr__(self):
         return 'Result({0})'.format(super(Result, self).__repr__())
+
+
+class Limit(object):
+
+    """ Class that defines query/scan limit behavior """
+
+    def __init__(self, scan_limit=None, item_limit=None, min_scan_limit=20,
+                 strict=False, filter=lambda x: True):
+        self.scan_limit = scan_limit
+        if item_limit is None:
+            self.item_limit = scan_limit
+        else:
+            self.item_limit = item_limit
+        self.min_scan_limit = min_scan_limit
+        self.strict = strict
+        self.filter = filter
+
+    def copy(self):
+        """ Return a copy of the limit """
+        return Limit(self.scan_limit, self.item_limit, self.min_scan_limit,
+                     self.strict, self.filter)
+
+    def set_request_args(self, args):
+        """ Set the Limit parameter into the request args """
+        if self.scan_limit is not None:
+            args['Limit'] = self.scan_limit
+        elif self.item_limit is not None:
+            args['Limit'] = max(self.item_limit, self.min_scan_limit)
+        else:
+            args.pop('Limit', None)
+
+    @property
+    def complete(self):
+        """ Return True if the limit has been reached """
+        if self.scan_limit is not None and self.scan_limit == 0:
+            return True
+        if self.item_limit is not None and self.item_limit == 0:
+            return True
+        return False
+
+    def post_fetch(self, response):
+        """ Called after a fetch. Updates the ScannedCount """
+        if self.scan_limit is not None:
+            self.scan_limit -= response['ScannedCount']
+
+    def accept(self, item):
+        """ Apply the filter and item_limit, and return True to accept """
+        accept = self.filter(item)
+        if accept and self.item_limit is not None:
+            if self.item_limit > 0:
+                self.item_limit -= 1
+            elif self.strict:
+                return False
+        return accept

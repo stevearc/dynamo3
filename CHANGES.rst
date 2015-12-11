@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.4.6
+-----
+* New ``Limit`` class for more complex query limit behavior
+* Bug fix: Scan and Query with ``Select='COUNT'`` will page results properly
+
 0.4.5
 -----
 * batch_get supports ``alias`` arg for ExpressionAttributeNames
