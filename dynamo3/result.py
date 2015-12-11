@@ -439,7 +439,35 @@ class Result(dict):
 
 class Limit(object):
 
-    """ Class that defines query/scan limit behavior """
+    """
+    Class that defines query/scan limit behavior
+
+    Parameters
+    ----------
+    scan_limit : int, optional
+        The maximum number of items for DynamoDB to scan. This will not
+        necessarily be the number of items returned.
+    item_limit : int, optional
+        The maximum number of items to return. Fetches will continue until this
+        number is reached or there are no results left. See also: ``strict``
+    min_scan_limit : int, optional
+        This only matters when ``item_limit`` is set and ``scan_limit`` is not.
+        After doing multiple fetches, the ``item_limit`` may drop to a low
+        value. The ``item_limit`` will be passed up as the query ``Limit``, but
+        if your ``item_limit`` is down to 1 you may want to fetch more than 1
+        item at a time. ``min_scan_limit`` determines the minimum ``Limit`` to
+        send up when ``scan_limit`` is None. (default 20)
+    strict : bool, optional
+        This modifies the behavior of ``item_limit``. If True, the query will
+        never return more items than ``item_limit``. If False, the query will
+        fetch until it hits the ``item_limit``, and then return the rest of the
+        page as well. (default False)
+    filter : callable, optional
+        Function that takes a single item dict and returns a boolean. If True,
+        the item will be counted towards the ``item_limit`` and returned from
+        the iterator. If False, it will be skipped.
+
+    """
 
     def __init__(self, scan_limit=None, item_limit=None, min_scan_limit=20,
                  strict=False, filter=lambda x: True):
