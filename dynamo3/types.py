@@ -32,6 +32,14 @@ TYPES = {
 TYPES_REV = dict(((v, k) for k, v in six.iteritems(TYPES)))
 
 
+def is_dynamo_value(value):
+    """ Returns True if the value is a Dynamo-formatted value """
+    if not isinstance(value, dict) or len(value) != 1:
+        return False
+    subkey = six.next(six.iterkeys(value))
+    return subkey in TYPES_REV
+
+
 def is_null(value):
     """ Check if a value is equivalent to null in Dynamo """
     return (value is None or
@@ -151,6 +159,16 @@ class Dynamizer(object):
         """ Run the encoder on a dict of values """
         return dict(((k, self.encode(v)) for k, v in six.iteritems(keys) if not
                      is_null(v)))
+
+    def maybe_encode_keys(self, keys):
+        """ Same as encode_keys but a no-op if already in Dynamo format """
+        ret = {}
+        for k, v in six.iteritems(keys):
+            if is_dynamo_value(v):
+                return keys
+            elif not is_null(v):
+                ret[k] = self.encode(v)
+        return ret
 
     def encode(self, value):
         """ Encode a value into the Dynamo dict format """

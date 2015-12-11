@@ -1,11 +1,9 @@
 """ Test the read functions of Dynamo """
 from __future__ import unicode_literals
 
-from six.moves import xrange as _xrange  # pylint: disable=F0401
-
 from . import BaseSystemTest, is_number
 from dynamo3 import STRING, NUMBER, DynamoKey, LocalIndex, GlobalIndex, TOTAL
-from dynamo3.result import Result, GetResultSet, ResultSet, ConsumedCapacity
+from dynamo3.result import Result, GetResultSet, ResultSet, ConsumedCapacity, Limit
 from mock import MagicMock
 
 
@@ -78,7 +76,7 @@ class TestQuery(BaseSystemTest):
         """ Can sort the results in descending order """
         self.make_table()
         with self.dynamo.batch_write('foobar') as batch:
-            for i in _xrange(3):
+            for i in range(3):
                 batch.put({'id': 'a', 'num': i})
         ret = self.dynamo.query('foobar', attributes=['num'], id__eq='a',
                                 desc=True)
@@ -88,7 +86,7 @@ class TestQuery(BaseSystemTest):
         """ Can limit the number of query results """
         self.make_table()
         with self.dynamo.batch_write('foobar') as batch:
-            for i in _xrange(3):
+            for i in range(3):
                 batch.put({'id': 'a', 'num': i})
         ret = self.dynamo.query('foobar', id__eq='a', limit=1)
         self.assertEqual(len(list(ret)), 1)
@@ -97,7 +95,7 @@ class TestQuery(BaseSystemTest):
         """ Can count items instead of returning the actual items """
         self.make_table()
         with self.dynamo.batch_write('foobar') as batch:
-            for i in _xrange(3):
+            for i in range(3):
                 batch.put({'id': 'a', 'num': i})
         ret = self.dynamo.query('foobar', count=True, id__eq='a')
         self.assertEqual(ret, 3)
@@ -219,6 +217,17 @@ class TestQuery(BaseSystemTest):
                                     id__eq='a')
         self.assertItemsEqual(list(results), [a, b])
 
+    def test_exclusive_start_key(self):
+        """ Provide an ExclusiveStartKey to resume a query """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'num': 1})
+        self.dynamo.put_item('foobar', {'id': 'a', 'num': 2})
+        self.dynamo.put_item('foobar', {'id': 'a', 'num': 3})
+        results = self.dynamo.query('foobar',
+                                    exclusive_start_key={'id': 'a', 'num': 2},
+                                    id__eq='a')
+        self.assertEqual(list(results), [{'id': 'a', 'num': 3}])
+
 
 class TestQuery2(BaseSystemTest):
 
@@ -305,7 +314,7 @@ class TestQuery2(BaseSystemTest):
         """ Can sort the results in descending order """
         self.make_table()
         with self.dynamo.batch_write('foobar') as batch:
-            for i in _xrange(3):
+            for i in range(3):
                 batch.put({'id': 'a', 'num': i})
         ret = self.dynamo.query2('foobar', 'id = :id', attributes='num',
                                  desc=True, id='a')
@@ -315,7 +324,7 @@ class TestQuery2(BaseSystemTest):
         """ Can limit the number of query results """
         self.make_table()
         with self.dynamo.batch_write('foobar') as batch:
-            for i in _xrange(3):
+            for i in range(3):
                 batch.put({'id': 'a', 'num': i})
         ret = self.dynamo.query2('foobar', 'id = :id', limit=1, id='a')
         self.assertEqual(len(list(ret)), 1)
@@ -324,7 +333,7 @@ class TestQuery2(BaseSystemTest):
         """ Can count items instead of returning the actual items """
         self.make_table()
         with self.dynamo.batch_write('foobar') as batch:
-            for i in _xrange(3):
+            for i in range(3):
                 batch.put({'id': 'a', 'num': i})
         ret = self.dynamo.query2('foobar', 'id = :id', select='COUNT', id='a')
         self.assertEqual(ret, 3)
@@ -459,6 +468,35 @@ class TestQuery2(BaseSystemTest):
                                      id='a', a='a', b='a')
         self.assertItemsEqual(list(results), [a, b])
 
+    def test_exclusive_start_key(self):
+        """ Provide an ExclusiveStartKey to resume a query """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'num': 1})
+        self.dynamo.put_item('foobar', {'id': 'a', 'num': 2})
+        self.dynamo.put_item('foobar', {'id': 'a', 'num': 3})
+        results = self.dynamo.query2('foobar', 'id = :id',
+                                     exclusive_start_key={'id': 'a', 'num': 2},
+                                     id='a')
+        self.assertEqual(list(results), [{'id': 'a', 'num': 3}])
+
+    def test_exclusive_start_key_format(self):
+        """ Provide an ExclusiveStartKey already in DynamoDB format """
+        self.make_table()
+        self.dynamo.put_item('foobar', {'id': 'a', 'num': 1})
+        self.dynamo.put_item('foobar', {'id': 'a', 'num': 2})
+        self.dynamo.put_item('foobar', {'id': 'a', 'num': 3})
+        key = {
+            'id': {
+                'S': 'a',
+            },
+            'num': {
+                'N': '2',
+            },
+        }
+        results = self.dynamo.query2('foobar', 'id = :id',
+                                     exclusive_start_key=key, id='a')
+        self.assertEqual(list(results), [{'id': 'a', 'num': 3}])
+
 
 class TestScan(BaseSystemTest):
 
@@ -485,7 +523,7 @@ class TestScan(BaseSystemTest):
         """ Can limit the number of scan results """
         self.make_table()
         with self.dynamo.batch_write('foobar') as batch:
-            for i in _xrange(3):
+            for i in range(3):
                 batch.put({'id': str(i)})
         ret = self.dynamo.scan('foobar', limit=1)
         self.assertEqual(len(list(ret)), 1)
@@ -494,7 +532,7 @@ class TestScan(BaseSystemTest):
         """ Can count items instead of returning the actual items """
         self.make_table()
         with self.dynamo.batch_write('foobar') as batch:
-            for i in _xrange(3):
+            for i in range(3):
                 batch.put({'id': str(i)})
         ret = self.dynamo.scan('foobar', count=True)
         self.assertEqual(ret, 3)
@@ -503,7 +541,7 @@ class TestScan(BaseSystemTest):
         """ Can return consumed capacity """
         conn = MagicMock()
         conn.call.return_value = {
-            'Responses': [],
+            'Items': [],
             'ConsumedCapacity': {
                 'TableName': 'foobar',
                 'CapacityUnits': 3,
@@ -522,7 +560,7 @@ class TestScan(BaseSystemTest):
                 },
             },
         }
-        rs = ResultSet(conn, 'Responses')
+        rs = ResultSet(conn, Limit())
         list(rs)
         self.assertEqual(rs.capacity, 3)
         self.assertEqual(rs.table_capacity, 1)
@@ -663,6 +701,19 @@ class TestScan(BaseSystemTest):
         ret = self.dynamo.scan('foobar', filter_or=True, a__eq='a', b__eq='a')
         self.assertItemsEqual(list(ret), [a, b])
 
+    def test_exclusive_start_key(self):
+        """ Provide an ExclusiveStartKey to resume a scan """
+        self.make_table()
+        items = [{'id': x} for x in ['a', 'b', 'c']]
+        a, b, c = items
+        self.dynamo.put_item('foobar', a)
+        self.dynamo.put_item('foobar', b)
+        self.dynamo.put_item('foobar', c)
+        first_item = list(self.dynamo.scan('foobar', limit=1))[0]
+        items.remove(first_item)
+        results = self.dynamo.scan('foobar', exclusive_start_key=first_item)
+        self.assertItemsEqual(list(results), items)
+
 
 class TestScan2(BaseSystemTest):
 
@@ -701,7 +752,7 @@ class TestScan2(BaseSystemTest):
         """ Can limit the number of scan results """
         self.make_table()
         with self.dynamo.batch_write('foobar') as batch:
-            for i in _xrange(3):
+            for i in range(3):
                 batch.put({'id': str(i)})
         ret = self.dynamo.scan2('foobar', limit=1)
         self.assertEqual(len(list(ret)), 1)
@@ -710,7 +761,7 @@ class TestScan2(BaseSystemTest):
         """ Can count items instead of returning the actual items """
         self.make_table()
         with self.dynamo.batch_write('foobar') as batch:
-            for i in _xrange(3):
+            for i in range(3):
                 batch.put({'id': str(i)})
         ret = self.dynamo.scan2('foobar', select='COUNT')
         self.assertEqual(ret.count, 3)
@@ -921,6 +972,19 @@ class TestScan2(BaseSystemTest):
                               [{'id': 'a'}, {'id': 'b'},
                                {'id': 'c'}, {'id': 'd'}])
 
+    def test_exclusive_start_key(self):
+        """ Provide an ExclusiveStartKey to resume a scan """
+        self.make_table()
+        items = [{'id': x} for x in ['a', 'b', 'c']]
+        a, b, c = items
+        self.dynamo.put_item('foobar', a)
+        self.dynamo.put_item('foobar', b)
+        self.dynamo.put_item('foobar', c)
+        first_item = list(self.dynamo.scan('foobar', limit=1))[0]
+        items.remove(first_item)
+        results = self.dynamo.scan2('foobar', exclusive_start_key=first_item)
+        self.assertItemsEqual(list(results), items)
+
 
 class TestBatchGet(BaseSystemTest):
 
@@ -943,7 +1007,7 @@ class TestBatchGet(BaseSystemTest):
     def test_get_many(self):
         """ Can get many items via paging """
         self.make_table()
-        keys = [{'id': str(i)} for i in _xrange(50)]
+        keys = [{'id': str(i)} for i in range(50)]
         with self.dynamo.batch_write('foobar') as batch:
             for key in keys:
                 batch.put(key)
@@ -1120,3 +1184,42 @@ class TestGetItem2(BaseSystemTest):
         response = {'Item': self.dynamo.dynamizer.encode_keys(d)}
         result = Result(self.dynamo.dynamizer, response, 'Item')
         self.assertNotEqual(repr(result), repr(d))
+
+
+class TestLimit(BaseSystemTest):
+    """ Tests for the Limit class """
+
+    def make_table(self, items=10):
+        """ Convenience method for making a table """
+        hash_key = DynamoKey('id')
+        self.dynamo.create_table('foobar', hash_key=hash_key)
+        with self.dynamo.batch_write('foobar') as batch:
+            for i in range(items):
+                batch.put({'id': str(i), 'num': i})
+
+    def test_scan_limit(self):
+        """ Limit can specify a max number of items to scan """
+        self.make_table()
+        ret = self.dynamo.scan2('foobar', limit=Limit(5))
+        self.assertEqual(len(list(ret)), 5)
+
+    def test_item_limit(self):
+        """ An item_limit will fetch until reached or exceeded """
+        self.make_table()
+        limit = Limit(item_limit=5)
+        ret = self.dynamo.scan2('foobar', limit=limit)
+        self.assertEqual(len(list(ret)), 10)
+        self.assertTrue(limit.complete)
+
+    def test_strict(self):
+        """ Strict=True will end the list exactly at the item_limit """
+        self.make_table()
+        ret = self.dynamo.scan2('foobar', limit=Limit(item_limit=5, strict=True))
+        self.assertEqual(len(list(ret)), 5)
+
+    def test_filter(self):
+        """ Limit can post-process to filter items """
+        self.make_table()
+        limit = Limit(filter=lambda x: x['num'] > 5)
+        ret = self.dynamo.scan2('foobar', limit=limit)
+        self.assertEqual(len(list(ret)), 4)

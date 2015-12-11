@@ -10,7 +10,8 @@ from .batch import BatchWriter, encode_query_kwargs
 from .constants import NONE, COUNT, INDEXES, READ_COMMANDS
 from .exception import translate_exception, DynamoDBError, ThroughputException
 from .fields import Throughput, Table
-from .result import ResultSet, GetResultSet, Result, Count, ConsumedCapacity
+from .result import (ResultSet, GetResultSet, Result, Count, ConsumedCapacity,
+                     TableResultSet, Limit)
 from .types import Dynamizer, is_null
 
 
@@ -70,11 +71,8 @@ class DynamoDBConnection(object):
         self.dynamizer = dynamizer
         self.request_retries = 10
         self.default_return_capacity = False
-        self._hooks = {
-            'precall': [],
-            'postcall': [],
-            'capacity': [],
-        }
+        self._hooks = None
+        self.clear_hooks()
 
     @property
     def host(self):
@@ -273,6 +271,14 @@ class DynamoDBConnection(object):
         """ Unsubscribe a hook from an event """
         self._hooks[event].remove(hook)
 
+    def clear_hooks(self):
+        """ Remove all hooks from all events """
+        self._hooks = {
+            'precall': [],
+            'postcall': [],
+            'capacity': [],
+        }
+
     def _default_capacity(self, value):
         """ Get the value for ReturnConsumedCapacity from provided value """
         if value is not None:
@@ -281,27 +287,29 @@ class DynamoDBConnection(object):
             return INDEXES
         return NONE
 
-    def _count(self, method, keywords):
+    def _count(self, method, limit, keywords):
         """ Do a scan or query and aggregate the results into a Count """
         has_more = True
         count = None
         while has_more:
+            limit.set_request_args(keywords)
             response = self.call(method, **keywords)
+            limit.post_fetch(response)
             count += Count.from_response(response)
             last_evaluated_key = response.get('LastEvaluatedKey')
-            has_more = last_evaluated_key is not None
+            has_more = last_evaluated_key is not None and not limit.complete
             if has_more:
                 keywords['ExclusiveStartKey'] = last_evaluated_key
         return count
 
-    def list_tables(self, limit=100):
+    def list_tables(self, limit=None):
         """
         List all tables.
 
         Parameters
         ----------
         limit : int, optional
-            Maximum number of tables to return (default 100)
+            Maximum number of tables to return
 
         Returns
         -------
@@ -309,7 +317,7 @@ class DynamoDBConnection(object):
             Iterator that returns table names as strings
 
         """
-        return ResultSet(self, 'TableNames', 'list_tables', Limit=limit)
+        return TableResultSet(self, limit)
 
     def describe_table(self, tablename):
         """
@@ -890,7 +898,8 @@ class DynamoDBConnection(object):
             return Result(self.dynamizer, result, 'Attributes')
 
     def scan(self, tablename, attributes=None, count=False, limit=None,
-             return_capacity=None, filter_or=False, **kwargs):
+             return_capacity=None, filter_or=False, exclusive_start_key=None,
+             **kwargs):
         """
         Perform a full-table scan
 
@@ -915,6 +924,8 @@ class DynamoDBConnection(object):
         filter_or : bool, optional
             If True, multiple filter kwargs will be OR'd together. If False,
             they will be AND'd together. (default False)
+        exclusive_start_key : dict, optional
+            The ExclusiveStartKey to resume a previous query
         **kwargs : dict, optional
             Filter arguments (examples below)
 
@@ -936,23 +947,26 @@ class DynamoDBConnection(object):
         }
         if attributes is not None:
             keywords['AttributesToGet'] = attributes
-        if limit is not None:
-            keywords['Limit'] = limit
+        if exclusive_start_key is not None:
+            keywords['ExclusiveStartKey'] = \
+                self.dynamizer.maybe_encode_keys(exclusive_start_key)
         if kwargs:
             keywords['ScanFilter'] = encode_query_kwargs(
                 self.dynamizer, kwargs)
             if len(kwargs) > 1:
                 keywords['ConditionalOperator'] = 'OR' if filter_or else 'AND'
+        if not isinstance(limit, Limit):
+            limit = Limit(limit)
         if count:
             keywords['Select'] = COUNT
-            return self.call('scan', **keywords)['Count']
+            return self._count('scan', limit, keywords)
         else:
-            return ResultSet(self, 'Items', 'scan', **keywords)
+            return ResultSet(self, limit, 'scan', **keywords)
 
     def scan2(self, tablename, expr_values=None, alias=None, attributes=None,
               consistent=False, select=None, index=None, limit=None,
               return_capacity=None, filter=False, segment=None,
-              total_segments=None, **kwargs):
+              total_segments=None, exclusive_start_key=None, **kwargs):
         """
         Perform a full-table scan
 
@@ -990,6 +1004,8 @@ class DynamoDBConnection(object):
         total_segments : int, optional
             When doing a parallel scan, the total number of threads performing
             the scan.
+        exclusive_start_key : dict, optional
+            The ExclusiveStartKey to resume a previous query
         **kwargs : dict, optional
             If expr_values is not provided, the kwargs dict will be used as the
             ExpressionAttributeValues (a ':' will be automatically prepended to
@@ -1018,8 +1034,6 @@ class DynamoDBConnection(object):
             keywords['ProjectionExpression'] = attributes
         if index is not None:
             keywords['IndexName'] = index
-        if limit is not None:
-            keywords['Limit'] = limit
         if alias:
             keywords['ExpressionAttributeNames'] = alias
         if select:
@@ -1030,15 +1044,20 @@ class DynamoDBConnection(object):
             keywords['Segment'] = segment
         if total_segments is not None:
             keywords['TotalSegments'] = total_segments
+        if exclusive_start_key is not None:
+            keywords['ExclusiveStartKey'] = \
+                self.dynamizer.maybe_encode_keys(exclusive_start_key)
+        if not isinstance(limit, Limit):
+            limit = Limit(limit)
 
         if select == COUNT:
-            return self._count('scan', keywords)
+            return self._count('scan', limit, keywords)
         else:
-            return ResultSet(self, 'Items', 'scan', **keywords)
+            return ResultSet(self, limit, 'scan', **keywords)
 
     def query(self, tablename, attributes=None, consistent=False, count=False,
               index=None, limit=None, desc=False, return_capacity=None,
-              filter=None, filter_or=False, **kwargs):
+              filter=None, filter_or=False, exclusive_start_key=None, **kwargs):
         """
         Perform an index query on a table
 
@@ -1073,6 +1092,8 @@ class DynamoDBConnection(object):
         filter_or : bool, optional
             If True, multiple filter args will be OR'd together. If False, they
             will be AND'd together. (default False)
+        exclusive_start_key : dict, optional
+            The ExclusiveStartKey to resume a previous query
         **kwargs : dict, optional
             Query arguments (examples below)
 
@@ -1092,33 +1113,33 @@ class DynamoDBConnection(object):
             'TableName': tablename,
             'ReturnConsumedCapacity': self._default_capacity(return_capacity),
             'ConsistentRead': consistent,
+            'ScanIndexForward': not desc,
+            'KeyConditions': encode_query_kwargs(self.dynamizer, kwargs),
         }
         if attributes is not None:
             keywords['AttributesToGet'] = attributes
         if index is not None:
             keywords['IndexName'] = index
-        if limit is not None:
-            keywords['Limit'] = limit
         if filter is not None:
             if len(filter) > 1:
                 keywords['ConditionalOperator'] = 'OR' if filter_or else 'AND'
             keywords['QueryFilter'] = encode_query_kwargs(self.dynamizer,
                                                           filter)
-
-        keywords['ScanIndexForward'] = not desc
-
-        keywords['KeyConditions'] = encode_query_kwargs(self.dynamizer,
-                                                        kwargs)
+        if exclusive_start_key is not None:
+            keywords['ExclusiveStartKey'] = \
+                self.dynamizer.maybe_encode_keys(exclusive_start_key)
+        if not isinstance(limit, Limit):
+            limit = Limit(limit)
         if count:
             keywords['Select'] = COUNT
-            return self._count('query', keywords)
+            return self._count('query', limit, keywords)
         else:
-            return ResultSet(self, 'Items', 'query', **keywords)
+            return ResultSet(self, limit, 'query', **keywords)
 
     def query2(self, tablename, key_condition_expr, expr_values=None,
                alias=None, attributes=None, consistent=False, select=None,
                index=None, limit=None, desc=False, return_capacity=None,
-               filter=None, **kwargs):
+               filter=None, exclusive_start_key=None, **kwargs):
         """
         Perform an index query on a table
 
@@ -1154,6 +1175,8 @@ class DynamoDBConnection(object):
             (default NONE)
         filter : str, optional
             See docs for FilterExpression
+        exclusive_start_key : dict, optional
+            The ExclusiveStartKey to resume a previous query
         **kwargs : dict, optional
             If expr_values is not provided, the kwargs dict will be used as the
             ExpressionAttributeValues (a ':' will be automatically prepended to
@@ -1183,19 +1206,22 @@ class DynamoDBConnection(object):
             keywords['ProjectionExpression'] = attributes
         if index is not None:
             keywords['IndexName'] = index
-        if limit is not None:
-            keywords['Limit'] = limit
         if alias:
             keywords['ExpressionAttributeNames'] = alias
         if select:
             keywords['Select'] = select
         if filter:
             keywords['FilterExpression'] = filter
+        if exclusive_start_key is not None:
+            keywords['ExclusiveStartKey'] = \
+                self.dynamizer.maybe_encode_keys(exclusive_start_key)
+        if not isinstance(limit, Limit):
+            limit = Limit(limit)
 
         if select == COUNT:
-            return self._count('query', keywords)
+            return self._count('query', limit, keywords)
         else:
-            return ResultSet(self, 'Items', 'query', **keywords)
+            return ResultSet(self, limit, 'query', **keywords)
 
     def update_table(self, tablename, throughput=None, global_indexes=None,
                      index_updates=None):

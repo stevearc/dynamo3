@@ -43,6 +43,7 @@ class BaseSystemTest(unittest.TestCase):
         super(BaseSystemTest, self).tearDown()
         for tablename in self.dynamo.list_tables():
             self.dynamo.delete_table(tablename)
+        self.dynamo.clear_hooks()
 
 
 class TestMisc(BaseSystemTest):
@@ -180,6 +181,14 @@ class TestMisc(BaseSystemTest):
         call.assert_called_with('scan', TableName='foobar',
                                 ReturnConsumedCapacity='INDEXES',
                                 ExclusiveStartKey=ANY)
+
+    def test_list_tables_page(self):
+        """ Call to ListTables should page results """
+        hash_key = DynamoKey('id')
+        for i in range(120):
+            self.dynamo.create_table('table%d' % i, hash_key=hash_key)
+        tables = list(self.dynamo.list_tables(110))
+        self.assertEqual(len(tables), 110)
 
 
 class TestDataTypes(BaseSystemTest):
