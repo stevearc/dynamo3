@@ -289,6 +289,8 @@ class DynamoDBConnection(object):
 
     def _count(self, method, limit, keywords):
         """ Do a scan or query and aggregate the results into a Count """
+        # The limit will be mutated, so copy it and leave the original intact
+        limit = limit.copy()
         has_more = True
         count = None
         while has_more:

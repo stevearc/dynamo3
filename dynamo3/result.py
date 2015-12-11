@@ -265,7 +265,8 @@ class ResultSet(PagedIterator):
     def __init__(self, connection, limit, *args, **kwargs):
         super(ResultSet, self).__init__()
         self.connection = connection
-        self.limit = limit
+        # The limit will be mutated, so copy it and leave the original intact
+        self.limit = limit.copy()
         self.args = args
         self.kwargs = kwargs
         self.last_evaluated_key = None
@@ -450,6 +451,11 @@ class Limit(object):
         self.min_scan_limit = min_scan_limit
         self.strict = strict
         self.filter = filter
+
+    def copy(self):
+        """ Return a copy of the limit """
+        return Limit(self.scan_limit, self.item_limit, self.min_scan_limit,
+                     self.strict, self.filter)
 
     def set_request_args(self, args):
         """ Set the Limit parameter into the request args """

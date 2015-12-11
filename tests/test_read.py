@@ -1209,7 +1209,6 @@ class TestLimit(BaseSystemTest):
         limit = Limit(item_limit=5)
         ret = self.dynamo.scan2('foobar', limit=limit)
         self.assertEqual(len(list(ret)), 10)
-        self.assertTrue(limit.complete)
 
     def test_strict(self):
         """ Strict=True will end the list exactly at the item_limit """
