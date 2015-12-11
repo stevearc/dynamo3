@@ -374,7 +374,9 @@ class TableResultSet(PagedIterator):
 
     @property
     def can_fetch_more(self):
-        return self.last_evaluated_table_name is not None and self.limit > 0
+        if self.last_evaluated_table_name is None:
+            return False
+        return self.limit is None or self.limit > 0
 
     def fetch(self):
         kwargs = {}
