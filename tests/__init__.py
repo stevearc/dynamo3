@@ -9,7 +9,8 @@ from six.moves.cPickle import dumps, loads  # pylint: disable=F0401,E0611
 from six.moves.urllib.parse import urlparse  # pylint: disable=F0401,E0611
 
 from dynamo3 import (DynamoDBConnection, Binary, DynamoKey, Dynamizer, STRING,
-                     ThroughputException, Table, GlobalIndex, DynamoDBError)
+                     ThroughputException, Table, GlobalIndex, DynamoDBError,
+                     Limit)
 from dynamo3.result import add_dicts, Count, Capacity, ConsumedCapacity
 
 
@@ -189,6 +190,11 @@ class TestMisc(BaseSystemTest):
             self.dynamo.create_table('table%d' % i, hash_key=hash_key)
         tables = list(self.dynamo.list_tables(110))
         self.assertEqual(len(tables), 110)
+
+    def test_limit_complete(self):
+        """ A limit with item_capacity = 0 is 'complete' """
+        limit = Limit(item_limit=0)
+        self.assertTrue(limit.complete)
 
 
 class TestDataTypes(BaseSystemTest):
