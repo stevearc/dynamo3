@@ -1,6 +1,10 @@
 Changelog
 =========
 
+0.4.7
+-----
+* New ``RateLimit`` class to avoid blowing through your provisioned throughput
+
 0.4.6
 -----
 * New ``Limit`` class for more complex query limit behavior
