@@ -9,7 +9,8 @@ from .exception import (CheckFailed, ConditionalCheckFailedException,
                         ProvisionedThroughputExceededException, DynamoDBError)
 from .fields import (Throughput, Table, DynamoKey, LocalIndex, GlobalIndex,
                      IndexUpdate)
-from .result import Limit
+from .rate import RateLimit
+from .result import Limit, Capacity
 from .types import Dynamizer, Binary, TYPES, TYPES_REV, is_null
 
-__version__ = '0.4.6'
+__version__ = '0.4.7'

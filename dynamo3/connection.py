@@ -1,4 +1,5 @@
 """ Connection class for DynamoDB """
+from contextlib import contextmanager
 import time
 import warnings
 
@@ -73,6 +74,7 @@ class DynamoDBConnection(object):
         self.default_return_capacity = False
         self._hooks = None
         self.clear_hooks()
+        self.rate_limiters = []
 
     @property
     def host(self):
@@ -234,13 +236,18 @@ class DynamoDBConnection(object):
             is_read = command in READ_COMMANDS
             consumed = data['ConsumedCapacity']
             if isinstance(consumed, list):
-                all_caps = [ConsumedCapacity.from_response(cap, is_read)
-                            for cap in consumed]
-                data['consumed_capacity'] = all_caps
+                data['consumed_capacity'] = [
+                    ConsumedCapacity.from_response(cap, is_read)
+                    for cap in consumed
+                ]
             else:
                 capacity = ConsumedCapacity.from_response(consumed, is_read)
                 data['consumed_capacity'] = capacity
-                all_caps = [capacity]
+        if 'consumed_capacity' in data:
+            if isinstance(data['consumed_capacity'], list):
+                all_caps = data['consumed_capacity']
+            else:
+                all_caps = [data['consumed_capacity']]
             for hook in self._hooks['capacity']:
                 for cap in all_caps:
                     hook(self, command, kwargs, data, cap)
@@ -265,11 +272,34 @@ class DynamoDBConnection(object):
         hook : callable
 
         """
-        self._hooks[event].append(hook)
+        if hook not in self._hooks[event]:
+            self._hooks[event].append(hook)
 
     def unsubscribe(self, event, hook):
         """ Unsubscribe a hook from an event """
-        self._hooks[event].remove(hook)
+        if hook in self._hooks[event]:
+            self._hooks[event].remove(hook)
+
+    def add_rate_limit(self, limiter):
+        """ Add a RateLimit to the connection """
+        if limiter not in self.rate_limiters:
+            self.subscribe('capacity', limiter.on_capacity)
+            self.rate_limiters.append(limiter)
+
+    def remove_rate_limit(self, limiter):
+        """ Remove a RateLimit from the connection """
+        if limiter in self.rate_limiters:
+            self.unsubscribe('capacity', limiter.on_capacity)
+            self.rate_limiters.remove(limiter)
+
+    @contextmanager
+    def limit(self, limiter):
+        """ Context manager that applies a RateLimit to the connection """
+        self.add_rate_limit(limiter)
+        try:
+            yield
+        finally:
+            self.remove_rate_limit(limiter)
 
     def clear_hooks(self):
         """ Remove all hooks from all events """
@@ -283,7 +313,7 @@ class DynamoDBConnection(object):
         """ Get the value for ReturnConsumedCapacity from provided value """
         if value is not None:
             return value
-        if self.default_return_capacity:
+        if self.default_return_capacity or self.rate_limiters:
             return INDEXES
         return NONE
 
