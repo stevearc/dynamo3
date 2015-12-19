@@ -2,7 +2,7 @@
 import time
 
 from contextlib import contextmanager
-from mock import patch
+from mock import patch, MagicMock
 
 from . import BaseSystemTest
 from dynamo3 import DynamoKey, GlobalIndex, RateLimit
@@ -27,18 +27,12 @@ class TestRateLimit(BaseSystemTest):
         def injector(connection, command, kwargs, data):
             """ Hook that injects consumed_capacity """
             data['consumed_capacity'] = capacity
-            # We have to manually call the capacity hooks because they're only
-            # run if the response has a ConsumedCapacity key (which we're
-            # bypassing)
-            for hook in connection._hooks['capacity']:
-                hook(connection, command, kwargs, data, capacity)
-        limiter.install(self.dynamo)
         self.dynamo.subscribe('postcall', injector)
         try:
-            with patch.object(time, 'sleep') as sleep:
-                yield sleep
+            with self.dynamo.limit(limiter):
+                with patch.object(time, 'sleep') as sleep:
+                    yield sleep
         finally:
-            limiter.uninstall(self.dynamo)
             self.dynamo.unsubscribe('postcall', injector)
 
     def test_no_throttle(self):
@@ -52,6 +46,14 @@ class TestRateLimit(BaseSystemTest):
     def test_throttle_total(self):
         """ Sleep if consumed capacity exceeds total """
         limiter = RateLimit(3, 3)
+        cap = ConsumedCapacity('foobar', Capacity(3, 0))
+        with self.inject_capacity(cap, limiter) as sleep:
+            list(self.dynamo.query2('foobar', 'id = :id', id='a'))
+        sleep.assert_called_with(1)
+
+    def test_throttle_total_cap(self):
+        """ Sleep if consumed capacity exceeds total """
+        limiter = RateLimit(total=Capacity(3, 3))
         cap = ConsumedCapacity('foobar', Capacity(3, 0))
         with self.inject_capacity(cap, limiter) as sleep:
             list(self.dynamo.query2('foobar', 'id = :id', id='a'))
@@ -87,6 +89,14 @@ class TestRateLimit(BaseSystemTest):
     def test_throttle_table_default(self):
         """ If no table limit provided, use the default """
         limiter = RateLimit(default_read=4, default_write=4)
+        cap = ConsumedCapacity('foobar', Capacity(8, 0), Capacity(8, 0))
+        with self.inject_capacity(cap, limiter) as sleep:
+            list(self.dynamo.query2('foobar', 'id = :id', id='a'))
+        sleep.assert_called_with(2)
+
+    def test_throttle_table_default_cap(self):
+        """ If no table limit provided, use the default """
+        limiter = RateLimit(default=Capacity(4, 4))
         cap = ConsumedCapacity('foobar', Capacity(8, 0), Capacity(8, 0))
         with self.inject_capacity(cap, limiter) as sleep:
             list(self.dynamo.query2('foobar', 'id = :id', id='a'))
@@ -157,3 +167,14 @@ class TestRateLimit(BaseSystemTest):
         store = DecayingCapacityStore()
         store.add(time.time() - 2, 4)
         self.assertEqual(store.value, 0)
+
+    def test_throttle_callback(self):
+        """ Callback is called when a query is throttled """
+        callback = MagicMock()
+        callback.return_value = True
+        limiter = RateLimit(3, 3, callback=callback)
+        cap = ConsumedCapacity('foobar', Capacity(3, 0))
+        with self.inject_capacity(cap, limiter) as sleep:
+            list(self.dynamo.query2('foobar', 'id = :id', id='a'))
+        sleep.assert_not_called()
+        self.assertTrue(callback.called)

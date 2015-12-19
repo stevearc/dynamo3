@@ -1,8 +1,10 @@
 """ Tools for rate limiting """
+from contextlib import contextmanager
 import six
 import logging
 import math
 import time
+from .result import Capacity
 
 LOG = logging.getLogger(__name__)
 
@@ -48,28 +50,40 @@ class RateLimit(object):
         The overall maximum read units per second
     total_write : float, optional
         The overall maximum write units per second
+    total : :class:`~dynamo3.result.Capacity`, optional
+        A Capacity object. You can provide this instead of ``total_read`` and
+        ``total_write``.
     default_read : float, optional
         The default read unit cap for tables
     default_write : float, optional
         The default write unit cap for tables
+    default : :class:`~dynamo3.result.Capacity`, optional
+        A Capacity object. You can provide this instead of ``default_read`` and
+        ``default_write``.
     table_caps : dict, optional
         Mapping of table name to dicts with two optional keys ('read' and
         'write') that provide the maximum units for the table and local
         indexes. You can specity global indexes by adding a key to the dict or
         by providing another key in ``table_caps`` that is the table name and
         index name joined by a ``:``.
+    callback : callable, optional
+        A function that will be called if the rate limit is exceeded. It will
+        be called with (connection, command, query, response,
+        consumed_capacity, seconds). If this function returns True, RateLimit
+        will skip the sleep.
     """
 
-    def __init__(self, total_read=None, total_write=None, default_read=None,
-                 default_write=None, table_caps=None):
-        self.total_cap = {
-            'read': total_read,
-            'write': total_write,
-        }
-        self.default_cap = {
-            'read': default_read,
-            'write': default_write,
-        }
+    def __init__(self, total_read=0, total_write=0, total=None, default_read=0,
+                 default_write=0, default=None, table_caps=None,
+                 callback=None):
+        if total is not None:
+            self.total_cap = total
+        else:
+            self.total_cap = Capacity(total_read, total_write)
+        if default is not None:
+            self.default_cap = default
+        else:
+            self.default_cap = Capacity(default_read, default_write)
         self.table_caps = table_caps or {}
         self._old_default_return_capacity = False
         self._consumed = {}
@@ -77,17 +91,7 @@ class RateLimit(object):
             'read': DecayingCapacityStore(),
             'write': DecayingCapacityStore(),
         }
-
-    def install(self, connection):
-        """ Install the throttle hooks onto a DynamoDBConnection """
-        self._old_default_return_capacity = connection.default_return_capacity
-        connection.default_return_capacity = True
-        connection.subscribe('capacity', self.on_capacity)
-
-    def uninstall(self, connection):
-        """ Uninstall the throttle hooks from a DynamoDBConnection """
-        connection.unsubscribe('capacity', self.on_capacity)
-        connection.default_return_capacity = self._old_default_return_capacity
+        self.callback = callback
 
     def get_consumed(self, key):
         """ Getter for a consumed capacity storage dict """
@@ -98,11 +102,14 @@ class RateLimit(object):
             }
         return self._consumed[key]
 
-    def on_capacity(self, connection, command, query_kwargs, response, capacity):
+    def on_capacity(self, connection, command, query_kwargs, response,
+                    capacity):
         """ Hook that runs in response to a 'returned capacity' event """
         now = time.time()
+        args = (connection, command, query_kwargs, response, capacity)
         # Check total against the total_cap
-        self._wait(now, self.total_cap, self._total_consumed, capacity.total)
+        self._wait(args, now, self.total_cap, self._total_consumed,
+                   capacity.total)
 
         # Increment table consumed capacity & check it
         if capacity.tablename in self.table_caps:
@@ -111,11 +118,12 @@ class RateLimit(object):
             table_cap = self.default_cap
         consumed_history = self.get_consumed(capacity.tablename)
         if capacity.table_capacity is not None:
-            self._wait(now, table_cap, consumed_history, capacity.table_capacity)
+            self._wait(args, now, table_cap, consumed_history,
+                       capacity.table_capacity)
         # The local index consumed capacity also counts against the table
         if capacity.local_index_capacity is not None:
             for consumed in six.itervalues(capacity.local_index_capacity):
-                self._wait(now, table_cap, consumed_history, consumed)
+                self._wait(args, now, table_cap, consumed_history, consumed)
 
         # Increment global indexes
         # check global indexes against the table+index cap or default
@@ -132,16 +140,20 @@ class RateLimit(object):
                     # use the cap on the table
                     index_cap = table_cap
                 consumed_history = self.get_consumed(full_name)
-                self._wait(now, index_cap, consumed_history, consumed)
+                self._wait(args, now, index_cap, consumed_history, consumed)
 
-    def _wait(self, now, cap, consumed_history, consumed_capacity):
+    def _wait(self, args, now, cap, consumed_history, consumed_capacity):
         """ Check the consumed capacity against the limit and sleep """
         for key in ['read', 'write']:
-            if key in cap and cap[key] is not None:
+            if key in cap and cap[key] > 0:
                 consumed_history[key].add(now, consumed_capacity[key])
                 consumed = consumed_history[key].value
                 if consumed > 0 and consumed >= cap[key]:
                     seconds = math.ceil(float(consumed) / cap[key])
                     LOG.debug("Rate limited throughput exceeded. Sleeping "
                               "for %d seconds.", seconds)
+                    if callable(self.callback):
+                        callback_args = args + (seconds,)
+                        if self.callback(*callback_args):
+                            continue
                     time.sleep(seconds)
