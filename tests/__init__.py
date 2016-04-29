@@ -11,7 +11,8 @@ from six.moves.urllib.parse import urlparse  # pylint: disable=F0401,E0611
 from dynamo3 import (DynamoDBConnection, Binary, DynamoKey, Dynamizer, STRING,
                      ThroughputException, Table, GlobalIndex, DynamoDBError,
                      Limit)
-from dynamo3.result import add_dicts, Count, Capacity, ConsumedCapacity
+from dynamo3.result import (add_dicts, Count, Capacity, ConsumedCapacity,
+                            ResultSet)
 
 
 try:
@@ -530,6 +531,24 @@ class TestResultModels(unittest.TestCase):
         c2 = ConsumedCapacity('boofar', Capacity(3, 0))
         with self.assertRaises(TypeError):
             c1 += c2
+
+
+    def test_always_continue_query(self):
+        """ Regression test.
+        If result has no items but does have LastEvaluatedKey, keep querying.
+        """
+        conn = MagicMock()
+        conn.dynamizer.decode_keys.side_effect = lambda x: x
+        items = ['a', 'b']
+        results = [
+            { 'Items': [], 'LastEvaluatedKey': {'foo': 1, 'bar': 2} },
+            { 'Items': [], 'LastEvaluatedKey': {'foo': 1, 'bar': 2} },
+            { 'Items': items },
+        ]
+        conn.call.side_effect = lambda *_, **__: results.pop(0)
+        rs = ResultSet(conn, Limit())
+        results = list(rs)
+        self.assertEqual(results, items)
 
 
 class TestHooks(BaseSystemTest):
