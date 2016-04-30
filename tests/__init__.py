@@ -11,7 +11,8 @@ from six.moves.urllib.parse import urlparse  # pylint: disable=F0401,E0611
 from dynamo3 import (DynamoDBConnection, Binary, DynamoKey, Dynamizer, STRING,
                      ThroughputException, Table, GlobalIndex, DynamoDBError,
                      Limit)
-from dynamo3.result import add_dicts, Count, Capacity, ConsumedCapacity
+from dynamo3.result import (add_dicts, Count, Capacity, ConsumedCapacity,
+                            ResultSet)
 
 
 try:
@@ -50,6 +51,7 @@ class BaseSystemTest(unittest.TestCase):
 class TestMisc(BaseSystemTest):
 
     """ Tests that don't fit anywhere else """
+
     def tearDown(self):
         super(TestMisc, self).tearDown()
         self.dynamo.default_return_capacity = False
@@ -177,11 +179,11 @@ class TestMisc(BaseSystemTest):
         """ When default_return_capacity=True, always return capacity """
         self.dynamo.default_return_capacity = True
         with patch.object(self.dynamo, 'call') as call:
+            call().get.return_value = None
             rs = self.dynamo.scan('foobar')
             list(rs)
         call.assert_called_with('scan', TableName='foobar',
-                                ReturnConsumedCapacity='INDEXES',
-                                ExclusiveStartKey=ANY)
+                                ReturnConsumedCapacity='INDEXES')
 
     def test_list_tables_page(self):
         """ Call to ListTables should page results """
@@ -392,6 +394,7 @@ class TestDynamizer(unittest.TestCase):
 
 
 class TestResultModels(unittest.TestCase):
+
     """ Tests for the model classes in results.py """
 
     def test_add_dicts_base_case(self):
@@ -516,12 +519,11 @@ class TestResultModels(unittest.TestCase):
         })
         self.assertIn(cap, set([c3]))
         combined = cap + c2
-        self.assertEqual(cap + c2, ConsumedCapacity('foobar', Capacity(0, 20), Capacity(0, 4), {
-            'l-index': Capacity(0, 8),
-            'l-index2': Capacity(0, 7),
-        }, {
-            'g-index': Capacity(0, 3),
-        }))
+        self.assertEqual(
+            cap + c2,
+            ConsumedCapacity('foobar', Capacity(0, 20), Capacity(0, 4),
+                             {'l-index': Capacity(0, 8), 'l-index2': Capacity(0, 7), },
+                             {'g-index': Capacity(0, 3), }))
         self.assertIn(str(Capacity(0, 3)), str(combined))
 
     def test_add_different_tables(self):
@@ -531,8 +533,26 @@ class TestResultModels(unittest.TestCase):
         with self.assertRaises(TypeError):
             c1 += c2
 
+    def test_always_continue_query(self):
+        """ Regression test.
+        If result has no items but does have LastEvaluatedKey, keep querying.
+        """
+        conn = MagicMock()
+        conn.dynamizer.decode_keys.side_effect = lambda x: x
+        items = ['a', 'b']
+        results = [
+            {'Items': [], 'LastEvaluatedKey': {'foo': 1, 'bar': 2}},
+            {'Items': [], 'LastEvaluatedKey': {'foo': 1, 'bar': 2}},
+            {'Items': items},
+        ]
+        conn.call.side_effect = lambda *_, **__: results.pop(0)
+        rs = ResultSet(conn, Limit())
+        results = list(rs)
+        self.assertEqual(results, items)
+
 
 class TestHooks(BaseSystemTest):
+
     """ Tests for connection callback hooks """
 
     def tearDown(self):
@@ -553,7 +573,9 @@ class TestHooks(BaseSystemTest):
             client.describe_table.side_effect = throw
             with self.assertRaises(Exception):
                 self.dynamo.describe_table('foobar')
-        hook.assert_called_with(self.dynamo, 'describe_table', {'TableName': 'foobar'})
+        hook.assert_called_with(
+            self.dynamo, 'describe_table', {
+                'TableName': 'foobar'})
 
     def test_postcall(self):
         """ postcall hooks are called after API call """

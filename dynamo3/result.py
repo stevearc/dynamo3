@@ -256,12 +256,14 @@ class PagedIterator(six.Iterator):
     def __next__(self):
         if self.iterator is None:
             self.iterator = self.fetch()
-        try:
-            return six.next(self.iterator)
-        except StopIteration:
-            if self.can_fetch_more:
-                self.iterator = self.fetch()
-            return six.next(self.iterator)
+        while True:
+            try:
+                return six.next(self.iterator)
+            except StopIteration:
+                if self.can_fetch_more:
+                    self.iterator = self.fetch()
+                else:
+                    raise
 
 
 class ResultSet(PagedIterator):

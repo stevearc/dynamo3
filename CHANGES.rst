@@ -1,6 +1,10 @@
 Changelog
 =========
 
+0.4.8
+-----
+* Bug fix: Scans/Queries could return incomplete results if AWS returned an empty Items list
+
 0.4.7
 -----
 * New ``RateLimit`` class to avoid blowing through your provisioned throughput
