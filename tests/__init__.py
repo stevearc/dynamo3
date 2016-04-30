@@ -179,11 +179,11 @@ class TestMisc(BaseSystemTest):
         """ When default_return_capacity=True, always return capacity """
         self.dynamo.default_return_capacity = True
         with patch.object(self.dynamo, 'call') as call:
+            call().get.return_value = None
             rs = self.dynamo.scan('foobar')
             list(rs)
         call.assert_called_with('scan', TableName='foobar',
-                                ReturnConsumedCapacity='INDEXES',
-                                ExclusiveStartKey=ANY)
+                                ReturnConsumedCapacity='INDEXES')
 
     def test_list_tables_page(self):
         """ Call to ListTables should page results """
