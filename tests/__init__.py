@@ -198,6 +198,21 @@ class TestMisc(BaseSystemTest):
         limit = Limit(item_limit=0)
         self.assertTrue(limit.complete)
 
+    def test_wait_create_table(self):
+        """ Create table shall wait for the table to come online. """
+        tablename = 'foobar_wait'
+        hash_key = DynamoKey('id')
+        self.dynamo.create_table(tablename, hash_key=hash_key, wait=True)
+        self.assertIsNotNone(self.dynamo.describe_table(tablename))
+
+    def test_wait_delete_table(self):
+        """ Delete table shall wait for the table to go offline. """
+        tablename = 'foobar_wait'
+        hash_key = DynamoKey('id')
+        self.dynamo.create_table(tablename, hash_key=hash_key, wait=True)
+        result = self.dynamo.delete_table(tablename, wait=True)
+        self.assertTrue(result)
+
 
 class TestDataTypes(BaseSystemTest):
 

@@ -375,7 +375,7 @@ class DynamoDBConnection(object):
             else:  # pragma: no cover
                 raise
 
-    def create_table(self, tablename, hash_key, range_key=None,
+    def create_table(self, tablename, hash_key, range_key=None, wait=False,
                      indexes=None, global_indexes=None, throughput=None):
         """
         Create a table
@@ -428,9 +428,14 @@ class DynamoDBConnection(object):
 
         kwargs['AttributeDefinitions'] = [attr.definition() for attr in
                                           all_attrs]
-        return self.call('create_table', **kwargs)
+        result = self.call('create_table', **kwargs)
+        if wait:
+            self.client.get_waiter('table_exists').wait(
+                TableName=tablename
+            )
+        return result
 
-    def delete_table(self, tablename):
+    def delete_table(self, tablename, wait=False):
         """
         Delete a table
 
@@ -447,6 +452,10 @@ class DynamoDBConnection(object):
         """
         try:
             self.call('delete_table', TableName=tablename)
+            if wait:
+                self.client.get_waiter('table_not_exists').wait(
+                    TableName=tablename
+                )
             return True
         except DynamoDBError as e:
             if e.kwargs['Code'] == 'ResourceNotFoundException':
