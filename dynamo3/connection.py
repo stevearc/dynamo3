@@ -375,8 +375,8 @@ class DynamoDBConnection(object):
             else:  # pragma: no cover
                 raise
 
-    def create_table(self, tablename, hash_key, range_key=None, wait=False,
-                     indexes=None, global_indexes=None, throughput=None):
+    def create_table(self, tablename, hash_key, range_key=None, indexes=None,
+                     global_indexes=None, throughput=None, wait=False):
         """
         Create a table
 
