@@ -55,6 +55,7 @@ Changelog
 -----
 * **Breakage**: Dropping support for python 3.2 due to lack of botocore support
 * Feature: Support JSON document data types
+
 Features thanks to DynamoDB upgrades: https://aws.amazon.com/blogs/aws/dynamodb-update-json-and-more/
 
 0.2.2
@@ -70,6 +71,7 @@ Features thanks to DynamoDB upgrades: https://aws.amazon.com/blogs/aws/dynamodb-
 * Feature: More expressive 'expected' conditionals
 * Feature: Queries can filter on non-indexed fields
 * Feature: Filter constraints may be OR'd together
+
 Features thanks to DynamoDB upgrades: http://aws.amazon.com/blogs/aws/improved-queries-and-updates-for-dynamodb/
 
 0.1.3
