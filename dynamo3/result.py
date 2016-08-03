@@ -418,11 +418,14 @@ class Result(dict):
         Mapping of local index name to the consumed capacity on that index
     global_indexes : dict
         Mapping of global index name to the consumed capacity on that index
+    exists : bool
+        False if the result is empty (i.e. no result was returned from dynamo)
 
     """
 
     def __init__(self, dynamizer, response, item_key):
         super(Result, self).__init__()
+        self.exists = item_key in response
         for k, v in six.iteritems(response.get(item_key, {})):
             self[k] = dynamizer.decode(v)
 

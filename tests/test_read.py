@@ -1104,7 +1104,14 @@ class TestGetItem(BaseSystemTest):
         item = {'id': 'a', 'foo': 'bar'}
         self.dynamo.put_item('foobar', item)
         ret = self.dynamo.get_item('foobar', {'id': 'a'})
+        self.assertTrue(ret.exists)
         self.assertEqual(ret, item)
+
+    def test_get_missing(self):
+        """ Fetching a missing item returns None """
+        self.make_table()
+        ret = self.dynamo.get_item('foobar', {'id': 'a'})
+        self.assertFalse(ret.exists)
 
     def test_attribute(self):
         """ Can fetch only certain attributes """
@@ -1148,8 +1155,14 @@ class TestGetItem2(BaseSystemTest):
         item = {'id': 'a', 'foo': 'bar'}
         self.dynamo.put_item('foobar', item)
         ret = self.dynamo.get_item2('foobar', {'id': 'a'})
+        self.assertTrue(ret.exists)
         self.assertEqual(ret, item)
 
+    def test_get_missing(self):
+        """ Fetching a missing item returns None """
+        self.make_table()
+        ret = self.dynamo.get_item2('foobar', {'id': 'a'})
+        self.assertFalse(ret.exists)
     def test_attribute(self):
         """ Can fetch only certain attributes """
         self.make_table()
