@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.4.9
+-----
+* Feature: Result objects from get_item have an ``exists`` flag
+* Feature: ``wait`` keyword for create and delete table
+
 0.4.8
 -----
 * Bug fix: Scans/Queries could return incomplete results if AWS returned an empty Items list
