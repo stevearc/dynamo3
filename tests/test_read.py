@@ -1163,6 +1163,7 @@ class TestGetItem2(BaseSystemTest):
         self.make_table()
         ret = self.dynamo.get_item2('foobar', {'id': 'a'})
         self.assertFalse(ret.exists)
+
     def test_attribute(self):
         """ Can fetch only certain attributes """
         self.make_table()
