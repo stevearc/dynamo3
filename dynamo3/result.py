@@ -371,6 +371,86 @@ class GetResultSet(PagedIterator):
         return self.connection.dynamizer.decode_keys(result)
 
 
+class GetResultSet2(PagedIterator):
+
+    """ Iterator that pages the results of a BatchGetItem """
+
+    def __init__(self, connection, table_keys_map, consistent=False,
+                 attributes=None, alias=None, return_capacity=NONE):
+        super(GetResultSet2, self).__init__()
+        self.connection = connection
+        self.table_keys_map = table_keys_map
+        self.unprocessed_keys = []
+        self.consistent = consistent
+        if attributes is not None:
+            if not isinstance(attributes, six.string_types):
+                attributes = ', '.join(attributes)
+        self.attributes = attributes
+        self.alias = alias
+        self.return_capacity = return_capacity
+        self._attempt = 0
+        self.consumed_capacity = None
+
+    @property
+    def can_fetch_more(self):
+        return bool(self.unprocessed_keys)
+
+    def build_kwargs(self):
+        """ Construct the kwargs to pass to batch_get_item """
+        key_count = sum([len(v) for v in self.table_keys_map.values()])
+        if key_count > MAX_GET_BATCH:
+            # TODO: What's the best way to handle this case?
+            raise ValueError("Exceeds max number of keys per batch")
+        # keys, self.keys = self.keys[:MAX_GET_BATCH], self.keys[MAX_GET_BATCH:]
+
+        # possible shared code
+        def _table_query(tablename, keys):
+            """ Common code to generate RequestItems part of the json request """
+            query = {'ConsistentRead': self.consistent}
+            if self.attributes is not None:
+                query['ProjectionExpression'] = self.attributes
+            if self.alias:
+                query['ExpressionAttributeNames'] = self.alias
+            query['Keys'] = keys
+            return {tablename: query}
+
+        request_items = {}
+        for tablename, keys in self.table_keys_map.items():
+            request_items.update(_table_query(tablename, keys))
+
+        return {
+            'RequestItems': request_items,
+            'ReturnConsumedCapacity': self.return_capacity,
+        }
+
+    def fetch(self):
+        """ Fetch a set of items from their keys """
+        kwargs = self.build_kwargs()
+        data = self.connection.call('batch_get_item', **kwargs)
+        if 'UnprocessedKeys' in data:
+            for items in six.itervalues(data['UnprocessedKeys']):
+                # TODO: reverse map keys to table names...
+                self.unprocessed_keys.extend(items['Keys'])
+            # Getting UnprocessedKeys indicates that we are exceeding our
+            # throughput. So sleep for a bit.
+            self._attempt += 1
+            self.connection.exponential_sleep(self._attempt)
+        else:
+            # No UnprocessedKeys means our request rate is fine, so we can
+            # reset the attempt number.
+            self._attempt = 0
+        self._update_capacity(data)
+        if 'consumed_capacity' in data:
+            # Comes back as a list from BatchWriteItem
+            self.consumed_capacity = \
+                sum(data['consumed_capacity'], self.consumed_capacity)
+        return iter([(k, v) for k, v in six.iteritems(data['Responses'])])
+
+    def __next__(self):
+        tablename, keys = super(GetResultSet2, self).__next__()
+        return tablename, [self.connection.dynamizer.decode_keys(key) for key in keys]
+
+
 class TableResultSet(PagedIterator):
 
     """ Iterator that pages table names from ListTables """

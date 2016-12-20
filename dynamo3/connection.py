@@ -12,7 +12,7 @@ from .constants import NONE, COUNT, INDEXES, READ_COMMANDS
 from .exception import translate_exception, DynamoDBError, ThroughputException
 from .fields import Throughput, Table
 from .result import (ResultSet, GetResultSet, Result, Count, ConsumedCapacity,
-                     TableResultSet, Limit)
+                     TableResultSet, Limit, GetResultSet2)
 from .types import Dynamizer, is_null
 
 
@@ -808,6 +808,50 @@ class DynamoDBConnection(object):
         ret = GetResultSet(self, tablename, keys,
                            consistent=consistent, attributes=attributes,
                            alias=alias, return_capacity=return_capacity)
+        return ret
+
+    def batch_get2(self, table_keys_map, attributes=None, alias=None,
+                   consistent=False, return_capacity=None):
+        """
+        Perform a batch get of many items in a table
+
+        Parameters
+        ----------
+        table_keys_map : dict
+            A dictionary of table names, and list or iterable of primary key dicts that specify the hash key and
+            the optional range key of each item to fetch.  For example:
+
+            .. code-block:: python
+
+                {
+                    'mytablename1': [
+                        {"id": "someobjectid"},
+                    ],
+                    'mytablename2': [
+                        {"id": "someobjectid"},
+                    ]
+                }
+
+        attributes : str or list, optional
+            See docs for ProjectionExpression. If list, it will be joined by
+            commas.
+        alias : dict, optional
+            See docs for ExpressionAttributeNames
+        consistent : bool, optional
+            Perform a strongly consistent read of the data (default False)
+        return_capacity : {NONE, INDEXES, TOTAL}, optional
+            INDEXES will return the consumed capacity for indexes, TOTAL will
+            return the consumed capacity for the table and the indexes.
+            (default NONE)
+        :returns : List of tuples (table name and keys pairs)
+
+        """
+
+        for table_name, keys in table_keys_map.items():
+            table_keys_map[table_name] = [self.dynamizer.encode_keys(k) for k in keys]
+        return_capacity = self._default_capacity(return_capacity)
+        ret = GetResultSet2(self, table_keys_map, consistent=consistent, attributes=attributes,
+                            alias=alias, return_capacity=return_capacity)
         return ret
 
     def update_item(self, tablename, key, updates, returns=NONE,

@@ -990,10 +990,11 @@ class TestBatchGet(BaseSystemTest):
 
     """ Tests for the BatchGetItem call """
 
-    def make_table(self):
+    def make_table(self, tablename=None):
         """ Convenience method for making a table """
+        tablename = tablename if tablename else 'foobar'
         hash_key = DynamoKey('id')
-        self.dynamo.create_table('foobar', hash_key=hash_key)
+        self.dynamo.create_table(tablename, hash_key=hash_key)
 
     def test_get_items(self):
         """ Can get multiple items """
@@ -1087,6 +1088,26 @@ class TestBatchGet(BaseSystemTest):
         self.assertEqual(rs.indexes, {'l-index': 1})
         self.assertEqual(rs.global_indexes, {'g-index': 1})
         self.assertEqual(rs.consumed_capacity, capacity)
+
+    def test_get_many_multiple_tables(self):
+        """ Can batch get from multiple tables """
+        table_map = {
+            "foobar1": [{'id': 'a'}, {'id': 'b'}],
+            "foobar2": [{'id': 'a'}, {'id': 'b'}]
+        }
+
+        for table, keys in table_map.items():
+            self.make_table(table)
+            with self.dynamo.batch_write(table) as batch:
+                for key in keys:
+                    batch.put(key)
+
+        rv = {}
+        results = self.dynamo.batch_get2(table_map)
+        for result in list(results):
+            tablename, values = result
+            rv[tablename] = values
+        self.assertItemsEqual(rv, table_map)
 
 
 class TestGetItem(BaseSystemTest):
