@@ -19,7 +19,6 @@ runtime.
 import inspect
 import logging
 import nose
-import shutil
 import six
 import subprocess
 import tarfile
@@ -32,7 +31,7 @@ import os
 from . import DynamoDBConnection
 
 
-DYNAMO_LOCAL = 'http://dynamodb-local.s3-website-us-west-2.amazonaws.com/dynamodb_local_latest'
+DYNAMO_LOCAL = 'https://s3-us-west-2.amazonaws.com/dynamodb-local/dynamodb_local_latest.tar.gz'
 
 
 class DynamoLocalPlugin(nose.plugins.Plugin):

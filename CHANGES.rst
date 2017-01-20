@@ -1,6 +1,10 @@
 Changelog
 =========
 
+0.4.10
+------
+* Fixed DynamoDB Local link in testing framework
+
 0.4.9
 -----
 * Feature: Result objects from get_item have an ``exists`` flag
