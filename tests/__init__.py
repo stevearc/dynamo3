@@ -1,6 +1,6 @@
 """ Tests for Dynamo3 """
-from __future__ import unicode_literals
 
+import sys
 import unittest
 from decimal import Decimal
 from pickle import dumps, loads
@@ -165,14 +165,40 @@ class TestMisc(BaseSystemTest):
         ret = self.dynamo.delete_table("foobar")
         self.assertTrue(not ret)
 
-    def test_re_raise(self):
-        """ DynamoDBError can re-raise itself if missing exc_info """
+    def test_re_raise_passthrough(self):
+        """ DynamoDBError can re-raise itself if missing original exception """
         err = DynamoDBError(400, Code="ErrCode", Message="Ouch", args={})
+        caught = False
         try:
             err.re_raise()
-            self.assertTrue(False)
         except DynamoDBError as e:
+            caught = True
             self.assertEqual(err, e)
+        self.assertTrue(caught)
+
+    def test_re_raise(self):
+        """ DynamoDBError can re-raise itself with stacktrace of original exc """
+        caught = False
+        try:
+            try:
+                raise Exception("Hello")
+            except Exception as e1:
+                err = DynamoDBError(
+                    400,
+                    Code="ErrCode",
+                    Message="Ouch",
+                    args={},
+                    exc_info=sys.exc_info(),
+                )
+                err.re_raise()
+        except DynamoDBError as e:
+            caught = True
+            import traceback
+
+            tb = traceback.format_tb(e.__traceback__)
+            self.assertIn("Hello", tb[-1])
+            self.assertEqual(e.status_code, 400)
+        self.assertTrue(caught)
 
     def test_default_return_capacity(self):
         """ When default_return_capacity=True, always return capacity """
