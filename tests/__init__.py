@@ -1,13 +1,13 @@
 """ Tests for Dynamo3 """
 from __future__ import unicode_literals
 
+import unittest
 from decimal import Decimal
+from pickle import dumps, loads
+from urllib.parse import urlparse
 
-import six
 from botocore.exceptions import ClientError
 from mock import ANY, MagicMock, patch
-from six.moves.cPickle import dumps, loads  # pylint: disable=F0401,E0611
-from six.moves.urllib.parse import urlparse  # pylint: disable=F0401,E0611
 
 from dynamo3 import (
     STRING,
@@ -23,19 +23,10 @@ from dynamo3 import (
 )
 from dynamo3.result import Capacity, ConsumedCapacity, Count, ResultSet, add_dicts
 
-try:
-    import unittest2 as unittest  # pylint: disable=F0401
-except ImportError:
-    import unittest
-
-
-if six.PY3:
-    unittest.TestCase.assertItemsEqual = unittest.TestCase.assertCountEqual
-
 
 def is_number(value):
     """ Check if a value is a float or int """
-    return isinstance(value, float) or isinstance(value, six.integer_types)
+    return isinstance(value, float) or isinstance(value, int)
 
 
 class BaseSystemTest(unittest.TestCase):
@@ -71,7 +62,7 @@ class TestMisc(BaseSystemTest):
 
     def test_connection_region(self):
         """ Connection can access name of connected region """
-        self.assertTrue(isinstance(self.dynamo.region, six.string_types))
+        self.assertTrue(isinstance(self.dynamo.region, str))
 
     def test_connect_to_region_old(self):
         """ Can connect to a dynamo region """
@@ -238,7 +229,7 @@ class TestDataTypes(BaseSystemTest):
         self.dynamo.put_item("foobar", {"id": "abc"})
         item = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(item["id"], "abc")
-        self.assertTrue(isinstance(item["id"], six.text_type))
+        self.assertTrue(isinstance(item["id"], str))
 
     def test_int(self):
         """ Store and retrieve an int """
@@ -322,7 +313,7 @@ class TestDataTypes(BaseSystemTest):
     def test_binary_converts_unicode(self):
         """ Binary will convert unicode to bytes """
         b = Binary("a")
-        self.assertTrue(isinstance(b.value, six.binary_type))
+        self.assertTrue(isinstance(b.value, bytes))
 
     def test_binary_force_string(self):
         """ Binary must wrap a string type """
@@ -611,7 +602,7 @@ class TestHooks(BaseSystemTest):
 
     def tearDown(self):
         super(TestHooks, self).tearDown()
-        for hooks in six.itervalues(self.dynamo._hooks):
+        for hooks in self.dynamo._hooks.values():
             while hooks:
                 hooks.pop()
 

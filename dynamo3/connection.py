@@ -4,7 +4,6 @@ import warnings
 from contextlib import contextmanager
 
 import botocore.session
-import six
 from botocore.exceptions import ClientError
 
 from .batch import BatchWriter, encode_query_kwargs
@@ -26,7 +25,7 @@ from .types import Dynamizer, is_null
 def build_expected(dynamizer, expected):
     """ Build the Expected parameters from a dict """
     ret = {}
-    for k, v in six.iteritems(expected):
+    for k, v in expected.items():
         if is_null(v):
             ret[k] = {
                 "Exists": False,
@@ -45,7 +44,7 @@ def build_expression_values(dynamizer, expr_values, kwargs):
         values = expr_values
         return dynamizer.encode_keys(values)
     elif kwargs:
-        values = dict(((":" + k, v) for k, v in six.iteritems(kwargs)))
+        values = dict(((":" + k, v) for k, v in kwargs.items()))
         return dynamizer.encode_keys(values)
 
 
@@ -686,7 +685,7 @@ class DynamoDBConnection(object):
             "ReturnConsumedCapacity": self._default_capacity(return_capacity),
         }
         if attributes is not None:
-            if not isinstance(attributes, six.string_types):
+            if not isinstance(attributes, str):
                 attributes = ", ".join(attributes)
             kwargs["ProjectionExpression"] = attributes
         if alias:
@@ -961,7 +960,7 @@ class DynamoDBConnection(object):
             expected.update(update.expected(self.dynamizer))
 
         # Pull the 'expected' constraints from the kwargs
-        for k, v in six.iteritems(encode_query_kwargs(self.dynamizer, kwargs)):
+        for k, v in encode_query_kwargs(self.dynamizer, kwargs).items():
             if k in expected:
                 raise ValueError(
                     "Cannot have more than one condition on a single field"
@@ -1206,7 +1205,7 @@ class DynamoDBConnection(object):
         if values:
             keywords["ExpressionAttributeValues"] = values
         if attributes is not None:
-            if not isinstance(attributes, six.string_types):
+            if not isinstance(attributes, str):
                 attributes = ", ".join(attributes)
             keywords["ProjectionExpression"] = attributes
         if index is not None:
@@ -1404,7 +1403,7 @@ class DynamoDBConnection(object):
             "ScanIndexForward": not desc,
         }
         if attributes is not None:
-            if not isinstance(attributes, six.string_types):
+            if not isinstance(attributes, str):
                 attributes = ", ".join(attributes)
             keywords["ProjectionExpression"] = attributes
         if index is not None:
@@ -1464,7 +1463,7 @@ class DynamoDBConnection(object):
                         "ProvisionedThroughput": value.schema(),
                     }
                 }
-                for key, value in six.iteritems(global_indexes)
+                for key, value in global_indexes.items()
             ]
         if all_attrs:
             attr_definitions = [attr.definition() for attr in all_attrs]

@@ -1,8 +1,6 @@
 """ DynamoDB types and type logic """
 from decimal import Clamped, Context, Decimal, Overflow, Underflow
 
-import six
-
 from .constants import (
     BINARY,
     BINARY_SET,
@@ -40,14 +38,14 @@ TYPES = {
     "MAP": MAP,
     "NULL": NULL,
 }
-TYPES_REV = dict(((v, k) for k, v in six.iteritems(TYPES)))
+TYPES_REV = dict(((v, k) for k, v in TYPES.items()))
 
 
 def is_dynamo_value(value):
     """ Returns True if the value is a Dynamo-formatted value """
     if not isinstance(value, dict) or len(value) != 1:
         return False
-    subkey = six.next(six.iterkeys(value))
+    subkey = next(iter(value.keys()))
     return subkey in TYPES_REV
 
 
@@ -61,9 +59,9 @@ class Binary(object):
     """ Wrap a binary string """
 
     def __init__(self, value):
-        if isinstance(value, six.text_type):
+        if isinstance(value, str):
             value = value.encode("utf-8")
-        if not isinstance(value, six.binary_type):
+        if not isinstance(value, bytes):
             raise TypeError("Value must be a string of binary data!")
 
         self.value = value
@@ -108,7 +106,7 @@ def encode_list(dynamizer, value):
 def encode_dict(dynamizer, value):
     """ Encode a dict for the DynamoDB format """
     encoded_dict = {}
-    for k, v in six.iteritems(value):
+    for k, v in value.items():
         encoded_type, encoded_value = dynamizer.raw_encode(v)
         encoded_dict[k] = {
             encoded_type: encoded_value,
@@ -122,16 +120,13 @@ class Dynamizer(object):
 
     def __init__(self):
         self.encoders = {}
-        self.register_encoder(six.text_type, lambda _, v: (STRING, v))
-        self.register_encoder(six.binary_type, lambda _, v: (STRING, v.decode("utf-8")))
-        for t in six.integer_types:
-            self.register_encoder(t, lambda _, v: (NUMBER, six.text_type(v)))
-        self.register_encoder(
-            float, lambda _, v: (NUMBER, six.text_type(float_to_decimal(v)))
-        )
+        self.register_encoder(str, lambda _, v: (STRING, v))
+        self.register_encoder(bytes, lambda _, v: (STRING, v.decode("utf-8")))
+        self.register_encoder(int, lambda _, v: (NUMBER, str(v)))
+        self.register_encoder(float, lambda _, v: (NUMBER, str(float_to_decimal(v))))
         self.register_encoder(
             Decimal,
-            lambda _, v: (NUMBER, six.text_type(DECIMAL_CONTEXT.create_decimal(v))),
+            lambda _, v: (NUMBER, str(DECIMAL_CONTEXT.create_decimal(v))),
         )
         self.register_encoder(set, encode_set)
         self.register_encoder(frozenset, encode_set)
@@ -167,14 +162,12 @@ class Dynamizer(object):
 
     def encode_keys(self, keys):
         """ Run the encoder on a dict of values """
-        return dict(
-            ((k, self.encode(v)) for k, v in six.iteritems(keys) if not is_null(v))
-        )
+        return dict(((k, self.encode(v)) for k, v in keys.items() if not is_null(v)))
 
     def maybe_encode_keys(self, keys):
         """ Same as encode_keys but a no-op if already in Dynamo format """
         ret = {}
-        for k, v in six.iteritems(keys):
+        for k, v in keys.items():
             if is_dynamo_value(v):
                 return keys
             elif not is_null(v):
@@ -187,11 +180,11 @@ class Dynamizer(object):
 
     def decode_keys(self, keys):
         """ Run the decoder on a dict of values """
-        return dict(((k, self.decode(v)) for k, v in six.iteritems(keys)))
+        return dict(((k, self.decode(v)) for k, v in keys.items()))
 
     def decode(self, dynamo_value):
         """ Decode a dynamo value into a python value """
-        type, value = next(six.iteritems(dynamo_value))
+        type, value = next(iter(dynamo_value.items()))
         if type == STRING:
             return value
         elif type == BINARY:
@@ -210,7 +203,7 @@ class Dynamizer(object):
             return [self.decode(v) for v in value]
         elif type == MAP:
             decoded_dict = {}
-            for k, v in six.iteritems(value):
+            for k, v in value.items():
                 decoded_dict[k] = self.decode(v)
             return decoded_dict
         elif type == NULL:

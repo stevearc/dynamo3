@@ -1,8 +1,6 @@
 """ Code for batch processing """
 import logging
 
-import six
-
 from .constants import MAX_WRITE_BATCH, NONE
 from .result import ConsumedCapacity
 from .types import is_null
@@ -88,7 +86,7 @@ class ItemUpdate(object):
         if len(kwargs) > 1:
             raise ValueError("Cannot have more than one condition on a " "single field")
         elif len(kwargs) == 1:
-            op, expected_value = next(six.iteritems(kwargs))
+            op, expected_value = next(iter(kwargs.items()))
             self._expect_kwargs[key + "__" + op] = expected_value
 
     @classmethod
@@ -150,9 +148,7 @@ class ItemUpdate(object):
 def _encode_write(dynamizer, data, action, key):
     """ Encode an item write command """
     # Strip null values out of data
-    data = dict(
-        ((k, dynamizer.encode(v)) for k, v in six.iteritems(data) if not is_null(v))
-    )
+    data = dict(((k, dynamizer.encode(v)) for k, v in data.items() if not is_null(v)))
     return {
         action: {
             key: data,
@@ -168,7 +164,7 @@ def encode_put(dynamizer, data):
 def encode_query_kwargs(dynamizer, kwargs):
     """ Encode query constraints in Dynamo format """
     ret = {}
-    for k, v in six.iteritems(kwargs):
+    for k, v in kwargs.items():
         if "__" not in k:
             raise TypeError("Invalid query argument '%s'" % k)
         name, condition_key = k.split("__")

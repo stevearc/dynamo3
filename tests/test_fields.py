@@ -1,10 +1,7 @@
 """ Tests for dynamo3.fields """
-from dynamo3 import DynamoKey, GlobalIndex, LocalIndex, Table, Throughput
+import unittest
 
-try:
-    import unittest2 as unittest  # pylint: disable=F0401
-except ImportError:
-    import unittest
+from dynamo3 import DynamoKey, GlobalIndex, LocalIndex, Table, Throughput
 
 
 class TestEqHash(unittest.TestCase):

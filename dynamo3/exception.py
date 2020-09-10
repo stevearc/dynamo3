@@ -3,7 +3,6 @@ import sys
 from pprint import pformat
 
 import botocore
-import six
 
 
 class DynamoDBError(botocore.exceptions.BotoCoreError):
@@ -20,9 +19,10 @@ class DynamoDBError(botocore.exceptions.BotoCoreError):
     def re_raise(self):
         """ Raise this exception with the original traceback """
         if self.exc_info is not None:
-            six.reraise(type(self), self, self.exc_info[2])
-        else:
-            raise self
+            traceback = self.exc_info[2]
+            if self.__traceback__ != traceback:
+                raise self.with_traceback(traceback)
+        raise self
 
 
 class ConditionalCheckFailedException(DynamoDBError):

@@ -1,5 +1,4 @@
 """ Wrappers for result objects and iterators """
-import six
 
 from .constants import MAX_GET_BATCH, NONE
 
@@ -65,7 +64,6 @@ class Count(int):
         return "Count(%d)" % self
 
 
-@six.python_2_unicode_compatible
 class Capacity(object):
     """ Wrapper for the capacity of a table or index """
 
@@ -124,7 +122,6 @@ class Capacity(object):
         return " ".join(pieces)
 
 
-@six.python_2_unicode_compatible
 class ConsumedCapacity(object):
     """ Record of the consumed capacity of a request """
 
@@ -148,7 +145,7 @@ class ConsumedCapacity(object):
         if key not in response:
             return None
         indexes = {}
-        for key, val in six.iteritems(response[key]):
+        for key, val in response[key].items():
             indexes[key] = capacity_factory(val)
         return indexes
 
@@ -218,16 +215,16 @@ class ConsumedCapacity(object):
         if self.table_capacity:
             lines.append("Table: %s" % self.table_capacity)
         if self.local_index_capacity:
-            for name, cap in six.iteritems(self.local_index_capacity):
+            for name, cap in self.local_index_capacity.items():
                 lines.append("Local index '%s': %s" % (name, cap))
         if self.global_index_capacity:
-            for name, cap in six.iteritems(self.global_index_capacity):
+            for name, cap in self.global_index_capacity.items():
                 lines.append("Global index '%s': %s" % (name, cap))
         lines.append("Total: %s" % self.total)
         return "\n".join(lines)
 
 
-class PagedIterator(six.Iterator):
+class PagedIterator(object):
 
     """ An iterator that iterates over paged results from Dynamo """
 
@@ -258,11 +255,11 @@ class PagedIterator(six.Iterator):
                 self.capacity += cap.get("CapacityUnits", 0)
                 self.table_capacity += cap.get("Table", {}).get("CapacityUnits", 0)
                 local_indexes = cap.get("LocalSecondaryIndexes", {})
-                for k, v in six.iteritems(local_indexes):
+                for k, v in local_indexes.items():
                     self.indexes.setdefault(k, 0)
                     self.indexes[k] += v["CapacityUnits"]
                 global_indexes = cap.get("GlobalSecondaryIndexes", {})
-                for k, v in six.iteritems(global_indexes):
+                for k, v in global_indexes.items():
                     self.global_indexes.setdefault(k, 0)
                     self.global_indexes[k] += v["CapacityUnits"]
 
@@ -274,7 +271,7 @@ class PagedIterator(six.Iterator):
             self.iterator = self.fetch()
         while True:
             try:
-                return six.next(self.iterator)
+                return next(self.iterator)
             except StopIteration:
                 if self.can_fetch_more:
                     self.iterator = self.fetch()
@@ -340,7 +337,7 @@ class GetResultSet(PagedIterator):
         self.keys = keys
         self.consistent = consistent
         if attributes is not None:
-            if not isinstance(attributes, six.string_types):
+            if not isinstance(attributes, str):
                 attributes = ", ".join(attributes)
         self.attributes = attributes
         self.alias = alias
@@ -373,7 +370,7 @@ class GetResultSet(PagedIterator):
         kwargs = self.build_kwargs()
         data = self.connection.call("batch_get_item", **kwargs)
         if "UnprocessedKeys" in data:
-            for items in six.itervalues(data["UnprocessedKeys"]):
+            for items in data["UnprocessedKeys"].values():
                 self.keys.extend(items["Keys"])
             # Getting UnprocessedKeys indicates that we are exceeding our
             # throughput. So sleep for a bit.
@@ -451,7 +448,7 @@ class Result(dict):
     def __init__(self, dynamizer, response, item_key):
         super(Result, self).__init__()
         self.exists = item_key in response
-        for k, v in six.iteritems(response.get(item_key, {})):
+        for k, v in response.get(item_key, {}).items():
             self[k] = dynamizer.decode(v)
 
         self.consumed_capacity = response.get("consumed_capacity")
@@ -463,13 +460,13 @@ class Result(dict):
         self.indexes = dict(
             (
                 (k, v["CapacityUnits"])
-                for k, v in six.iteritems(cap.get("LocalSecondaryIndexes", {}))
+                for k, v in cap.get("LocalSecondaryIndexes", {}).items()
             )
         )
         self.global_indexes = dict(
             (
                 (k, v["CapacityUnits"])
-                for k, v in six.iteritems(cap.get("GlobalSecondaryIndexes", {}))
+                for k, v in cap.get("GlobalSecondaryIndexes", {}).items()
             )
         )
 

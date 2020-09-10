@@ -16,7 +16,6 @@ REQUIREMENTS_TEST = open(os.path.join(HERE, "requirements_test.txt")).readlines(
 
 REQUIREMENTS = [
     "botocore>=0.89.0",
-    "six",
 ]
 
 if __name__ == "__main__":

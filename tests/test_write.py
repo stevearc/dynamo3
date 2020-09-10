@@ -2,7 +2,6 @@
 from __future__ import unicode_literals
 
 from mock import ANY, MagicMock, call, patch
-from six.moves import xrange as _xrange  # pylint: disable=F0401
 
 from dynamo3 import (
     ALL_NEW,
@@ -236,7 +235,7 @@ class TestBatchWrite(BaseSystemTest):
         with self.dynamo.batch_write("foobar") as batch:
             batch.put({"id": "a"})
         ret = list(self.dynamo.scan("foobar"))
-        self.assertItemsEqual(ret, [{"id": "a"}])
+        self.assertCountEqual(ret, [{"id": "a"}])
 
     def test_delete_items(self):
         """ Batch write can delete items from table """
@@ -248,19 +247,19 @@ class TestBatchWrite(BaseSystemTest):
         with self.dynamo.batch_write("foobar") as batch:
             batch.delete({"id": "b"})
         ret = list(self.dynamo.scan("foobar"))
-        self.assertItemsEqual(ret, [{"id": "a"}])
+        self.assertCountEqual(ret, [{"id": "a"}])
 
     def test_write_many(self):
         """ Can batch write arbitrary numbers of items """
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         with self.dynamo.batch_write("foobar") as batch:
-            for i in _xrange(50):
+            for i in range(50):
                 batch.put({"id": str(i)})
         count = self.dynamo.scan("foobar", count=True)
         self.assertEqual(count, 50)
         with self.dynamo.batch_write("foobar") as batch:
-            for i in _xrange(50):
+            for i in range(50):
                 batch.delete({"id": str(i)})
         count = self.dynamo.scan("foobar", count=True)
         self.assertEqual(count, 0)
@@ -273,7 +272,7 @@ class TestBatchWrite(BaseSystemTest):
         with self.dynamo.batch_write("foobar") as batch:
             batch.put({"id": "a", "foo": None})
         ret = list(self.dynamo.scan("foobar"))
-        self.assertItemsEqual(ret, [{"id": "a"}])
+        self.assertCountEqual(ret, [{"id": "a"}])
 
     def test_handle_unprocessed(self):
         """ Retry all unprocessed items """
@@ -474,7 +473,7 @@ class TestUpdateItem(BaseSystemTest):
         update = ItemUpdate.put("foo", None)
         self.dynamo.update_item("foobar", {"id": "a"}, [update])
         ret = list(self.dynamo.scan("foobar"))
-        self.assertItemsEqual(ret, [{"id": "a"}])
+        self.assertCountEqual(ret, [{"id": "a"}])
 
     def test_condition_converts_eq_null(self):
         """ Conditional converts eq=None to null=True """

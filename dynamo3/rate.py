@@ -4,8 +4,6 @@ import math
 import time
 from contextlib import contextmanager
 
-import six
-
 from .result import Capacity
 
 LOG = logging.getLogger(__name__)
@@ -129,14 +127,14 @@ class RateLimit(object):
             self._wait(args, now, table_cap, consumed_history, capacity.table_capacity)
         # The local index consumed capacity also counts against the table
         if capacity.local_index_capacity is not None:
-            for consumed in six.itervalues(capacity.local_index_capacity):
+            for consumed in capacity.local_index_capacity.values():
                 self._wait(args, now, table_cap, consumed_history, consumed)
 
         # Increment global indexes
         # check global indexes against the table+index cap or default
         gic = capacity.global_index_capacity
         if gic is not None:
-            for index_name, consumed in six.iteritems(gic):
+            for index_name, consumed in gic.items():
                 full_name = capacity.tablename + ":" + index_name
                 if index_name in table_cap:
                     index_cap = table_cap[index_name]

@@ -24,10 +24,9 @@ import subprocess
 import tarfile
 import tempfile
 from contextlib import closing
+from urllib.request import urlretrieve
 
 import nose
-import six
-from six.moves.urllib.request import urlretrieve  # pylint: disable=F0401,E0611
 
 from . import DynamoDBConnection
 
@@ -154,5 +153,5 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
             if not result.wasSuccessful():  # pragma: no cover
                 output = self._dynamo_local.stdout.read()
                 encoding = locale.getdefaultlocale()[1] or "utf-8"
-                six.print_("DynamoDB Local output:")
-                six.print_(output.decode(encoding))
+                print("DynamoDB Local output:")
+                print(output.decode(encoding))
