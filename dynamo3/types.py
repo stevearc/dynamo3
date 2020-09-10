@@ -209,4 +209,4 @@ class Dynamizer(object):
         elif type == NULL:
             return None
         else:
-            raise TypeError("Received unrecognized type %r from dynamo", type)
+            raise TypeError("Received unrecognized type %r from dynamo" % type)

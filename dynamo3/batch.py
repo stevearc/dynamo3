@@ -2,7 +2,6 @@
 import logging
 
 from .constants import MAX_WRITE_BATCH, NONE
-from .result import ConsumedCapacity
 from .types import is_null
 
 LOG = logging.getLogger(__name__)

@@ -54,6 +54,7 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
         self.path = None
         self.link = None
         self.region = None
+        self.live = False
 
     def options(self, parser, env):
         super(DynamoLocalPlugin, self).options(parser, env)

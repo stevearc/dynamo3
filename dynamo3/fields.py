@@ -222,8 +222,8 @@ class GlobalIndex(BaseIndex):
         index.response = response
         return index
 
-    def __hash__(self):
-        return super(GlobalIndex, self).__hash__()
+    def __hash__(self):  # pylint: disable=W0235
+        return super().__hash__()
 
     def __eq__(self, other):
         return (

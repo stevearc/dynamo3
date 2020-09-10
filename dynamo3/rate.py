@@ -2,7 +2,6 @@
 import logging
 import math
 import time
-from contextlib import contextmanager
 
 from .result import Capacity
 
