@@ -1,9 +1,11 @@
 """ Tools for rate limiting """
-from contextlib import contextmanager
-import six
 import logging
 import math
 import time
+from contextlib import contextmanager
+
+import six
+
 from .result import Capacity
 
 LOG = logging.getLogger(__name__)
@@ -73,9 +75,17 @@ class RateLimit(object):
         will skip the sleep.
     """
 
-    def __init__(self, total_read=0, total_write=0, total=None, default_read=0,
-                 default_write=0, default=None, table_caps=None,
-                 callback=None):
+    def __init__(
+        self,
+        total_read=0,
+        total_write=0,
+        total=None,
+        default_read=0,
+        default_write=0,
+        default=None,
+        table_caps=None,
+        callback=None,
+    ):
         if total is not None:
             self.total_cap = total
         else:
@@ -88,8 +98,8 @@ class RateLimit(object):
         self._old_default_return_capacity = False
         self._consumed = {}
         self._total_consumed = {
-            'read': DecayingCapacityStore(),
-            'write': DecayingCapacityStore(),
+            "read": DecayingCapacityStore(),
+            "write": DecayingCapacityStore(),
         }
         self.callback = callback
 
@@ -97,19 +107,17 @@ class RateLimit(object):
         """ Getter for a consumed capacity storage dict """
         if key not in self._consumed:
             self._consumed[key] = {
-                'read': DecayingCapacityStore(),
-                'write': DecayingCapacityStore(),
+                "read": DecayingCapacityStore(),
+                "write": DecayingCapacityStore(),
             }
         return self._consumed[key]
 
-    def on_capacity(self, connection, command, query_kwargs, response,
-                    capacity):
+    def on_capacity(self, connection, command, query_kwargs, response, capacity):
         """ Hook that runs in response to a 'returned capacity' event """
         now = time.time()
         args = (connection, command, query_kwargs, response, capacity)
         # Check total against the total_cap
-        self._wait(args, now, self.total_cap, self._total_consumed,
-                   capacity.total)
+        self._wait(args, now, self.total_cap, self._total_consumed, capacity.total)
 
         # Increment table consumed capacity & check it
         if capacity.tablename in self.table_caps:
@@ -118,8 +126,7 @@ class RateLimit(object):
             table_cap = self.default_cap
         consumed_history = self.get_consumed(capacity.tablename)
         if capacity.table_capacity is not None:
-            self._wait(args, now, table_cap, consumed_history,
-                       capacity.table_capacity)
+            self._wait(args, now, table_cap, consumed_history, capacity.table_capacity)
         # The local index consumed capacity also counts against the table
         if capacity.local_index_capacity is not None:
             for consumed in six.itervalues(capacity.local_index_capacity):
@@ -130,7 +137,7 @@ class RateLimit(object):
         gic = capacity.global_index_capacity
         if gic is not None:
             for index_name, consumed in six.iteritems(gic):
-                full_name = capacity.tablename + ':' + index_name
+                full_name = capacity.tablename + ":" + index_name
                 if index_name in table_cap:
                     index_cap = table_cap[index_name]
                 elif full_name in self.table_caps:
@@ -144,14 +151,16 @@ class RateLimit(object):
 
     def _wait(self, args, now, cap, consumed_history, consumed_capacity):
         """ Check the consumed capacity against the limit and sleep """
-        for key in ['read', 'write']:
+        for key in ["read", "write"]:
             if key in cap and cap[key] > 0:
                 consumed_history[key].add(now, consumed_capacity[key])
                 consumed = consumed_history[key].value
                 if consumed > 0 and consumed >= cap[key]:
                     seconds = math.ceil(float(consumed) / cap[key])
-                    LOG.debug("Rate limited throughput exceeded. Sleeping "
-                              "for %d seconds.", seconds)
+                    LOG.debug(
+                        "Rate limited throughput exceeded. Sleeping " "for %d seconds.",
+                        seconds,
+                    )
                     if callable(self.callback):
                         callback_args = args + (seconds,)
                         if self.callback(*callback_args):

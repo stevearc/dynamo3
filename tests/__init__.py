@@ -1,19 +1,27 @@
 """ Tests for Dynamo3 """
 from __future__ import unicode_literals
 
+from decimal import Decimal
+
 import six
 from botocore.exceptions import ClientError
-from decimal import Decimal
-from mock import patch, MagicMock, ANY
+from mock import ANY, MagicMock, patch
 from six.moves.cPickle import dumps, loads  # pylint: disable=F0401,E0611
 from six.moves.urllib.parse import urlparse  # pylint: disable=F0401,E0611
 
-from dynamo3 import (DynamoDBConnection, Binary, DynamoKey, Dynamizer, STRING,
-                     ThroughputException, Table, GlobalIndex, DynamoDBError,
-                     Limit)
-from dynamo3.result import (add_dicts, Count, Capacity, ConsumedCapacity,
-                            ResultSet)
-
+from dynamo3 import (
+    STRING,
+    Binary,
+    Dynamizer,
+    DynamoDBConnection,
+    DynamoDBError,
+    DynamoKey,
+    GlobalIndex,
+    Limit,
+    Table,
+    ThroughputException,
+)
+from dynamo3.result import Capacity, ConsumedCapacity, Count, ResultSet, add_dicts
 
 try:
     import unittest2 as unittest  # pylint: disable=F0401
@@ -33,6 +41,7 @@ def is_number(value):
 class BaseSystemTest(unittest.TestCase):
 
     """ Base class for system tests """
+
     dynamo = None
 
     def setUp(self):
@@ -66,81 +75,80 @@ class TestMisc(BaseSystemTest):
 
     def test_connect_to_region_old(self):
         """ Can connect to a dynamo region """
-        conn = DynamoDBConnection.connect_to_region('us-west-1')
+        conn = DynamoDBConnection.connect_to_region("us-west-1")
         self.assertIsNotNone(conn.host)
 
     def test_connect_to_region_creds_old(self):
         """ Can connect to a dynamo region with credentials """
         conn = DynamoDBConnection.connect_to_region(
-            'us-west-1', access_key='abc', secret_key='12345')
+            "us-west-1", access_key="abc", secret_key="12345"
+        )
         self.assertIsNotNone(conn.host)
 
     def test_connect_to_host_without_session_old(self):
         """ Can connect to a dynamo host without passing in a session """
-        conn = DynamoDBConnection.connect_to_host(access_key='abc',
-                                                  secret_key='12345')
+        conn = DynamoDBConnection.connect_to_host(access_key="abc", secret_key="12345")
         self.assertIsNotNone(conn.host)
 
     def test_connect_to_region(self):
         """ Can connect to a dynamo region """
-        conn = DynamoDBConnection.connect('us-west-1')
+        conn = DynamoDBConnection.connect("us-west-1")
         self.assertIsNotNone(conn.host)
 
     def test_connect_to_region_creds(self):
         """ Can connect to a dynamo region with credentials """
         conn = DynamoDBConnection.connect(
-            'us-west-1', access_key='abc', secret_key='12345')
+            "us-west-1", access_key="abc", secret_key="12345"
+        )
         self.assertIsNotNone(conn.host)
 
     def test_connect_to_host_without_session(self):
         """ Can connect to a dynamo host without passing in a session """
-        conn = DynamoDBConnection.connect('us-west-1', host='localhost')
+        conn = DynamoDBConnection.connect("us-west-1", host="localhost")
         self.assertIsNotNone(conn.host)
 
-    @patch('dynamo3.connection.time')
+    @patch("dynamo3.connection.time")
     def test_retry_on_throughput_error(self, time):
         """ Throughput exceptions trigger a retry of the request """
+
         def call(*_, **__):
             """ Dummy service call """
             response = {
-                'ResponseMetadata': {
-                    'HTTPStatusCode': 400,
+                "ResponseMetadata": {
+                    "HTTPStatusCode": 400,
                 },
-                'Error': {
-                    'Code': 'ProvisionedThroughputExceededException',
-                    'Message': 'Does not matter',
-                }
+                "Error": {
+                    "Code": "ProvisionedThroughputExceededException",
+                    "Message": "Does not matter",
+                },
             }
-            raise ClientError(response, 'list_tables')
+            raise ClientError(response, "list_tables")
 
-        with patch.object(self.dynamo, 'client') as client:
+        with patch.object(self.dynamo, "client") as client:
             client.list_tables.side_effect = call
             with self.assertRaises(ThroughputException):
-                self.dynamo.call('list_tables')
-        self.assertEqual(len(time.sleep.mock_calls),
-                         self.dynamo.request_retries - 1)
+                self.dynamo.call("list_tables")
+        self.assertEqual(len(time.sleep.mock_calls), self.dynamo.request_retries - 1)
         self.assertTrue(time.sleep.called)
 
     def test_describe_missing(self):
         """ Describing a missing table returns None """
-        ret = self.dynamo.describe_table('foobar')
+        ret = self.dynamo.describe_table("foobar")
         self.assertIsNone(ret)
 
     def test_magic_table_props(self):
         """ Table magically looks up properties on response object """
-        hash_key = DynamoKey('id')
-        self.dynamo.create_table('foobar', hash_key=hash_key)
-        ret = self.dynamo.describe_table('foobar')
+        hash_key = DynamoKey("id")
+        self.dynamo.create_table("foobar", hash_key=hash_key)
+        ret = self.dynamo.describe_table("foobar")
         self.assertIsNotNone(ret.item_count)
         with self.assertRaises(AttributeError):
             self.assertIsNotNone(ret.crazy_property)
 
     def test_magic_index_props(self):
         """ Index magically looks up properties on response object """
-        index = GlobalIndex.all('idx-name', DynamoKey('id'))
-        index.response = {
-            'FooBar': 2
-        }
+        index = GlobalIndex.all("idx-name", DynamoKey("id"))
+        index.response = {"FooBar": 2}
         self.assertEqual(index.foo_bar, 2)
         with self.assertRaises(AttributeError):
             self.assertIsNotNone(index.crazy_property)
@@ -148,27 +156,27 @@ class TestMisc(BaseSystemTest):
     def test_describe_during_delete(self):
         """ Describing a table during a delete operation should not crash """
         response = {
-            'ItemCount': 0,
-            'ProvisionedThroughput': {
-                'NumberOfDecreasesToday': 0,
-                'ReadCapacityUnits': 5,
-                'WriteCapacityUnits': 5
+            "ItemCount": 0,
+            "ProvisionedThroughput": {
+                "NumberOfDecreasesToday": 0,
+                "ReadCapacityUnits": 5,
+                "WriteCapacityUnits": 5,
             },
-            'TableName': 'myTableName',
-            'TableSizeBytes': 0,
-            'TableStatus': 'DELETING'
+            "TableName": "myTableName",
+            "TableSizeBytes": 0,
+            "TableStatus": "DELETING",
         }
         table = Table.from_response(response)
-        self.assertEqual(table.status, 'DELETING')
+        self.assertEqual(table.status, "DELETING")
 
     def test_delete_missing(self):
         """ Deleting a missing table returns False """
-        ret = self.dynamo.delete_table('foobar')
+        ret = self.dynamo.delete_table("foobar")
         self.assertTrue(not ret)
 
     def test_re_raise(self):
         """ DynamoDBError can re-raise itself if missing exc_info """
-        err = DynamoDBError(400, Code='ErrCode', Message='Ouch', args={})
+        err = DynamoDBError(400, Code="ErrCode", Message="Ouch", args={})
         try:
             err.re_raise()
             self.assertTrue(False)
@@ -178,18 +186,19 @@ class TestMisc(BaseSystemTest):
     def test_default_return_capacity(self):
         """ When default_return_capacity=True, always return capacity """
         self.dynamo.default_return_capacity = True
-        with patch.object(self.dynamo, 'call') as call:
+        with patch.object(self.dynamo, "call") as call:
             call().get.return_value = None
-            rs = self.dynamo.scan('foobar')
+            rs = self.dynamo.scan("foobar")
             list(rs)
-        call.assert_called_with('scan', TableName='foobar',
-                                ReturnConsumedCapacity='INDEXES')
+        call.assert_called_with(
+            "scan", TableName="foobar", ReturnConsumedCapacity="INDEXES"
+        )
 
     def test_list_tables_page(self):
         """ Call to ListTables should page results """
-        hash_key = DynamoKey('id')
+        hash_key = DynamoKey("id")
         for i in range(120):
-            self.dynamo.create_table('table%d' % i, hash_key=hash_key)
+            self.dynamo.create_table("table%d" % i, hash_key=hash_key)
         tables = list(self.dynamo.list_tables(110))
         self.assertEqual(len(tables), 110)
 
@@ -200,15 +209,15 @@ class TestMisc(BaseSystemTest):
 
     def test_wait_create_table(self):
         """ Create table shall wait for the table to come online. """
-        tablename = 'foobar_wait'
-        hash_key = DynamoKey('id')
+        tablename = "foobar_wait"
+        hash_key = DynamoKey("id")
         self.dynamo.create_table(tablename, hash_key=hash_key, wait=True)
         self.assertIsNotNone(self.dynamo.describe_table(tablename))
 
     def test_wait_delete_table(self):
         """ Delete table shall wait for the table to go offline. """
-        tablename = 'foobar_wait'
-        hash_key = DynamoKey('id')
+        tablename = "foobar_wait"
+        hash_key = DynamoKey("id")
         self.dynamo.create_table(tablename, hash_key=hash_key, wait=True)
         result = self.dynamo.delete_table(tablename, wait=True)
         self.assertTrue(result)
@@ -220,100 +229,99 @@ class TestDataTypes(BaseSystemTest):
 
     def make_table(self):
         """ Convenience method for making a table """
-        hash_key = DynamoKey('id')
-        self.dynamo.create_table('foobar', hash_key=hash_key)
+        hash_key = DynamoKey("id")
+        self.dynamo.create_table("foobar", hash_key=hash_key)
 
     def test_string(self):
         """ Store and retrieve a string """
         self.make_table()
-        self.dynamo.put_item('foobar', {'id': 'abc'})
-        item = list(self.dynamo.scan('foobar'))[0]
-        self.assertEqual(item['id'], 'abc')
-        self.assertTrue(isinstance(item['id'], six.text_type))
+        self.dynamo.put_item("foobar", {"id": "abc"})
+        item = list(self.dynamo.scan("foobar"))[0]
+        self.assertEqual(item["id"], "abc")
+        self.assertTrue(isinstance(item["id"], six.text_type))
 
     def test_int(self):
         """ Store and retrieve an int """
         self.make_table()
-        self.dynamo.put_item('foobar', {'id': 'a', 'num': 1})
-        item = list(self.dynamo.scan('foobar'))[0]
-        self.assertEqual(item['num'], 1)
+        self.dynamo.put_item("foobar", {"id": "a", "num": 1})
+        item = list(self.dynamo.scan("foobar"))[0]
+        self.assertEqual(item["num"], 1)
 
     def test_float(self):
         """ Store and retrieve a float """
         self.make_table()
-        self.dynamo.put_item('foobar', {'id': 'a', 'num': 1.1})
-        item = list(self.dynamo.scan('foobar'))[0]
-        self.assertAlmostEqual(float(item['num']), 1.1)
+        self.dynamo.put_item("foobar", {"id": "a", "num": 1.1})
+        item = list(self.dynamo.scan("foobar"))[0]
+        self.assertAlmostEqual(float(item["num"]), 1.1)
 
     def test_decimal(self):
         """ Store and retrieve a Decimal """
         self.make_table()
-        self.dynamo.put_item('foobar', {'id': 'a', 'num': Decimal('1.1')})
-        item = list(self.dynamo.scan('foobar'))[0]
-        self.assertEqual(item['num'], Decimal('1.1'))
+        self.dynamo.put_item("foobar", {"id": "a", "num": Decimal("1.1")})
+        item = list(self.dynamo.scan("foobar"))[0]
+        self.assertEqual(item["num"], Decimal("1.1"))
 
     def test_binary(self):
         """ Store and retrieve a binary """
         self.make_table()
-        self.dynamo.put_item('foobar', {'id': 'a', 'data': Binary('abc')})
-        item = list(self.dynamo.scan('foobar'))[0]
-        self.assertEqual(item['data'].value, b'abc')
+        self.dynamo.put_item("foobar", {"id": "a", "data": Binary("abc")})
+        item = list(self.dynamo.scan("foobar"))[0]
+        self.assertEqual(item["data"].value, b"abc")
 
     def test_binary_bytes(self):
         """ Store and retrieve bytes as a binary """
         self.make_table()
-        data = {'a': 1, 'b': 2}
-        self.dynamo.put_item('foobar', {'id': 'a',
-                                        'data': Binary(dumps(data))})
-        item = list(self.dynamo.scan('foobar'))[0]
-        self.assertEqual(loads(item['data'].value), data)
+        data = {"a": 1, "b": 2}
+        self.dynamo.put_item("foobar", {"id": "a", "data": Binary(dumps(data))})
+        item = list(self.dynamo.scan("foobar"))[0]
+        self.assertEqual(loads(item["data"].value), data)
 
     def test_string_set(self):
         """ Store and retrieve a string set """
         self.make_table()
         item = {
-            'id': 'a',
-            'datas': set(['a', 'b']),
+            "id": "a",
+            "datas": set(["a", "b"]),
         }
-        self.dynamo.put_item('foobar', item)
-        ret = list(self.dynamo.scan('foobar'))[0]
+        self.dynamo.put_item("foobar", item)
+        ret = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(ret, item)
 
     def test_number_set(self):
         """ Store and retrieve a number set """
         self.make_table()
         item = {
-            'id': 'a',
-            'datas': set([1, 2, 3]),
+            "id": "a",
+            "datas": set([1, 2, 3]),
         }
-        self.dynamo.put_item('foobar', item)
-        ret = list(self.dynamo.scan('foobar'))[0]
+        self.dynamo.put_item("foobar", item)
+        ret = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(ret, item)
 
     def test_binary_set(self):
         """ Store and retrieve a binary set """
         self.make_table()
         item = {
-            'id': 'a',
-            'datas': set([Binary('a'), Binary('b')]),
+            "id": "a",
+            "datas": set([Binary("a"), Binary("b")]),
         }
-        self.dynamo.put_item('foobar', item)
-        ret = list(self.dynamo.scan('foobar'))[0]
+        self.dynamo.put_item("foobar", item)
+        ret = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(ret, item)
 
     def test_binary_equal(self):
         """ Binary should eq other Binaries and also raw bytestrings """
-        self.assertEqual(Binary('a'), Binary('a'))
-        self.assertEqual(Binary('a'), b'a')
-        self.assertFalse(Binary('a') != Binary('a'))
+        self.assertEqual(Binary("a"), Binary("a"))
+        self.assertEqual(Binary("a"), b"a")
+        self.assertFalse(Binary("a") != Binary("a"))
 
     def test_binary_repr(self):
         """ Binary repr should wrap the contained value """
-        self.assertEqual(repr(Binary('a')), 'Binary(%s)' % b'a')
+        self.assertEqual(repr(Binary("a")), "Binary(%s)" % b"a")
 
     def test_binary_converts_unicode(self):
         """ Binary will convert unicode to bytes """
-        b = Binary('a')
+        b = Binary("a")
         self.assertTrue(isinstance(b.value, six.binary_type))
 
     def test_binary_force_string(self):
@@ -324,44 +332,44 @@ class TestDataTypes(BaseSystemTest):
     def test_bool(self):
         """ Store and retrieve a boolean """
         self.make_table()
-        self.dynamo.put_item('foobar', {'id': 'abc', 'b': True})
-        item = list(self.dynamo.scan('foobar'))[0]
-        self.assertEqual(item['b'], True)
-        self.assertTrue(isinstance(item['b'], bool))
+        self.dynamo.put_item("foobar", {"id": "abc", "b": True})
+        item = list(self.dynamo.scan("foobar"))[0]
+        self.assertEqual(item["b"], True)
+        self.assertTrue(isinstance(item["b"], bool))
 
     def test_list(self):
         """ Store and retrieve a list """
         self.make_table()
-        self.dynamo.put_item('foobar', {'id': 'abc', 'l': ['a', 1, False]})
-        item = list(self.dynamo.scan('foobar'))[0]
-        self.assertEqual(item['l'], ['a', 1, False])
+        self.dynamo.put_item("foobar", {"id": "abc", "l": ["a", 1, False]})
+        item = list(self.dynamo.scan("foobar"))[0]
+        self.assertEqual(item["l"], ["a", 1, False])
 
     def test_dict(self):
         """ Store and retrieve a dict """
         self.make_table()
         data = {
-            'i': 1,
-            's': 'abc',
-            'n': None,
-            'l': ['a', 1, True],
-            'b': False,
+            "i": 1,
+            "s": "abc",
+            "n": None,
+            "l": ["a", 1, True],
+            "b": False,
         }
-        self.dynamo.put_item('foobar', {'id': 'abc', 'd': data})
-        item = list(self.dynamo.scan('foobar'))[0]
-        self.assertEqual(item['d'], data)
+        self.dynamo.put_item("foobar", {"id": "abc", "d": data})
+        item = list(self.dynamo.scan("foobar"))[0]
+        self.assertEqual(item["d"], data)
 
     def test_nested_dict(self):
         """ Store and retrieve a nested dict """
         self.make_table()
         data = {
-            's': 'abc',
-            'd': {
-                'i': 42,
+            "s": "abc",
+            "d": {
+                "i": 42,
             },
         }
-        self.dynamo.put_item('foobar', {'id': 'abc', 'd': data})
-        item = list(self.dynamo.scan('foobar'))[0]
-        self.assertEqual(item['d'], data)
+        self.dynamo.put_item("foobar", {"id": "abc", "d": data})
+        item = list(self.dynamo.scan("foobar"))[0]
+        self.assertEqual(item["d"], data)
 
     def test_nested_list(self):
         """ Store and retrieve a nested list """
@@ -371,17 +379,17 @@ class TestDataTypes(BaseSystemTest):
             [
                 True,
                 None,
-                'abc',
+                "abc",
             ],
         ]
-        self.dynamo.put_item('foobar', {'id': 'abc', 'l': data})
-        item = list(self.dynamo.scan('foobar'))[0]
-        self.assertEqual(item['l'], data)
+        self.dynamo.put_item("foobar", {"id": "abc", "l": data})
+        item = list(self.dynamo.scan("foobar"))[0]
+        self.assertEqual(item["l"], data)
 
     def test_unrecognized_type(self):
         """ Dynamizer throws error on unrecognized type """
         value = {
-            'ASDF': 'abc',
+            "ASDF": "abc",
         }
         with self.assertRaises(TypeError):
             self.dynamo.dynamizer.decode(value)
@@ -394,15 +402,16 @@ class TestDynamizer(unittest.TestCase):
     def test_register_encoder(self):
         """ Can register a custom encoder """
         from datetime import datetime
+
         dynamizer = Dynamizer()
-        dynamizer.register_encoder(datetime, lambda d, v:
-                                   (STRING, v.isoformat()))
+        dynamizer.register_encoder(datetime, lambda d, v: (STRING, v.isoformat()))
         now = datetime.utcnow()
         self.assertEqual(dynamizer.raw_encode(now), (STRING, now.isoformat()))
 
     def test_encoder_missing(self):
         """ If no encoder is found, raise ValueError """
         from datetime import datetime
+
         dynamizer = Dynamizer()
         with self.assertRaises(ValueError):
             dynamizer.encode(datetime.utcnow())
@@ -421,19 +430,22 @@ class TestResultModels(unittest.TestCase):
     def test_add_dicts(self):
         """ Merge two dicts of values together """
         a = {
-            'a': 1,
-            'b': 2,
+            "a": 1,
+            "b": 2,
         }
         b = {
-            'a': 3,
-            'c': 4,
+            "a": 3,
+            "c": 4,
         }
         ret = add_dicts(a, b)
-        self.assertEqual(ret, {
-            'a': 4,
-            'b': 2,
-            'c': 4,
-        })
+        self.assertEqual(
+            ret,
+            {
+                "a": 4,
+                "b": 2,
+                "c": 4,
+            },
+        )
 
     def test_count_repr(self):
         """ Count repr """
@@ -462,7 +474,7 @@ class TestResultModels(unittest.TestCase):
 
     def test_count_add_none_capacity(self):
         """ Count addition with one None consumed_capacity """
-        cap = Capacity.create_read({'CapacityUnits': 3})
+        cap = Capacity.create_read({"CapacityUnits": 3})
         count = Count(4, 2)
         count2 = Count(5, 3, cap)
         ret = count + count2
@@ -472,8 +484,8 @@ class TestResultModels(unittest.TestCase):
 
     def test_count_add_capacity(self):
         """ Count addition with consumed_capacity """
-        count = Count(4, 2, Capacity.create_read({'CapacityUnits': 3}))
-        count2 = Count(5, 3, Capacity.create_read({'CapacityUnits': 2}))
+        count = Count(4, 2, Capacity.create_read({"CapacityUnits": 3}))
+        count2 = Count(5, 3, Capacity.create_read({"CapacityUnits": 2}))
         ret = count + count2
         self.assertEqual(ret, 9)
         self.assertEqual(ret.scanned_count, 5)
@@ -481,11 +493,11 @@ class TestResultModels(unittest.TestCase):
 
     def test_capacity_factories(self):
         """ Capacity.create_(read|write) factories """
-        cap = Capacity.create_read({'CapacityUnits': 3})
+        cap = Capacity.create_read({"CapacityUnits": 3})
         self.assertEqual(cap.read, 3)
         self.assertEqual(cap.write, 0)
 
-        cap = Capacity.create_write({'CapacityUnits': 3})
+        cap = Capacity.create_write({"CapacityUnits": 3})
         self.assertEqual(cap.write, 3)
         self.assertEqual(cap.read, 0)
 
@@ -507,8 +519,8 @@ class TestResultModels(unittest.TestCase):
     def test_total_consumed_capacity(self):
         """ ConsumedCapacity can parse results with only Total """
         response = {
-            'TableName': 'foobar',
-            'CapacityUnits': 4,
+            "TableName": "foobar",
+            "CapacityUnits": 4,
         }
         cap = ConsumedCapacity.from_response(response, True)
         self.assertEqual(cap.total.read, 4)
@@ -516,49 +528,76 @@ class TestResultModels(unittest.TestCase):
 
     def test_consumed_capacity_equality(self):
         """ ConsumedCapacity addition and equality """
-        cap = ConsumedCapacity('foobar', Capacity(0, 10), Capacity(0, 2), {
-            'l-index': Capacity(0, 4),
-        }, {
-            'g-index': Capacity(0, 3),
-        })
-        c2 = ConsumedCapacity('foobar', Capacity(0, 10), Capacity(0, 2), {
-            'l-index': Capacity(0, 4),
-            'l-index2': Capacity(0, 7),
-        })
+        cap = ConsumedCapacity(
+            "foobar",
+            Capacity(0, 10),
+            Capacity(0, 2),
+            {
+                "l-index": Capacity(0, 4),
+            },
+            {
+                "g-index": Capacity(0, 3),
+            },
+        )
+        c2 = ConsumedCapacity(
+            "foobar",
+            Capacity(0, 10),
+            Capacity(0, 2),
+            {
+                "l-index": Capacity(0, 4),
+                "l-index2": Capacity(0, 7),
+            },
+        )
 
         self.assertNotEqual(cap, c2)
-        c3 = ConsumedCapacity('foobar', Capacity(0, 10), Capacity(0, 2), {
-            'l-index': Capacity(0, 4),
-        }, {
-            'g-index': Capacity(0, 3),
-        })
+        c3 = ConsumedCapacity(
+            "foobar",
+            Capacity(0, 10),
+            Capacity(0, 2),
+            {
+                "l-index": Capacity(0, 4),
+            },
+            {
+                "g-index": Capacity(0, 3),
+            },
+        )
         self.assertIn(cap, set([c3]))
         combined = cap + c2
         self.assertEqual(
             cap + c2,
-            ConsumedCapacity('foobar', Capacity(0, 20), Capacity(0, 4),
-                             {'l-index': Capacity(0, 8), 'l-index2': Capacity(0, 7), },
-                             {'g-index': Capacity(0, 3), }))
+            ConsumedCapacity(
+                "foobar",
+                Capacity(0, 20),
+                Capacity(0, 4),
+                {
+                    "l-index": Capacity(0, 8),
+                    "l-index2": Capacity(0, 7),
+                },
+                {
+                    "g-index": Capacity(0, 3),
+                },
+            ),
+        )
         self.assertIn(str(Capacity(0, 3)), str(combined))
 
     def test_add_different_tables(self):
         """ Cannot add ConsumedCapacity of two different tables """
-        c1 = ConsumedCapacity('foobar', Capacity(1, 28))
-        c2 = ConsumedCapacity('boofar', Capacity(3, 0))
+        c1 = ConsumedCapacity("foobar", Capacity(1, 28))
+        c2 = ConsumedCapacity("boofar", Capacity(3, 0))
         with self.assertRaises(TypeError):
             c1 += c2
 
     def test_always_continue_query(self):
-        """ Regression test.
+        """Regression test.
         If result has no items but does have LastEvaluatedKey, keep querying.
         """
         conn = MagicMock()
         conn.dynamizer.decode_keys.side_effect = lambda x: x
-        items = ['a', 'b']
+        items = ["a", "b"]
         results = [
-            {'Items': [], 'LastEvaluatedKey': {'foo': 1, 'bar': 2}},
-            {'Items': [], 'LastEvaluatedKey': {'foo': 1, 'bar': 2}},
-            {'Items': items},
+            {"Items": [], "LastEvaluatedKey": {"foo": 1, "bar": 2}},
+            {"Items": [], "LastEvaluatedKey": {"foo": 1, "bar": 2}},
+            {"Items": items},
         ]
         conn.call.side_effect = lambda *_, **__: results.pop(0)
         rs = ResultSet(conn, Limit())
@@ -579,62 +618,62 @@ class TestHooks(BaseSystemTest):
     def test_precall(self):
         """ precall hooks are called before an API call """
         hook = MagicMock()
-        self.dynamo.subscribe('precall', hook)
+        self.dynamo.subscribe("precall", hook)
 
         def throw(**_):
             """ Throw an exception to terminate the request """
             raise Exception()
-        with patch.object(self.dynamo, 'client') as client:
+
+        with patch.object(self.dynamo, "client") as client:
             client.describe_table.side_effect = throw
             with self.assertRaises(Exception):
-                self.dynamo.describe_table('foobar')
-        hook.assert_called_with(
-            self.dynamo, 'describe_table', {
-                'TableName': 'foobar'})
+                self.dynamo.describe_table("foobar")
+        hook.assert_called_with(self.dynamo, "describe_table", {"TableName": "foobar"})
 
     def test_postcall(self):
         """ postcall hooks are called after API call """
-        hash_key = DynamoKey('id')
-        self.dynamo.create_table('foobar', hash_key=hash_key)
+        hash_key = DynamoKey("id")
+        self.dynamo.create_table("foobar", hash_key=hash_key)
         calls = []
 
         def hook(*args):
             """ Log the call into a list """
             calls.append(args)
-        self.dynamo.subscribe('postcall', hook)
-        self.dynamo.describe_table('foobar')
+
+        self.dynamo.subscribe("postcall", hook)
+        self.dynamo.describe_table("foobar")
         self.assertEqual(len(calls), 1)
         args = calls[0]
         self.assertEqual(len(args), 4)
         conn, command, kwargs, response = args
         self.assertEqual(conn, self.dynamo)
-        self.assertEqual(command, 'describe_table')
-        self.assertEqual(kwargs['TableName'], 'foobar')
-        self.assertEqual(response['Table']['TableName'], 'foobar')
+        self.assertEqual(command, "describe_table")
+        self.assertEqual(kwargs["TableName"], "foobar")
+        self.assertEqual(response["Table"]["TableName"], "foobar")
 
     def test_capacity(self):
         """ capacity hooks are called whenever response has ConsumedCapacity """
-        hash_key = DynamoKey('id')
-        self.dynamo.create_table('foobar', hash_key=hash_key)
+        hash_key = DynamoKey("id")
+        self.dynamo.create_table("foobar", hash_key=hash_key)
         hook = MagicMock()
-        self.dynamo.subscribe('capacity', hook)
-        with patch.object(self.dynamo, 'client') as client:
+        self.dynamo.subscribe("capacity", hook)
+        with patch.object(self.dynamo, "client") as client:
             client.scan.return_value = {
-                'Items': [],
-                'ConsumedCapacity': {
-                    'TableName': 'foobar',
-                    'CapacityUnits': 4,
-                }
+                "Items": [],
+                "ConsumedCapacity": {
+                    "TableName": "foobar",
+                    "CapacityUnits": 4,
+                },
             }
-            rs = self.dynamo.scan('foobar')
+            rs = self.dynamo.scan("foobar")
             list(rs)
-        cap = ConsumedCapacity('foobar', Capacity(4, 0))
-        hook.assert_called_with(self.dynamo, 'scan', ANY, ANY, cap)
+        cap = ConsumedCapacity("foobar", Capacity(4, 0))
+        hook.assert_called_with(self.dynamo, "scan", ANY, ANY, cap)
 
     def test_subscribe(self):
         """ Can subscribe and unsubscribe from hooks """
         hook = object()
-        self.dynamo.subscribe('precall', hook)
-        self.assertEqual(len(self.dynamo._hooks['precall']), 1)
-        self.dynamo.unsubscribe('precall', hook)
-        self.assertEqual(len(self.dynamo._hooks['precall']), 0)
+        self.dynamo.subscribe("precall", hook)
+        self.assertEqual(len(self.dynamo._hooks["precall"]), 1)
+        self.dynamo.unsubscribe("precall", hook)
+        self.assertEqual(len(self.dynamo._hooks["precall"]), 0)

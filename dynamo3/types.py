@@ -1,13 +1,24 @@
 """ DynamoDB types and type logic """
+from decimal import Clamped, Context, Decimal, Overflow, Underflow
+
 import six
-from decimal import Decimal, Context, Clamped, Overflow, Underflow
 
-from .constants import (NUMBER, STRING, BINARY, NUMBER_SET, STRING_SET,
-                        BINARY_SET, LIST, BOOL, MAP, NULL)
+from .constants import (
+    BINARY,
+    BINARY_SET,
+    BOOL,
+    LIST,
+    MAP,
+    NULL,
+    NUMBER,
+    NUMBER_SET,
+    STRING,
+    STRING_SET,
+)
 
-
-DECIMAL_CONTEXT = Context(Emin=-128, Emax=126, rounding=None, prec=38,
-                          traps=[Clamped, Overflow, Underflow])
+DECIMAL_CONTEXT = Context(
+    Emin=-128, Emax=126, rounding=None, prec=38, traps=[Clamped, Overflow, Underflow]
+)
 
 
 def float_to_decimal(f):
@@ -18,16 +29,16 @@ def float_to_decimal(f):
 
 
 TYPES = {
-    'NUMBER': NUMBER,
-    'STRING': STRING,
-    'BINARY': BINARY,
-    'NUMBER_SET': NUMBER_SET,
-    'STRING_SET': STRING_SET,
-    'BINARY_SET': BINARY_SET,
-    'LIST': LIST,
-    'BOOL': BOOL,
-    'MAP': MAP,
-    'NULL': NULL,
+    "NUMBER": NUMBER,
+    "STRING": STRING,
+    "BINARY": BINARY,
+    "NUMBER_SET": NUMBER_SET,
+    "STRING_SET": STRING_SET,
+    "BINARY_SET": BINARY_SET,
+    "LIST": LIST,
+    "BOOL": BOOL,
+    "MAP": MAP,
+    "NULL": NULL,
 }
 TYPES_REV = dict(((v, k) for k, v in six.iteritems(TYPES)))
 
@@ -42,8 +53,7 @@ def is_dynamo_value(value):
 
 def is_null(value):
     """ Check if a value is equivalent to null in Dynamo """
-    return (value is None or
-            (isinstance(value, (set, frozenset)) and len(value) == 0))
+    return value is None or (isinstance(value, (set, frozenset)) and len(value) == 0)
 
 
 class Binary(object):
@@ -52,9 +62,9 @@ class Binary(object):
 
     def __init__(self, value):
         if isinstance(value, six.text_type):
-            value = value.encode('utf-8')
+            value = value.encode("utf-8")
         if not isinstance(value, six.binary_type):
-            raise TypeError('Value must be a string of binary data!')
+            raise TypeError("Value must be a string of binary data!")
 
         self.value = value
 
@@ -71,14 +81,14 @@ class Binary(object):
         return not self.__eq__(other)
 
     def __repr__(self):
-        return 'Binary(%s)' % self.value
+        return "Binary(%s)" % self.value
 
 
 def encode_set(dynamizer, value):
     """ Encode a set for the DynamoDB format """
     inner_value = next(iter(value))
     inner_type = dynamizer.raw_encode(inner_value)[0]
-    return inner_type + 'S', [dynamizer.raw_encode(v)[1] for v in value]
+    return inner_type + "S", [dynamizer.raw_encode(v)[1] for v in value]
 
 
 def encode_list(dynamizer, value):
@@ -87,10 +97,12 @@ def encode_list(dynamizer, value):
     dict(map(dynamizer.raw_encode, value))
     for v in value:
         encoded_type, encoded_value = dynamizer.raw_encode(v)
-        encoded_list.append({
-            encoded_type: encoded_value,
-        })
-    return 'L', encoded_list
+        encoded_list.append(
+            {
+                encoded_type: encoded_value,
+            }
+        )
+    return "L", encoded_list
 
 
 def encode_dict(dynamizer, value):
@@ -101,7 +113,7 @@ def encode_dict(dynamizer, value):
         encoded_dict[k] = {
             encoded_type: encoded_value,
         }
-    return 'M', encoded_dict
+    return "M", encoded_dict
 
 
 class Dynamizer(object):
@@ -111,19 +123,16 @@ class Dynamizer(object):
     def __init__(self):
         self.encoders = {}
         self.register_encoder(six.text_type, lambda _, v: (STRING, v))
-        self.register_encoder(
-            six.binary_type, lambda _, v: (
-                STRING, v.decode('utf-8')))
+        self.register_encoder(six.binary_type, lambda _, v: (STRING, v.decode("utf-8")))
         for t in six.integer_types:
             self.register_encoder(t, lambda _, v: (NUMBER, six.text_type(v)))
         self.register_encoder(
-            float, lambda _, v: (
-                NUMBER, six.text_type(
-                    float_to_decimal(v))))
+            float, lambda _, v: (NUMBER, six.text_type(float_to_decimal(v)))
+        )
         self.register_encoder(
-            Decimal, lambda _, v: (
-                NUMBER, six.text_type(
-                    DECIMAL_CONTEXT.create_decimal(v))))
+            Decimal,
+            lambda _, v: (NUMBER, six.text_type(DECIMAL_CONTEXT.create_decimal(v))),
+        )
         self.register_encoder(set, encode_set)
         self.register_encoder(frozenset, encode_set)
         self.register_encoder(Binary, lambda _, v: (BINARY, v.value))
@@ -152,13 +161,15 @@ class Dynamizer(object):
         if type(value) in self.encoders:
             encoder = self.encoders[type(value)]
             return encoder(self, value)
-        raise ValueError("No encoder for value '%s' of type '%s'" %
-                         (value, type(value)))
+        raise ValueError(
+            "No encoder for value '%s' of type '%s'" % (value, type(value))
+        )
 
     def encode_keys(self, keys):
         """ Run the encoder on a dict of values """
-        return dict(((k, self.encode(v)) for k, v in six.iteritems(keys) if not
-                     is_null(v)))
+        return dict(
+            ((k, self.encode(v)) for k, v in six.iteritems(keys) if not is_null(v))
+        )
 
     def maybe_encode_keys(self, keys):
         """ Same as encode_keys but a no-op if already in Dynamo format """

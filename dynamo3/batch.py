@@ -1,30 +1,30 @@
 """ Code for batch processing """
 import logging
+
 import six
 
-from .types import is_null
 from .constants import MAX_WRITE_BATCH, NONE
 from .result import ConsumedCapacity
-
+from .types import is_null
 
 LOG = logging.getLogger(__name__)
 NO_ARG = object()
 
 CONDITIONS = {
-    'eq': 'EQ',
-    'ne': 'NE',
-    'le': 'LE',
-    'lte': 'LE',
-    'lt': 'LT',
-    'ge': 'GE',
-    'gte': 'GE',
-    'gt': 'GT',
-    'beginswith': 'BEGINS_WITH',
-    'begins_with': 'BEGINS_WITH',
-    'between': 'BETWEEN',
-    'in': 'IN',
-    'contains': 'CONTAINS',
-    'ncontains': 'NOT_CONTAINS',
+    "eq": "EQ",
+    "ne": "NE",
+    "le": "LE",
+    "lte": "LE",
+    "lt": "LT",
+    "ge": "GE",
+    "gte": "GE",
+    "gt": "GT",
+    "beginswith": "BEGINS_WITH",
+    "begins_with": "BEGINS_WITH",
+    "between": "BETWEEN",
+    "in": "IN",
+    "contains": "CONTAINS",
+    "ncontains": "NOT_CONTAINS",
 }
 
 
@@ -67,15 +67,16 @@ class ItemUpdate(object):
 
     """
 
-    ADD = 'ADD'
-    DELETE = 'DELETE'
-    PUT = 'PUT'
+    ADD = "ADD"
+    DELETE = "DELETE"
+    PUT = "PUT"
 
     def __init__(self, action, key, value=None, expected=NO_ARG, **kwargs):
         if is_null(value):
             if action == self.ADD:
-                raise ValueError("Update must set a value for non-delete "
-                                 "operations!")
+                raise ValueError(
+                    "Update must set a value for non-delete " "operations!"
+                )
             elif action == self.PUT:
                 # If we are trying to PUT a null value, change to a delete
                 action = self.DELETE
@@ -85,11 +86,10 @@ class ItemUpdate(object):
         self._expected = expected
         self._expect_kwargs = {}
         if len(kwargs) > 1:
-            raise ValueError("Cannot have more than one condition on a "
-                             "single field")
+            raise ValueError("Cannot have more than one condition on a " "single field")
         elif len(kwargs) == 1:
             op, expected_value = next(six.iteritems(kwargs))
-            self._expect_kwargs[key + '__' + op] = expected_value
+            self._expect_kwargs[key + "__" + op] = expected_value
 
     @classmethod
     def put(cls, *args, **kwargs):
@@ -110,11 +110,11 @@ class ItemUpdate(object):
         """ Get the attributes for the update """
         ret = {
             self.key: {
-                'Action': self.action,
+                "Action": self.action,
             }
         }
         if not is_null(self.value):
-            ret[self.key]['Value'] = dynamizer.encode(self.value)
+            ret[self.key]["Value"] = dynamizer.encode(self.value)
         return ret
 
     def expected(self, dynamizer):
@@ -124,10 +124,10 @@ class ItemUpdate(object):
         if self._expected is not NO_ARG:
             ret = {}
             if is_null(self._expected):
-                ret['Exists'] = False
+                ret["Exists"] = False
             else:
-                ret['Value'] = dynamizer.encode(self._expected)
-                ret['Exists'] = True
+                ret["Value"] = dynamizer.encode(self._expected)
+                ret["Exists"] = True
             return {self.key: ret}
         return {}
 
@@ -135,11 +135,13 @@ class ItemUpdate(object):
         return hash(self.action) + hash(self.key)
 
     def __eq__(self, other):
-        return (isinstance(other, ItemUpdate) and
-                self.action == other.action and
-                self.key == other.key and
-                self.value == other.value and
-                self._expected == other._expected)
+        return (
+            isinstance(other, ItemUpdate)
+            and self.action == other.action
+            and self.key == other.key
+            and self.value == other.value
+            and self._expected == other._expected
+        )
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -148,8 +150,9 @@ class ItemUpdate(object):
 def _encode_write(dynamizer, data, action, key):
     """ Encode an item write command """
     # Strip null values out of data
-    data = dict(((k, dynamizer.encode(v)) for k, v in six.iteritems(data) if
-                 not is_null(v)))
+    data = dict(
+        ((k, dynamizer.encode(v)) for k, v in six.iteritems(data) if not is_null(v))
+    )
     return {
         action: {
             key: data,
@@ -159,46 +162,49 @@ def _encode_write(dynamizer, data, action, key):
 
 def encode_put(dynamizer, data):
     """ Encode an item put command """
-    return _encode_write(dynamizer, data, 'PutRequest', 'Item')
+    return _encode_write(dynamizer, data, "PutRequest", "Item")
 
 
 def encode_query_kwargs(dynamizer, kwargs):
     """ Encode query constraints in Dynamo format """
     ret = {}
     for k, v in six.iteritems(kwargs):
-        if '__' not in k:
+        if "__" not in k:
             raise TypeError("Invalid query argument '%s'" % k)
-        name, condition_key = k.split('__')
+        name, condition_key = k.split("__")
         # Convert ==None to IS_NULL
-        if condition_key == 'eq' and is_null(v):
-            condition_key = 'null'
+        if condition_key == "eq" and is_null(v):
+            condition_key = "null"
             v = True
         # null is a special case
-        if condition_key == 'null':
-            ret[name] = {
-                'ComparisonOperator': 'NULL' if v else 'NOT_NULL'
-            }
+        if condition_key == "null":
+            ret[name] = {"ComparisonOperator": "NULL" if v else "NOT_NULL"}
             continue
-        elif condition_key not in ('in', 'between'):
+        elif condition_key not in ("in", "between"):
             v = (v,)
         ret[name] = {
-            'AttributeValueList': [dynamizer.encode(value) for value in v],
-            'ComparisonOperator': CONDITIONS[condition_key],
+            "AttributeValueList": [dynamizer.encode(value) for value in v],
+            "ComparisonOperator": CONDITIONS[condition_key],
         }
     return ret
 
 
 def encode_delete(dynamizer, data):
     """ Encode an item delete command """
-    return _encode_write(dynamizer, data, 'DeleteRequest', 'Key')
+    return _encode_write(dynamizer, data, "DeleteRequest", "Key")
 
 
 class BatchWriter(object):
 
     """ Context manager for writing a large number of items to a table """
 
-    def __init__(self, connection, tablename, return_capacity=NONE,
-                 return_item_collection_metrics=NONE):
+    def __init__(
+        self,
+        connection,
+        tablename,
+        return_capacity=NONE,
+        return_item_collection_metrics=NONE,
+    ):
         self.connection = connection
         self.tablename = tablename
         self.return_capacity = return_capacity
@@ -274,18 +280,18 @@ class BatchWriter(object):
     def _write(self, items):
         """ Perform a batch write and handle the response """
         response = self._batch_write_item(items)
-        if 'consumed_capacity' in response:
+        if "consumed_capacity" in response:
             # Comes back as a list from BatchWriteItem
-            self.consumed_capacity = \
-                sum(response['consumed_capacity'], self.consumed_capacity)
+            self.consumed_capacity = sum(
+                response["consumed_capacity"], self.consumed_capacity
+            )
 
-        if response.get('UnprocessedItems'):
-            unprocessed = response['UnprocessedItems'].get(self.tablename, [])
+        if response.get("UnprocessedItems"):
+            unprocessed = response["UnprocessedItems"].get(self.tablename, [])
 
             # Some items have not been processed. Stow them for now &
             # re-attempt processing on ``__exit__``.
-            LOG.info("%d items were unprocessed. Storing for later.",
-                     len(unprocessed))
+            LOG.info("%d items were unprocessed. Storing for later.", len(unprocessed))
             self._unprocessed.extend(unprocessed)
             # Getting UnprocessedItems indicates that we are exceeding our
             # throughput. So sleep for a bit.
@@ -312,10 +318,10 @@ class BatchWriter(object):
     def _batch_write_item(self, items):
         """ Make a BatchWriteItem call to Dynamo """
         kwargs = {
-            'RequestItems': {
+            "RequestItems": {
                 self.tablename: items,
             },
-            'ReturnConsumedCapacity': self.return_capacity,
-            'ReturnItemCollectionMetrics': self.return_item_collection_metrics,
+            "ReturnConsumedCapacity": self.return_capacity,
+            "ReturnItemCollectionMetrics": self.return_item_collection_metrics,
         }
-        return self.connection.call('batch_write_item', **kwargs)
+        return self.connection.call("batch_write_item", **kwargs)

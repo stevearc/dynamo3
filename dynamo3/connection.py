@@ -1,18 +1,25 @@
 """ Connection class for DynamoDB """
-from contextlib import contextmanager
 import time
 import warnings
+from contextlib import contextmanager
 
 import botocore.session
 import six
 from botocore.exceptions import ClientError
 
 from .batch import BatchWriter, encode_query_kwargs
-from .constants import NONE, COUNT, INDEXES, READ_COMMANDS
-from .exception import translate_exception, DynamoDBError, ThroughputException
-from .fields import Throughput, Table
-from .result import (ResultSet, GetResultSet, Result, Count, ConsumedCapacity,
-                     TableResultSet, Limit)
+from .constants import COUNT, INDEXES, NONE, READ_COMMANDS
+from .exception import DynamoDBError, ThroughputException, translate_exception
+from .fields import Table, Throughput
+from .result import (
+    ConsumedCapacity,
+    Count,
+    GetResultSet,
+    Limit,
+    Result,
+    ResultSet,
+    TableResultSet,
+)
 from .types import Dynamizer, is_null
 
 
@@ -22,12 +29,12 @@ def build_expected(dynamizer, expected):
     for k, v in six.iteritems(expected):
         if is_null(v):
             ret[k] = {
-                'Exists': False,
+                "Exists": False,
             }
         else:
             ret[k] = {
-                'Exists': True,
-                'Value': dynamizer.encode(v),
+                "Exists": True,
+                "Value": dynamizer.encode(v),
             }
     return ret
 
@@ -38,7 +45,7 @@ def build_expression_values(dynamizer, expr_values, kwargs):
         values = expr_values
         return dynamizer.encode_keys(values)
     elif kwargs:
-        values = dict(((':' + k, v) for k, v in six.iteritems(kwargs)))
+        values = dict(((":" + k, v) for k, v in six.iteritems(kwargs)))
         return dynamizer.encode_keys(values)
 
 
@@ -87,8 +94,9 @@ class DynamoDBConnection(object):
         return self.client.meta.region_name
 
     @classmethod
-    def connect_to_region(cls, region, session=None, access_key=None,
-                          secret_key=None, **kwargs):
+    def connect_to_region(
+        cls, region, session=None, access_key=None, secret_key=None, **kwargs
+    ):
         """
         Connect to an AWS region.
 
@@ -108,19 +116,28 @@ class DynamoDBConnection(object):
             Keyword arguments to pass to the constructor
 
         """
-        warnings.warn("connect_to_region is deprecated and will be removed. "
-                      "Use connect instead.")
+        warnings.warn(
+            "connect_to_region is deprecated and will be removed. "
+            "Use connect instead."
+        )
         if session is None:
             session = botocore.session.get_session()
             if access_key is not None:
                 session.set_credentials(access_key, secret_key)
-        client = session.create_client('dynamodb', region)
+        client = session.create_client("dynamodb", region)
         return cls(client, **kwargs)
 
     @classmethod
-    def connect_to_host(cls, host='localhost', port=8000, is_secure=False,
-                        session=None, access_key=None, secret_key=None,
-                        **kwargs):
+    def connect_to_host(
+        cls,
+        host="localhost",
+        port=8000,
+        is_secure=False,
+        session=None,
+        access_key=None,
+        secret_key=None,
+        **kwargs
+    ):
         """
         Connect to a specific host.
 
@@ -144,20 +161,31 @@ class DynamoDBConnection(object):
             Keyword arguments to pass to the constructor
 
         """
-        warnings.warn("connect_to_host is deprecated and will be removed. "
-                      "Use connect instead.")
+        warnings.warn(
+            "connect_to_host is deprecated and will be removed. " "Use connect instead."
+        )
         if session is None:
             session = botocore.session.get_session()
             if access_key is not None:
                 session.set_credentials(access_key, secret_key)
         url = "http://%s:%d" % (host, port)
-        client = session.create_client('dynamodb', 'local', endpoint_url=url,
-                                       use_ssl=is_secure)
+        client = session.create_client(
+            "dynamodb", "local", endpoint_url=url, use_ssl=is_secure
+        )
         return cls(client, **kwargs)
 
     @classmethod
-    def connect(cls, region, session=None, access_key=None, secret_key=None,
-                host=None, port=80, is_secure=True, **kwargs):
+    def connect(
+        cls,
+        region,
+        session=None,
+        access_key=None,
+        secret_key=None,
+        host=None,
+        port=80,
+        is_secure=True,
+        **kwargs
+    ):
         """
         Connect to an AWS region.
 
@@ -187,10 +215,11 @@ class DynamoDBConnection(object):
                 session.set_credentials(access_key, secret_key)
         url = None
         if host is not None:
-            protocol = 'https' if is_secure else 'http'
+            protocol = "https" if is_secure else "http"
             url = "%s://%s:%d" % (protocol, host, port)
-        client = session.create_client('dynamodb', region, endpoint_url=url,
-                                       use_ssl=is_secure)
+        client = session.create_client(
+            "dynamodb", region, endpoint_url=url, use_ssl=is_secure
+        )
         return cls(client, **kwargs)
 
     def call(self, command, **kwargs):
@@ -213,7 +242,7 @@ class DynamoDBConnection(object):
         data : dict
 
         """
-        for hook in self._hooks['precall']:
+        for hook in self._hooks["precall"]:
             hook(self, command, kwargs)
         op = getattr(self.client, command)
         attempt = 0
@@ -230,25 +259,24 @@ class DynamoDBConnection(object):
                     self.exponential_sleep(attempt)
                 else:
                     exc.re_raise()
-        for hook in self._hooks['postcall']:
+        for hook in self._hooks["postcall"]:
             hook(self, command, kwargs, data)
-        if 'ConsumedCapacity' in data:
+        if "ConsumedCapacity" in data:
             is_read = command in READ_COMMANDS
-            consumed = data['ConsumedCapacity']
+            consumed = data["ConsumedCapacity"]
             if isinstance(consumed, list):
-                data['consumed_capacity'] = [
-                    ConsumedCapacity.from_response(cap, is_read)
-                    for cap in consumed
+                data["consumed_capacity"] = [
+                    ConsumedCapacity.from_response(cap, is_read) for cap in consumed
                 ]
             else:
                 capacity = ConsumedCapacity.from_response(consumed, is_read)
-                data['consumed_capacity'] = capacity
-        if 'consumed_capacity' in data:
-            if isinstance(data['consumed_capacity'], list):
-                all_caps = data['consumed_capacity']
+                data["consumed_capacity"] = capacity
+        if "consumed_capacity" in data:
+            if isinstance(data["consumed_capacity"], list):
+                all_caps = data["consumed_capacity"]
             else:
-                all_caps = [data['consumed_capacity']]
-            for hook in self._hooks['capacity']:
+                all_caps = [data["consumed_capacity"]]
+            for hook in self._hooks["capacity"]:
                 for cap in all_caps:
                     hook(self, command, kwargs, data, cap)
         return data
@@ -283,13 +311,13 @@ class DynamoDBConnection(object):
     def add_rate_limit(self, limiter):
         """ Add a RateLimit to the connection """
         if limiter not in self.rate_limiters:
-            self.subscribe('capacity', limiter.on_capacity)
+            self.subscribe("capacity", limiter.on_capacity)
             self.rate_limiters.append(limiter)
 
     def remove_rate_limit(self, limiter):
         """ Remove a RateLimit from the connection """
         if limiter in self.rate_limiters:
-            self.unsubscribe('capacity', limiter.on_capacity)
+            self.unsubscribe("capacity", limiter.on_capacity)
             self.rate_limiters.remove(limiter)
 
     @contextmanager
@@ -304,9 +332,9 @@ class DynamoDBConnection(object):
     def clear_hooks(self):
         """ Remove all hooks from all events """
         self._hooks = {
-            'precall': [],
-            'postcall': [],
-            'capacity': [],
+            "precall": [],
+            "postcall": [],
+            "capacity": [],
         }
 
     def _default_capacity(self, value):
@@ -328,10 +356,10 @@ class DynamoDBConnection(object):
             response = self.call(method, **keywords)
             limit.post_fetch(response)
             count += Count.from_response(response)
-            last_evaluated_key = response.get('LastEvaluatedKey')
+            last_evaluated_key = response.get("LastEvaluatedKey")
             has_more = last_evaluated_key is not None and not limit.complete
             if has_more:
-                keywords['ExclusiveStartKey'] = last_evaluated_key
+                keywords["ExclusiveStartKey"] = last_evaluated_key
         return count
 
     def list_tables(self, limit=None):
@@ -366,17 +394,24 @@ class DynamoDBConnection(object):
 
         """
         try:
-            response = self.call(
-                'describe_table', TableName=tablename)['Table']
+            response = self.call("describe_table", TableName=tablename)["Table"]
             return Table.from_response(response)
         except DynamoDBError as e:
-            if e.kwargs['Code'] == 'ResourceNotFoundException':
+            if e.kwargs["Code"] == "ResourceNotFoundException":
                 return None
             else:  # pragma: no cover
                 raise
 
-    def create_table(self, tablename, hash_key, range_key=None, indexes=None,
-                     global_indexes=None, throughput=None, wait=False):
+    def create_table(
+        self,
+        tablename,
+        hash_key,
+        range_key=None,
+        indexes=None,
+        global_indexes=None,
+        throughput=None,
+        wait=False,
+    ):
         """
         Create a table
 
@@ -406,33 +441,26 @@ class DynamoDBConnection(object):
             key_schema.append(range_key.range_schema())
 
         kwargs = {
-            'TableName': tablename,
-            'KeySchema': key_schema,
-            'ProvisionedThroughput': throughput.schema(),
+            "TableName": tablename,
+            "KeySchema": key_schema,
+            "ProvisionedThroughput": throughput.schema(),
         }
         if indexes:
-            kwargs['LocalSecondaryIndexes'] = [
-                idx.schema(hash_key) for idx in indexes
-            ]
+            kwargs["LocalSecondaryIndexes"] = [idx.schema(hash_key) for idx in indexes]
             for idx in indexes:
                 all_attrs.add(idx.range_key)
 
         if global_indexes:
-            kwargs['GlobalSecondaryIndexes'] = [
-                idx.schema() for idx in global_indexes
-            ]
+            kwargs["GlobalSecondaryIndexes"] = [idx.schema() for idx in global_indexes]
             for idx in global_indexes:
                 all_attrs.add(idx.hash_key)
                 if idx.range_key is not None:
                     all_attrs.add(idx.range_key)
 
-        kwargs['AttributeDefinitions'] = [attr.definition() for attr in
-                                          all_attrs]
-        result = self.call('create_table', **kwargs)
+        kwargs["AttributeDefinitions"] = [attr.definition() for attr in all_attrs]
+        result = self.call("create_table", **kwargs)
         if wait:
-            self.client.get_waiter('table_exists').wait(
-                TableName=tablename
-            )
+            self.client.get_waiter("table_exists").wait(TableName=tablename)
         return result
 
     def delete_table(self, tablename, wait=False):
@@ -451,20 +479,26 @@ class DynamoDBConnection(object):
 
         """
         try:
-            self.call('delete_table', TableName=tablename)
+            self.call("delete_table", TableName=tablename)
             if wait:
-                self.client.get_waiter('table_not_exists').wait(
-                    TableName=tablename
-                )
+                self.client.get_waiter("table_not_exists").wait(TableName=tablename)
             return True
         except DynamoDBError as e:
-            if e.kwargs['Code'] == 'ResourceNotFoundException':
+            if e.kwargs["Code"] == "ResourceNotFoundException":
                 return False
             else:  # pragma: no cover
                 raise
 
-    def put_item(self, tablename, item, expected=None, returns=NONE,
-                 return_capacity=None, expect_or=False, **kwargs):
+    def put_item(
+        self,
+        tablename,
+        item,
+        expected=None,
+        returns=NONE,
+        return_capacity=None,
+        expect_or=False,
+        **kwargs
+    ):
         """
         Store an item, overwriting existing data
 
@@ -499,22 +533,31 @@ class DynamoDBConnection(object):
         """
         keywords = {}
         if kwargs:
-            keywords['Expected'] = encode_query_kwargs(self.dynamizer, kwargs)
-            if len(keywords['Expected']) > 1:
-                keywords['ConditionalOperator'] = 'OR' if expect_or else 'AND'
+            keywords["Expected"] = encode_query_kwargs(self.dynamizer, kwargs)
+            if len(keywords["Expected"]) > 1:
+                keywords["ConditionalOperator"] = "OR" if expect_or else "AND"
         elif expected is not None:
-            keywords['Expected'] = build_expected(self.dynamizer, expected)
-        keywords['ReturnConsumedCapacity'] = \
-            self._default_capacity(return_capacity)
+            keywords["Expected"] = build_expected(self.dynamizer, expected)
+        keywords["ReturnConsumedCapacity"] = self._default_capacity(return_capacity)
         item = self.dynamizer.encode_keys(item)
-        ret = self.call('put_item', TableName=tablename, Item=item,
-                        ReturnValues=returns, **keywords)
+        ret = self.call(
+            "put_item", TableName=tablename, Item=item, ReturnValues=returns, **keywords
+        )
         if ret:
-            return Result(self.dynamizer, ret, 'Attributes')
+            return Result(self.dynamizer, ret, "Attributes")
 
-    def put_item2(self, tablename, item, expr_values=None, alias=None,
-                  condition=None, returns=NONE, return_capacity=None,
-                  return_item_collection_metrics=NONE, **kwargs):
+    def put_item2(
+        self,
+        tablename,
+        item,
+        expr_values=None,
+        alias=None,
+        condition=None,
+        returns=NONE,
+        return_capacity=None,
+        return_item_collection_metrics=NONE,
+        **kwargs
+    ):
         """
         Put a new item into a table
 
@@ -550,25 +593,26 @@ class DynamoDBConnection(object):
 
         """
         keywords = {
-            'TableName': tablename,
-            'Item': self.dynamizer.encode_keys(item),
-            'ReturnValues': returns,
-            'ReturnConsumedCapacity': self._default_capacity(return_capacity),
-            'ReturnItemCollectionMetrics': return_item_collection_metrics,
+            "TableName": tablename,
+            "Item": self.dynamizer.encode_keys(item),
+            "ReturnValues": returns,
+            "ReturnConsumedCapacity": self._default_capacity(return_capacity),
+            "ReturnItemCollectionMetrics": return_item_collection_metrics,
         }
         values = build_expression_values(self.dynamizer, expr_values, kwargs)
         if values:
-            keywords['ExpressionAttributeValues'] = values
+            keywords["ExpressionAttributeValues"] = values
         if alias:
-            keywords['ExpressionAttributeNames'] = alias
+            keywords["ExpressionAttributeNames"] = alias
         if condition:
-            keywords['ConditionExpression'] = condition
-        result = self.call('put_item', **keywords)
+            keywords["ConditionExpression"] = condition
+        result = self.call("put_item", **keywords)
         if result:
-            return Result(self.dynamizer, result, 'Attributes')
+            return Result(self.dynamizer, result, "Attributes")
 
-    def get_item(self, tablename, key, attributes=None, consistent=False,
-                 return_capacity=None):
+    def get_item(
+        self, tablename, key, attributes=None, consistent=False, return_capacity=None
+    ):
         """
         Fetch a single item from a table
 
@@ -593,18 +637,25 @@ class DynamoDBConnection(object):
 
         """
         kwargs = {
-            'TableName': tablename,
-            'Key': self.dynamizer.encode_keys(key),
-            'ConsistentRead': consistent,
-            'ReturnConsumedCapacity': self._default_capacity(return_capacity),
+            "TableName": tablename,
+            "Key": self.dynamizer.encode_keys(key),
+            "ConsistentRead": consistent,
+            "ReturnConsumedCapacity": self._default_capacity(return_capacity),
         }
         if attributes is not None:
-            kwargs['AttributesToGet'] = attributes
-        data = self.call('get_item', **kwargs)
-        return Result(self.dynamizer, data, 'Item')
+            kwargs["AttributesToGet"] = attributes
+        data = self.call("get_item", **kwargs)
+        return Result(self.dynamizer, data, "Item")
 
-    def get_item2(self, tablename, key, attributes=None, alias=None,
-                  consistent=False, return_capacity=None):
+    def get_item2(
+        self,
+        tablename,
+        key,
+        attributes=None,
+        alias=None,
+        consistent=False,
+        return_capacity=None,
+    ):
         """
         Fetch a single item from a table
 
@@ -629,22 +680,30 @@ class DynamoDBConnection(object):
 
         """
         kwargs = {
-            'TableName': tablename,
-            'Key': self.dynamizer.encode_keys(key),
-            'ConsistentRead': consistent,
-            'ReturnConsumedCapacity': self._default_capacity(return_capacity),
+            "TableName": tablename,
+            "Key": self.dynamizer.encode_keys(key),
+            "ConsistentRead": consistent,
+            "ReturnConsumedCapacity": self._default_capacity(return_capacity),
         }
         if attributes is not None:
             if not isinstance(attributes, six.string_types):
-                attributes = ', '.join(attributes)
-            kwargs['ProjectionExpression'] = attributes
+                attributes = ", ".join(attributes)
+            kwargs["ProjectionExpression"] = attributes
         if alias:
-            kwargs['ExpressionAttributeNames'] = alias
-        data = self.call('get_item', **kwargs)
-        return Result(self.dynamizer, data, 'Item')
+            kwargs["ExpressionAttributeNames"] = alias
+        data = self.call("get_item", **kwargs)
+        return Result(self.dynamizer, data, "Item")
 
-    def delete_item(self, tablename, key, expected=None, returns=NONE,
-                    return_capacity=None, expect_or=False, **kwargs):
+    def delete_item(
+        self,
+        tablename,
+        key,
+        expected=None,
+        returns=NONE,
+        return_capacity=None,
+        expect_or=False,
+        **kwargs
+    ):
         """
         Delete an item
 
@@ -679,22 +738,36 @@ class DynamoDBConnection(object):
         """
         key = self.dynamizer.encode_keys(key)
         keywords = {
-            'ReturnConsumedCapacity': self._default_capacity(return_capacity),
+            "ReturnConsumedCapacity": self._default_capacity(return_capacity),
         }
         if kwargs:
-            keywords['Expected'] = encode_query_kwargs(self.dynamizer, kwargs)
-            if len(keywords['Expected']) > 1:
-                keywords['ConditionalOperator'] = 'OR' if expect_or else 'AND'
+            keywords["Expected"] = encode_query_kwargs(self.dynamizer, kwargs)
+            if len(keywords["Expected"]) > 1:
+                keywords["ConditionalOperator"] = "OR" if expect_or else "AND"
         elif expected is not None:
-            keywords['Expected'] = build_expected(self.dynamizer, expected)
-        ret = self.call('delete_item', TableName=tablename, Key=key,
-                        ReturnValues=returns, **keywords)
+            keywords["Expected"] = build_expected(self.dynamizer, expected)
+        ret = self.call(
+            "delete_item",
+            TableName=tablename,
+            Key=key,
+            ReturnValues=returns,
+            **keywords
+        )
         if ret:
-            return Result(self.dynamizer, ret, 'Attributes')
+            return Result(self.dynamizer, ret, "Attributes")
 
-    def delete_item2(self, tablename, key, expr_values=None, alias=None,
-                     condition=None, returns=NONE, return_capacity=None,
-                     return_item_collection_metrics=NONE, **kwargs):
+    def delete_item2(
+        self,
+        tablename,
+        key,
+        expr_values=None,
+        alias=None,
+        condition=None,
+        returns=NONE,
+        return_capacity=None,
+        return_item_collection_metrics=NONE,
+        **kwargs
+    ):
         """
         Delete an item from a table
 
@@ -731,25 +804,26 @@ class DynamoDBConnection(object):
 
         """
         keywords = {
-            'TableName': tablename,
-            'Key': self.dynamizer.encode_keys(key),
-            'ReturnValues': returns,
-            'ReturnConsumedCapacity': self._default_capacity(return_capacity),
-            'ReturnItemCollectionMetrics': return_item_collection_metrics,
+            "TableName": tablename,
+            "Key": self.dynamizer.encode_keys(key),
+            "ReturnValues": returns,
+            "ReturnConsumedCapacity": self._default_capacity(return_capacity),
+            "ReturnItemCollectionMetrics": return_item_collection_metrics,
         }
         values = build_expression_values(self.dynamizer, expr_values, kwargs)
         if values:
-            keywords['ExpressionAttributeValues'] = values
+            keywords["ExpressionAttributeValues"] = values
         if alias:
-            keywords['ExpressionAttributeNames'] = alias
+            keywords["ExpressionAttributeNames"] = alias
         if condition:
-            keywords['ConditionExpression'] = condition
-        result = self.call('delete_item', **keywords)
+            keywords["ConditionExpression"] = condition
+        result = self.call("delete_item", **keywords)
         if result:
-            return Result(self.dynamizer, result, 'Attributes')
+            return Result(self.dynamizer, result, "Attributes")
 
-    def batch_write(self, tablename, return_capacity=None,
-                    return_item_collection_metrics=NONE):
+    def batch_write(
+        self, tablename, return_capacity=None, return_item_collection_metrics=NONE
+    ):
         """
         Perform a batch write on a table
 
@@ -775,11 +849,22 @@ class DynamoDBConnection(object):
 
         """
         return_capacity = self._default_capacity(return_capacity)
-        return BatchWriter(self, tablename, return_capacity=return_capacity,
-                           return_item_collection_metrics=return_item_collection_metrics)
+        return BatchWriter(
+            self,
+            tablename,
+            return_capacity=return_capacity,
+            return_item_collection_metrics=return_item_collection_metrics,
+        )
 
-    def batch_get(self, tablename, keys, attributes=None, alias=None,
-                  consistent=False, return_capacity=None):
+    def batch_get(
+        self,
+        tablename,
+        keys,
+        attributes=None,
+        alias=None,
+        consistent=False,
+        return_capacity=None,
+    ):
         """
         Perform a batch get of many items in a table
 
@@ -805,13 +890,27 @@ class DynamoDBConnection(object):
         """
         keys = [self.dynamizer.encode_keys(k) for k in keys]
         return_capacity = self._default_capacity(return_capacity)
-        ret = GetResultSet(self, tablename, keys,
-                           consistent=consistent, attributes=attributes,
-                           alias=alias, return_capacity=return_capacity)
+        ret = GetResultSet(
+            self,
+            tablename,
+            keys,
+            consistent=consistent,
+            attributes=attributes,
+            alias=alias,
+            return_capacity=return_capacity,
+        )
         return ret
 
-    def update_item(self, tablename, key, updates, returns=NONE,
-                    return_capacity=None, expect_or=False, **kwargs):
+    def update_item(
+        self,
+        tablename,
+        key,
+        updates,
+        returns=NONE,
+        return_capacity=None,
+        expect_or=False,
+        **kwargs
+    ):
         """
         Update a single item in a table
 
@@ -855,7 +954,7 @@ class DynamoDBConnection(object):
         attr_updates = {}
         expected = {}
         keywords = {
-            'ReturnConsumedCapacity': self._default_capacity(return_capacity),
+            "ReturnConsumedCapacity": self._default_capacity(return_capacity),
         }
         for update in updates:
             attr_updates.update(update.attrs(self.dynamizer))
@@ -864,24 +963,40 @@ class DynamoDBConnection(object):
         # Pull the 'expected' constraints from the kwargs
         for k, v in six.iteritems(encode_query_kwargs(self.dynamizer, kwargs)):
             if k in expected:
-                raise ValueError("Cannot have more than one condition on a single field")
+                raise ValueError(
+                    "Cannot have more than one condition on a single field"
+                )
             expected[k] = v
 
         if expected:
-            keywords['Expected'] = expected
+            keywords["Expected"] = expected
             if len(expected) > 1:
-                keywords['ConditionalOperator'] = 'OR' if expect_or else 'AND'
+                keywords["ConditionalOperator"] = "OR" if expect_or else "AND"
 
-        result = self.call('update_item', TableName=tablename, Key=key,
-                           AttributeUpdates=attr_updates,
-                           ReturnValues=returns,
-                           **keywords)
+        result = self.call(
+            "update_item",
+            TableName=tablename,
+            Key=key,
+            AttributeUpdates=attr_updates,
+            ReturnValues=returns,
+            **keywords
+        )
         if result:
-            return Result(self.dynamizer, result, 'Attributes')
+            return Result(self.dynamizer, result, "Attributes")
 
-    def update_item2(self, tablename, key, expression, expr_values=None, alias=None,
-                     condition=None, returns=NONE, return_capacity=None,
-                     return_item_collection_metrics=NONE, **kwargs):
+    def update_item2(
+        self,
+        tablename,
+        key,
+        expression,
+        expr_values=None,
+        alias=None,
+        condition=None,
+        returns=NONE,
+        return_capacity=None,
+        return_item_collection_metrics=NONE,
+        **kwargs
+    ):
         """
         Update a single item in a table
 
@@ -920,27 +1035,35 @@ class DynamoDBConnection(object):
 
         """
         keywords = {
-            'TableName': tablename,
-            'Key': self.dynamizer.encode_keys(key),
-            'UpdateExpression': expression,
-            'ReturnValues': returns,
-            'ReturnConsumedCapacity': self._default_capacity(return_capacity),
-            'ReturnItemCollectionMetrics': return_item_collection_metrics,
+            "TableName": tablename,
+            "Key": self.dynamizer.encode_keys(key),
+            "UpdateExpression": expression,
+            "ReturnValues": returns,
+            "ReturnConsumedCapacity": self._default_capacity(return_capacity),
+            "ReturnItemCollectionMetrics": return_item_collection_metrics,
         }
         values = build_expression_values(self.dynamizer, expr_values, kwargs)
         if values:
-            keywords['ExpressionAttributeValues'] = values
+            keywords["ExpressionAttributeValues"] = values
         if alias:
-            keywords['ExpressionAttributeNames'] = alias
+            keywords["ExpressionAttributeNames"] = alias
         if condition:
-            keywords['ConditionExpression'] = condition
-        result = self.call('update_item', **keywords)
+            keywords["ConditionExpression"] = condition
+        result = self.call("update_item", **keywords)
         if result:
-            return Result(self.dynamizer, result, 'Attributes')
+            return Result(self.dynamizer, result, "Attributes")
 
-    def scan(self, tablename, attributes=None, count=False, limit=None,
-             return_capacity=None, filter_or=False, exclusive_start_key=None,
-             **kwargs):
+    def scan(
+        self,
+        tablename,
+        attributes=None,
+        count=False,
+        limit=None,
+        return_capacity=None,
+        filter_or=False,
+        exclusive_start_key=None,
+        **kwargs
+    ):
         """
         Perform a full-table scan
 
@@ -983,31 +1106,44 @@ class DynamoDBConnection(object):
 
         """
         keywords = {
-            'TableName': tablename,
-            'ReturnConsumedCapacity': self._default_capacity(return_capacity),
+            "TableName": tablename,
+            "ReturnConsumedCapacity": self._default_capacity(return_capacity),
         }
         if attributes is not None:
-            keywords['AttributesToGet'] = attributes
+            keywords["AttributesToGet"] = attributes
         if exclusive_start_key is not None:
-            keywords['ExclusiveStartKey'] = \
-                self.dynamizer.maybe_encode_keys(exclusive_start_key)
+            keywords["ExclusiveStartKey"] = self.dynamizer.maybe_encode_keys(
+                exclusive_start_key
+            )
         if kwargs:
-            keywords['ScanFilter'] = encode_query_kwargs(
-                self.dynamizer, kwargs)
+            keywords["ScanFilter"] = encode_query_kwargs(self.dynamizer, kwargs)
             if len(kwargs) > 1:
-                keywords['ConditionalOperator'] = 'OR' if filter_or else 'AND'
+                keywords["ConditionalOperator"] = "OR" if filter_or else "AND"
         if not isinstance(limit, Limit):
             limit = Limit(limit)
         if count:
-            keywords['Select'] = COUNT
-            return self._count('scan', limit, keywords)
+            keywords["Select"] = COUNT
+            return self._count("scan", limit, keywords)
         else:
-            return ResultSet(self, limit, 'scan', **keywords)
+            return ResultSet(self, limit, "scan", **keywords)
 
-    def scan2(self, tablename, expr_values=None, alias=None, attributes=None,
-              consistent=False, select=None, index=None, limit=None,
-              return_capacity=None, filter=False, segment=None,
-              total_segments=None, exclusive_start_key=None, **kwargs):
+    def scan2(
+        self,
+        tablename,
+        expr_values=None,
+        alias=None,
+        attributes=None,
+        consistent=False,
+        select=None,
+        index=None,
+        limit=None,
+        return_capacity=None,
+        filter=False,
+        segment=None,
+        total_segments=None,
+        exclusive_start_key=None,
+        **kwargs
+    ):
         """
         Perform a full-table scan
 
@@ -1062,43 +1198,56 @@ class DynamoDBConnection(object):
 
         """
         keywords = {
-            'TableName': tablename,
-            'ReturnConsumedCapacity': self._default_capacity(return_capacity),
-            'ConsistentRead': consistent,
+            "TableName": tablename,
+            "ReturnConsumedCapacity": self._default_capacity(return_capacity),
+            "ConsistentRead": consistent,
         }
         values = build_expression_values(self.dynamizer, expr_values, kwargs)
         if values:
-            keywords['ExpressionAttributeValues'] = values
+            keywords["ExpressionAttributeValues"] = values
         if attributes is not None:
             if not isinstance(attributes, six.string_types):
-                attributes = ', '.join(attributes)
-            keywords['ProjectionExpression'] = attributes
+                attributes = ", ".join(attributes)
+            keywords["ProjectionExpression"] = attributes
         if index is not None:
-            keywords['IndexName'] = index
+            keywords["IndexName"] = index
         if alias:
-            keywords['ExpressionAttributeNames'] = alias
+            keywords["ExpressionAttributeNames"] = alias
         if select:
-            keywords['Select'] = select
+            keywords["Select"] = select
         if filter:
-            keywords['FilterExpression'] = filter
+            keywords["FilterExpression"] = filter
         if segment is not None:
-            keywords['Segment'] = segment
+            keywords["Segment"] = segment
         if total_segments is not None:
-            keywords['TotalSegments'] = total_segments
+            keywords["TotalSegments"] = total_segments
         if exclusive_start_key is not None:
-            keywords['ExclusiveStartKey'] = \
-                self.dynamizer.maybe_encode_keys(exclusive_start_key)
+            keywords["ExclusiveStartKey"] = self.dynamizer.maybe_encode_keys(
+                exclusive_start_key
+            )
         if not isinstance(limit, Limit):
             limit = Limit(limit)
 
         if select == COUNT:
-            return self._count('scan', limit, keywords)
+            return self._count("scan", limit, keywords)
         else:
-            return ResultSet(self, limit, 'scan', **keywords)
+            return ResultSet(self, limit, "scan", **keywords)
 
-    def query(self, tablename, attributes=None, consistent=False, count=False,
-              index=None, limit=None, desc=False, return_capacity=None,
-              filter=None, filter_or=False, exclusive_start_key=None, **kwargs):
+    def query(
+        self,
+        tablename,
+        attributes=None,
+        consistent=False,
+        count=False,
+        index=None,
+        limit=None,
+        desc=False,
+        return_capacity=None,
+        filter=None,
+        filter_or=False,
+        exclusive_start_key=None,
+        **kwargs
+    ):
         """
         Perform an index query on a table
 
@@ -1151,36 +1300,49 @@ class DynamoDBConnection(object):
 
         """
         keywords = {
-            'TableName': tablename,
-            'ReturnConsumedCapacity': self._default_capacity(return_capacity),
-            'ConsistentRead': consistent,
-            'ScanIndexForward': not desc,
-            'KeyConditions': encode_query_kwargs(self.dynamizer, kwargs),
+            "TableName": tablename,
+            "ReturnConsumedCapacity": self._default_capacity(return_capacity),
+            "ConsistentRead": consistent,
+            "ScanIndexForward": not desc,
+            "KeyConditions": encode_query_kwargs(self.dynamizer, kwargs),
         }
         if attributes is not None:
-            keywords['AttributesToGet'] = attributes
+            keywords["AttributesToGet"] = attributes
         if index is not None:
-            keywords['IndexName'] = index
+            keywords["IndexName"] = index
         if filter is not None:
             if len(filter) > 1:
-                keywords['ConditionalOperator'] = 'OR' if filter_or else 'AND'
-            keywords['QueryFilter'] = encode_query_kwargs(self.dynamizer,
-                                                          filter)
+                keywords["ConditionalOperator"] = "OR" if filter_or else "AND"
+            keywords["QueryFilter"] = encode_query_kwargs(self.dynamizer, filter)
         if exclusive_start_key is not None:
-            keywords['ExclusiveStartKey'] = \
-                self.dynamizer.maybe_encode_keys(exclusive_start_key)
+            keywords["ExclusiveStartKey"] = self.dynamizer.maybe_encode_keys(
+                exclusive_start_key
+            )
         if not isinstance(limit, Limit):
             limit = Limit(limit)
         if count:
-            keywords['Select'] = COUNT
-            return self._count('query', limit, keywords)
+            keywords["Select"] = COUNT
+            return self._count("query", limit, keywords)
         else:
-            return ResultSet(self, limit, 'query', **keywords)
+            return ResultSet(self, limit, "query", **keywords)
 
-    def query2(self, tablename, key_condition_expr, expr_values=None,
-               alias=None, attributes=None, consistent=False, select=None,
-               index=None, limit=None, desc=False, return_capacity=None,
-               filter=None, exclusive_start_key=None, **kwargs):
+    def query2(
+        self,
+        tablename,
+        key_condition_expr,
+        expr_values=None,
+        alias=None,
+        attributes=None,
+        consistent=False,
+        select=None,
+        index=None,
+        limit=None,
+        desc=False,
+        return_capacity=None,
+        filter=None,
+        exclusive_start_key=None,
+        **kwargs
+    ):
         """
         Perform an index query on a table
 
@@ -1234,38 +1396,40 @@ class DynamoDBConnection(object):
         """
         values = build_expression_values(self.dynamizer, expr_values, kwargs)
         keywords = {
-            'TableName': tablename,
-            'ReturnConsumedCapacity': self._default_capacity(return_capacity),
-            'ConsistentRead': consistent,
-            'KeyConditionExpression': key_condition_expr,
-            'ExpressionAttributeValues': values,
-            'ScanIndexForward': not desc,
+            "TableName": tablename,
+            "ReturnConsumedCapacity": self._default_capacity(return_capacity),
+            "ConsistentRead": consistent,
+            "KeyConditionExpression": key_condition_expr,
+            "ExpressionAttributeValues": values,
+            "ScanIndexForward": not desc,
         }
         if attributes is not None:
             if not isinstance(attributes, six.string_types):
-                attributes = ', '.join(attributes)
-            keywords['ProjectionExpression'] = attributes
+                attributes = ", ".join(attributes)
+            keywords["ProjectionExpression"] = attributes
         if index is not None:
-            keywords['IndexName'] = index
+            keywords["IndexName"] = index
         if alias:
-            keywords['ExpressionAttributeNames'] = alias
+            keywords["ExpressionAttributeNames"] = alias
         if select:
-            keywords['Select'] = select
+            keywords["Select"] = select
         if filter:
-            keywords['FilterExpression'] = filter
+            keywords["FilterExpression"] = filter
         if exclusive_start_key is not None:
-            keywords['ExclusiveStartKey'] = \
-                self.dynamizer.maybe_encode_keys(exclusive_start_key)
+            keywords["ExclusiveStartKey"] = self.dynamizer.maybe_encode_keys(
+                exclusive_start_key
+            )
         if not isinstance(limit, Limit):
             limit = Limit(limit)
 
         if select == COUNT:
-            return self._count('query', limit, keywords)
+            return self._count("query", limit, keywords)
         else:
-            return ResultSet(self, limit, 'query', **keywords)
+            return ResultSet(self, limit, "query", **keywords)
 
-    def update_table(self, tablename, throughput=None, global_indexes=None,
-                     index_updates=None):
+    def update_table(
+        self, tablename, throughput=None, global_indexes=None, index_updates=None
+    ):
         """
         Update the throughput of a table and/or global indexes
 
@@ -1282,29 +1446,27 @@ class DynamoDBConnection(object):
             List of IndexUpdates to perform
 
         """
-        kwargs = {
-            'TableName': tablename
-        }
+        kwargs = {"TableName": tablename}
         all_attrs = set()
         if throughput is not None:
-            kwargs['ProvisionedThroughput'] = throughput.schema()
+            kwargs["ProvisionedThroughput"] = throughput.schema()
         if index_updates is not None:
             updates = []
             for update in index_updates:
                 all_attrs.update(update.get_attrs())
                 updates.append(update.serialize())
-            kwargs['GlobalSecondaryIndexUpdates'] = updates
+            kwargs["GlobalSecondaryIndexUpdates"] = updates
         elif global_indexes is not None:
-            kwargs['GlobalSecondaryIndexUpdates'] = [
+            kwargs["GlobalSecondaryIndexUpdates"] = [
                 {
-                    'Update': {
-                        'IndexName': key,
-                        'ProvisionedThroughput': value.schema(),
+                    "Update": {
+                        "IndexName": key,
+                        "ProvisionedThroughput": value.schema(),
                     }
                 }
                 for key, value in six.iteritems(global_indexes)
             ]
         if all_attrs:
             attr_definitions = [attr.definition() for attr in all_attrs]
-            kwargs['AttributeDefinitions'] = attr_definitions
-        return self.call('update_table', **kwargs)
+            kwargs["AttributeDefinitions"] = attr_definitions
+        return self.call("update_table", **kwargs)
