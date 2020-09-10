@@ -1,0 +1,7 @@
+black
+docutils
+isort>=4.2.5,<5
+mock
+mypy
+nose
+pylint==2.3.1

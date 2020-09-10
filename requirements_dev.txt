@@ -1,8 +1,3 @@
-pylint==1.5.1
+-r requirements_test.txt
 tox
-coverage
-pep8
-autopep8
-nose
-mock
-bumpversion
+bump2version
