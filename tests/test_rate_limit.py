@@ -28,6 +28,7 @@ class TestRateLimit(BaseSystemTest):
 
         def injector(connection, command, kwargs, data):
             """ Hook that injects consumed_capacity """
+            data.pop("ConsumedCapacity", None)
             data["consumed_capacity"] = capacity
 
         self.dynamo.subscribe("postcall", injector)
