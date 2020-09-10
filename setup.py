@@ -21,7 +21,7 @@ REQUIREMENTS = [
 if __name__ == "__main__":
     setup(
         name="dynamo3",
-        version="0.4.10",
+        version="1.0.0.dev0",
         description="Python 3 compatible library for DynamoDB",
         long_description=README + "\n\n" + CHANGES,
         classifiers=[

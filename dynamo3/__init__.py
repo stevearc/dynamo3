@@ -32,4 +32,4 @@ from .rate import RateLimit
 from .result import Capacity, Limit
 from .types import TYPES, TYPES_REV, Binary, Dynamizer, is_null
 
-__version__ = "0.4.10"
+__version__ = "1.0.0.dev0"
