@@ -804,7 +804,7 @@ class DynamoDBConnection(object):
         ...
 
     @overload
-    def scan2(
+    def scan2(  # pylint:disable=E0102
         self,
         tablename: str,
         expr_values: Optional[ExpressionValuesType],
@@ -823,7 +823,7 @@ class DynamoDBConnection(object):
     ) -> ResultSet:
         ...
 
-    def scan2(
+    def scan2(  # pylint:disable=E0102
         self,
         tablename: str,
         expr_values: Optional[ExpressionValuesType] = None,
@@ -950,7 +950,7 @@ class DynamoDBConnection(object):
         ...
 
     @overload
-    def query2(
+    def query2(  # pylint:disable=E0102
         self,
         tablename: str,
         key_condition_expr: str,
@@ -969,7 +969,7 @@ class DynamoDBConnection(object):
     ) -> ResultSet:
         ...
 
-    def query2(
+    def query2(  # pylint:disable=E0102
         self,
         tablename: str,
         key_condition_expr: str,
