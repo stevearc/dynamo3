@@ -611,68 +611,6 @@ class DynamoDBConnection(object):
         data = self.call("get_item", **kwargs)
         return Result(self.dynamizer, data, "Item")
 
-    def delete_item(
-        self,
-        tablename,
-        key,
-        expected=None,
-        returns=NONE,
-        return_capacity=None,
-        expect_or=False,
-        **kwargs
-    ):
-        """
-        Delete an item
-
-        This uses the older version of the DynamoDB API.
-        See also: :meth:`~.delete_item2`.
-
-        Parameters
-        ----------
-        tablename : str
-            Name of the table to delete from
-        key : dict
-            Primary key dict specifying the hash key and, if applicable, the
-            range key of the item.
-        expected : dict, optional
-            DEPRECATED (use **kwargs instead).
-            If present, will check the values in Dynamo before performing the
-            write. If values do not match, will raise an exception. (Using None
-            as a value checks that the field does not exist).
-        returns : {NONE, ALL_OLD}, optional
-            If ALL_OLD, return the data that was deleted (default NONE)
-        return_capacity : {NONE, INDEXES, TOTAL}, optional
-            INDEXES will return the consumed capacity for indexes, TOTAL will
-            return the consumed capacity for the table and the indexes.
-            (default NONE)
-        expect_or : bool, optional
-            If True, the **kwargs conditionals will be OR'd together. If False,
-            they will be AND'd. (default False).
-        **kwargs : dict, optional
-            Conditional filter on the DELETE. Same format as the kwargs for
-            :meth:`~.scan`.
-
-        """
-        key = self.dynamizer.encode_keys(key)
-        keywords = {
-            "ReturnConsumedCapacity": self._default_capacity(return_capacity),
-        }
-        if kwargs:
-            keywords["Expected"] = encode_query_kwargs(self.dynamizer, kwargs)
-            if len(keywords["Expected"]) > 1:
-                keywords["ConditionalOperator"] = "OR" if expect_or else "AND"
-        elif expected is not None:
-            keywords["Expected"] = build_expected(self.dynamizer, expected)
-        ret = self.call(
-            "delete_item",
-            TableName=tablename,
-            Key=key,
-            ReturnValues=returns,
-            **keywords
-        )
-        if ret:
-            return Result(self.dynamizer, ret, "Attributes")
-
     def delete_item2(
         self,
         tablename,
