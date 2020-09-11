@@ -5,7 +5,7 @@ from contextlib import contextmanager
 import botocore.session
 from botocore.exceptions import ClientError
 
-from .batch import BatchWriter, encode_query_kwargs
+from .batch import BatchWriter
 from .constants import COUNT, INDEXES, NONE, READ_COMMANDS
 from .exception import DynamoDBError, ThroughputException, translate_exception
 from .fields import Table, Throughput
@@ -405,63 +405,6 @@ class DynamoDBConnection(object):
                 return False
             else:  # pragma: no cover
                 raise
-
-    def put_item(
-        self,
-        tablename,
-        item,
-        expected=None,
-        returns=NONE,
-        return_capacity=None,
-        expect_or=False,
-        **kwargs
-    ):
-        """
-        Store an item, overwriting existing data
-
-        This uses the older version of the DynamoDB API.
-        See also: :meth:`~.put_item2`.
-
-        Parameters
-        ----------
-        tablename : str
-            Name of the table to write
-        item : dict
-            Item data
-        expected : dict, optional
-            DEPRECATED (use **kwargs instead).
-            If present, will check the values in Dynamo before performing the
-            write. If values do not match, will raise an exception. (Using None
-            as a value checks that the field does not exist).
-        returns : {NONE, ALL_OLD}, optional
-            If ALL_OLD, will return any data that was overwritten (default
-            NONE)
-        return_capacity : {NONE, INDEXES, TOTAL}, optional
-            INDEXES will return the consumed capacity for indexes, TOTAL will
-            return the consumed capacity for the table and the indexes.
-            (default NONE)
-        expect_or : bool, optional
-            If True, the **kwargs conditionals will be OR'd together. If False,
-            they will be AND'd. (default False).
-        **kwargs : dict, optional
-            Conditional filter on the PUT. Same format as the kwargs for
-            :meth:`~.scan`.
-
-        """
-        keywords = {}
-        if kwargs:
-            keywords["Expected"] = encode_query_kwargs(self.dynamizer, kwargs)
-            if len(keywords["Expected"]) > 1:
-                keywords["ConditionalOperator"] = "OR" if expect_or else "AND"
-        elif expected is not None:
-            keywords["Expected"] = build_expected(self.dynamizer, expected)
-        keywords["ReturnConsumedCapacity"] = self._default_capacity(return_capacity)
-        item = self.dynamizer.encode_keys(item)
-        ret = self.call(
-            "put_item", TableName=tablename, Item=item, ReturnValues=returns, **keywords
-        )
-        if ret:
-            return Result(self.dynamizer, ret, "Attributes")
 
     def put_item2(
         self,

@@ -5,24 +5,6 @@ from .constants import MAX_WRITE_BATCH, NONE
 from .types import is_null
 
 LOG = logging.getLogger(__name__)
-NO_ARG = object()
-
-CONDITIONS = {
-    "eq": "EQ",
-    "ne": "NE",
-    "le": "LE",
-    "lte": "LE",
-    "lt": "LT",
-    "ge": "GE",
-    "gte": "GE",
-    "gt": "GT",
-    "beginswith": "BEGINS_WITH",
-    "begins_with": "BEGINS_WITH",
-    "between": "BETWEEN",
-    "in": "IN",
-    "contains": "CONTAINS",
-    "ncontains": "NOT_CONTAINS",
-}
 
 
 def _encode_write(dynamizer, data, action, key):
@@ -39,30 +21,6 @@ def _encode_write(dynamizer, data, action, key):
 def encode_put(dynamizer, data):
     """ Encode an item put command """
     return _encode_write(dynamizer, data, "PutRequest", "Item")
-
-
-def encode_query_kwargs(dynamizer, kwargs):
-    """ Encode query constraints in Dynamo format """
-    ret = {}
-    for k, v in kwargs.items():
-        if "__" not in k:
-            raise TypeError("Invalid query argument '%s'" % k)
-        name, condition_key = k.split("__")
-        # Convert ==None to IS_NULL
-        if condition_key == "eq" and is_null(v):
-            condition_key = "null"
-            v = True
-        # null is a special case
-        if condition_key == "null":
-            ret[name] = {"ComparisonOperator": "NULL" if v else "NOT_NULL"}
-            continue
-        elif condition_key not in ("in", "between"):
-            v = (v,)
-        ret[name] = {
-            "AttributeValueList": [dynamizer.encode(value) for value in v],
-            "ComparisonOperator": CONDITIONS[condition_key],
-        }
-    return ret
 
 
 def encode_delete(dynamizer, data):
