@@ -1,5 +1,4 @@
 """ An API that wraps DynamoDB calls """
-from .batch import ItemUpdate
 from .connection import DynamoDBConnection
 from .constants import (
     ALL_NEW,
