@@ -1,14 +1,27 @@
 """ Connection class for DynamoDB """
 import time
 from contextlib import contextmanager
+from typing import Any, Callable, Dict, Iterable, List, Optional, Union, overload
 
 import botocore.session
+from botocore.client import BaseClient
 from botocore.exceptions import ClientError
+from typing_extensions import Literal
 
 from .batch import BatchWriter
-from .constants import COUNT, INDEXES, NONE, READ_COMMANDS
+from .constants import (
+    COUNT,
+    INDEXES,
+    NONE,
+    READ_COMMANDS,
+    NonCountSelectType,
+    ReturnCapacityType,
+    ReturnItemCollectionMetricsType,
+    SelectType,
+)
 from .exception import DynamoDBError, ThroughputException, translate_exception
-from .fields import Table, Throughput
+from .fields import DynamoKey, GlobalIndex, IndexUpdate, LocalIndex, Table, Throughput
+from .rate import RateLimit
 from .result import (
     ConsumedCapacity,
     Count,
@@ -21,7 +34,7 @@ from .result import (
 from .types import Dynamizer, is_null
 
 
-def build_expected(dynamizer, expected):
+def build_expected(dynamizer: Dynamizer, expected: Dict[str, Any]) -> Dict[str, Any]:
     """ Build the Expected parameters from a dict """
     ret = {}
     for k, v in expected.items():
@@ -37,7 +50,19 @@ def build_expected(dynamizer, expected):
     return ret
 
 
-def build_expression_values(dynamizer, expr_values, kwargs):
+ExpressionValueType = Any
+ExpressionValuesType = Dict[str, ExpressionValueType]
+ExpressionAttributeNamesType = Dict[str, str]
+DynamoObject = Dict[str, Any]
+EncodedDynamoObject = Dict[str, Any]
+HookType = Literal[Literal["precall"], Literal["postcall"], Literal["capacity"]]
+
+
+def build_expression_values(
+    dynamizer: Dynamizer,
+    expr_values: Optional[ExpressionValuesType],
+    kwargs: ExpressionValueType,
+) -> Optional[EncodedDynamoObject]:
     """ Build ExpresionAttributeValues from a value or kwargs """
     if expr_values:
         values = expr_values
@@ -45,6 +70,7 @@ def build_expression_values(dynamizer, expr_values, kwargs):
     elif kwargs:
         values = dict(((":" + k, v) for k, v in kwargs.items()))
         return dynamizer.encode_keys(values)
+    return None
 
 
 class DynamoDBConnection(object):
@@ -72,37 +98,44 @@ class DynamoDBConnection(object):
 
     """
 
-    def __init__(self, client=None, dynamizer=Dynamizer()):
+    def __init__(
+        self,
+        client: BaseClient,
+        dynamizer: Dynamizer = Dynamizer(),
+    ):
         self.client = client
         self.dynamizer = dynamizer
         self.request_retries = 10
         self.default_return_capacity = False
-        self._hooks = None
-        self.clear_hooks()
-        self.rate_limiters = []
+        self._hooks: Dict[HookType, List[Callable]] = {
+            "precall": [],
+            "postcall": [],
+            "capacity": [],
+        }
+        self.rate_limiters: List[RateLimit] = []
 
     @property
-    def host(self):
+    def host(self) -> str:
         """ The address of the endpoint """
         return self.client.meta.endpoint_url
 
     @property
-    def region(self):
+    def region(self) -> str:
         """ The name of the current connected region """
         return self.client.meta.region_name
 
     @classmethod
     def connect(
         cls,
-        region,
-        session=None,
-        access_key=None,
-        secret_key=None,
-        host=None,
-        port=80,
-        is_secure=True,
-        **kwargs
-    ):
+        region: str,
+        session: Optional[botocore.session.Session] = None,
+        access_key: Optional[str] = None,
+        secret_key: Optional[str] = None,
+        host: Optional[str] = None,
+        port: int = 80,
+        is_secure: bool = True,
+        dynamizer: Dynamizer = Dynamizer(),
+    ) -> "DynamoDBConnection":
         """
         Connect to an AWS region.
 
@@ -137,9 +170,9 @@ class DynamoDBConnection(object):
         client = session.create_client(
             "dynamodb", region, endpoint_url=url, use_ssl=is_secure
         )
-        return cls(client, **kwargs)
+        return cls(client, dynamizer)
 
-    def call(self, command, **kwargs):
+    def call(self, command: str, **kwargs: Any) -> Dict[str, Any]:
         """
         Make a request to DynamoDB using the raw botocore API
 
@@ -198,12 +231,12 @@ class DynamoDBConnection(object):
                     hook(self, command, kwargs, data, cap)
         return data
 
-    def exponential_sleep(self, attempt):
+    def exponential_sleep(self, attempt: int):
         """ Sleep with exponential backoff """
         if attempt > 1:
             time.sleep(0.1 * 2 ** attempt)
 
-    def subscribe(self, event, hook):
+    def subscribe(self, event: HookType, hook: Callable):
         """
         Subscribe a callback to an event
 
@@ -220,25 +253,25 @@ class DynamoDBConnection(object):
         if hook not in self._hooks[event]:
             self._hooks[event].append(hook)
 
-    def unsubscribe(self, event, hook):
+    def unsubscribe(self, event: HookType, hook: Callable):
         """ Unsubscribe a hook from an event """
         if hook in self._hooks[event]:
             self._hooks[event].remove(hook)
 
-    def add_rate_limit(self, limiter):
+    def add_rate_limit(self, limiter: RateLimit):
         """ Add a RateLimit to the connection """
         if limiter not in self.rate_limiters:
             self.subscribe("capacity", limiter.on_capacity)
             self.rate_limiters.append(limiter)
 
-    def remove_rate_limit(self, limiter):
+    def remove_rate_limit(self, limiter: RateLimit):
         """ Remove a RateLimit from the connection """
         if limiter in self.rate_limiters:
             self.unsubscribe("capacity", limiter.on_capacity)
             self.rate_limiters.remove(limiter)
 
     @contextmanager
-    def limit(self, limiter):
+    def limit(self, limiter: RateLimit):
         """ Context manager that applies a RateLimit to the connection """
         self.add_rate_limit(limiter)
         try:
@@ -254,7 +287,9 @@ class DynamoDBConnection(object):
             "capacity": [],
         }
 
-    def _default_capacity(self, value):
+    def _default_capacity(
+        self, value: Optional[ReturnCapacityType]
+    ) -> ReturnCapacityType:
         """ Get the value for ReturnConsumedCapacity from provided value """
         if value is not None:
             return value
@@ -262,12 +297,12 @@ class DynamoDBConnection(object):
             return INDEXES
         return NONE
 
-    def _count(self, method, limit, keywords):
+    def _count(self, method: str, limit: Limit, keywords: Dict[str, Any]) -> Count:
         """ Do a scan or query and aggregate the results into a Count """
         # The limit will be mutated, so copy it and leave the original intact
         limit = limit.copy()
         has_more = True
-        count = None
+        count = Count(0, 0)
         while has_more:
             limit.set_request_args(keywords)
             response = self.call(method, **keywords)
@@ -279,7 +314,7 @@ class DynamoDBConnection(object):
                 keywords["ExclusiveStartKey"] = last_evaluated_key
         return count
 
-    def list_tables(self, limit=None):
+    def list_tables(self, limit: Optional[int] = None) -> TableResultSet:
         """
         List all tables.
 
@@ -296,7 +331,7 @@ class DynamoDBConnection(object):
         """
         return TableResultSet(self, limit)
 
-    def describe_table(self, tablename):
+    def describe_table(self, tablename: str) -> Optional[Table]:
         """
         Get the details about a table
 
@@ -321,13 +356,13 @@ class DynamoDBConnection(object):
 
     def create_table(
         self,
-        tablename,
-        hash_key,
-        range_key=None,
-        indexes=None,
-        global_indexes=None,
-        throughput=None,
-        wait=False,
+        tablename: str,
+        hash_key: DynamoKey,
+        range_key: Optional[DynamoKey] = None,
+        indexes: Optional[List[LocalIndex]] = None,
+        global_indexes: Optional[List[GlobalIndex]] = None,
+        throughput: Optional[Throughput] = None,
+        wait: bool = False,
     ):
         """
         Create a table
@@ -368,11 +403,13 @@ class DynamoDBConnection(object):
                 all_attrs.add(idx.range_key)
 
         if global_indexes:
-            kwargs["GlobalSecondaryIndexes"] = [idx.schema() for idx in global_indexes]
-            for idx in global_indexes:
-                all_attrs.add(idx.hash_key)
-                if idx.range_key is not None:
-                    all_attrs.add(idx.range_key)
+            kwargs["GlobalSecondaryIndexes"] = [
+                gidx.schema() for gidx in global_indexes
+            ]
+            for gidx in global_indexes:
+                all_attrs.add(gidx.hash_key)
+                if gidx.range_key is not None:
+                    all_attrs.add(gidx.range_key)
 
         kwargs["AttributeDefinitions"] = [attr.definition() for attr in all_attrs]
         result = self.call("create_table", **kwargs)
@@ -380,7 +417,7 @@ class DynamoDBConnection(object):
             self.client.get_waiter("table_exists").wait(TableName=tablename)
         return result
 
-    def delete_table(self, tablename, wait=False):
+    def delete_table(self, tablename: str, wait: bool = False) -> bool:
         """
         Delete a table
 
@@ -408,15 +445,15 @@ class DynamoDBConnection(object):
 
     def put_item2(
         self,
-        tablename,
-        item,
-        expr_values=None,
-        alias=None,
-        condition=None,
-        returns=NONE,
-        return_capacity=None,
+        tablename: str,
+        item: DynamoObject,
+        expr_values: Optional[ExpressionValuesType] = None,
+        alias: Optional[ExpressionAttributeNamesType] = None,
+        condition: Optional[str] = None,
+        returns: Literal[Literal["NONE"], Literal["ALL_OLD"]] = NONE,
+        return_capacity: ReturnCapacityType = None,
         return_item_collection_metrics=NONE,
-        **kwargs
+        **kwargs: ExpressionValueType
     ):
         """
         Put a new item into a table
@@ -509,13 +546,13 @@ class DynamoDBConnection(object):
 
     def get_item2(
         self,
-        tablename,
-        key,
-        attributes=None,
-        alias=None,
-        consistent=False,
-        return_capacity=None,
-    ):
+        tablename: str,
+        key: DynamoObject,
+        attributes: Optional[Union[str, List[str]]] = None,
+        alias: Optional[ExpressionAttributeNamesType] = None,
+        consistent: bool = False,
+        return_capacity: Optional[ReturnCapacityType] = None,
+    ) -> Result:
         """
         Fetch a single item from a table
 
@@ -556,16 +593,16 @@ class DynamoDBConnection(object):
 
     def delete_item2(
         self,
-        tablename,
-        key,
-        expr_values=None,
-        alias=None,
-        condition=None,
-        returns=NONE,
-        return_capacity=None,
-        return_item_collection_metrics=NONE,
+        tablename: str,
+        key: DynamoObject,
+        expr_values: Optional[ExpressionValuesType] = None,
+        alias: Optional[ExpressionAttributeNamesType] = None,
+        condition: Optional[str] = None,
+        returns: Literal[Literal["NONE"], Literal["ALL_OLD"]] = NONE,
+        return_capacity: Optional[ReturnCapacityType] = None,
+        return_item_collection_metrics: ReturnItemCollectionMetricsType = NONE,
         **kwargs
-    ):
+    ) -> Optional[Result]:
         """
         Delete an item from a table
 
@@ -618,10 +655,14 @@ class DynamoDBConnection(object):
         result = self.call("delete_item", **keywords)
         if result:
             return Result(self.dynamizer, result, "Attributes")
+        return None
 
     def batch_write(
-        self, tablename, return_capacity=None, return_item_collection_metrics=NONE
-    ):
+        self,
+        tablename: str,
+        return_capacity: Optional[ReturnCapacityType] = None,
+        return_item_collection_metrics: ReturnItemCollectionMetricsType = NONE,
+    ) -> BatchWriter:
         """
         Perform a batch write on a table
 
@@ -656,13 +697,13 @@ class DynamoDBConnection(object):
 
     def batch_get(
         self,
-        tablename,
-        keys,
-        attributes=None,
-        alias=None,
-        consistent=False,
-        return_capacity=None,
-    ):
+        tablename: str,
+        keys: Iterable[DynamoObject],
+        attributes: Optional[Union[str, List[str]]] = None,
+        alias: Optional[ExpressionAttributeNamesType] = None,
+        consistent: bool = False,
+        return_capacity: Optional[ReturnCapacityType] = None,
+    ) -> GetResultSet:
         """
         Perform a batch get of many items in a table
 
@@ -711,7 +752,7 @@ class DynamoDBConnection(object):
         return_capacity=None,
         return_item_collection_metrics=NONE,
         **kwargs
-    ):
+    ) -> Optional[Result]:
         """
         Update a single item in a table
 
@@ -767,24 +808,65 @@ class DynamoDBConnection(object):
         result = self.call("update_item", **keywords)
         if result:
             return Result(self.dynamizer, result, "Attributes")
+        return None
+
+    @overload
+    def scan2(
+        self,
+        tablename: str,
+        expr_values: Optional[ExpressionValuesType],
+        alias: Optional[ExpressionAttributeNamesType],
+        attributes: Optional[Union[str, List[str]]],
+        consistent: bool,
+        select: Literal["COUNT"],
+        index: Optional[str],
+        limit: Optional[Union[Limit, int]],
+        return_capacity: Optional[ReturnCapacityType],
+        filter: Optional[str],
+        segment: Optional[int],
+        total_segments: Optional[int],
+        exclusive_start_key: Optional[DynamoObject],
+        **kwargs: ExpressionValueType
+    ) -> Count:
+        ...
+
+    @overload
+    def scan2(
+        self,
+        tablename: str,
+        expr_values: Optional[ExpressionValuesType],
+        alias: Optional[ExpressionAttributeNamesType],
+        attributes: Optional[Union[str, List[str]]],
+        consistent: bool,
+        select: Optional[NonCountSelectType],
+        index: Optional[str],
+        limit: Optional[Union[Limit, int]],
+        return_capacity: Optional[ReturnCapacityType],
+        filter: Optional[str],
+        segment: Optional[int],
+        total_segments: Optional[int],
+        exclusive_start_key: Optional[DynamoObject],
+        **kwargs: ExpressionValueType
+    ) -> ResultSet:
+        ...
 
     def scan2(
         self,
-        tablename,
-        expr_values=None,
-        alias=None,
-        attributes=None,
-        consistent=False,
-        select=None,
-        index=None,
-        limit=None,
-        return_capacity=None,
-        filter=False,
-        segment=None,
-        total_segments=None,
-        exclusive_start_key=None,
-        **kwargs
-    ):
+        tablename: str,
+        expr_values: Optional[ExpressionValuesType] = None,
+        alias: Optional[ExpressionAttributeNamesType] = None,
+        attributes: Optional[Union[str, List[str]]] = None,
+        consistent: bool = False,
+        select: Optional[SelectType] = None,
+        index: Optional[str] = None,
+        limit: Optional[Union[Limit, int]] = None,
+        return_capacity: Optional[ReturnCapacityType] = None,
+        filter: Optional[str] = None,
+        segment: Optional[int] = None,
+        total_segments: Optional[int] = None,
+        exclusive_start_key: Optional[DynamoObject] = None,
+        **kwargs: ExpressionValueType
+    ) -> Union[Count, ResultSet]:
         """
         Perform a full-table scan
 
@@ -808,7 +890,7 @@ class DynamoDBConnection(object):
             See docs for Select
         index : str, optional
             The name of the index to query
-        limit : int, optional
+        limit : int or Limit, optional
             Maximum number of items to return
         return_capacity : {NONE, INDEXES, TOTAL}, optional
             INDEXES will return the consumed capacity for indexes, TOTAL will
@@ -874,23 +956,63 @@ class DynamoDBConnection(object):
         else:
             return ResultSet(self, limit, "scan", **keywords)
 
+    @overload
     def query2(
         self,
-        tablename,
-        key_condition_expr,
-        expr_values=None,
-        alias=None,
-        attributes=None,
-        consistent=False,
-        select=None,
-        index=None,
-        limit=None,
-        desc=False,
-        return_capacity=None,
-        filter=None,
-        exclusive_start_key=None,
-        **kwargs
-    ):
+        tablename: str,
+        key_condition_expr: str,
+        expr_values: Optional[DynamoObject],
+        alias: Optional[ExpressionAttributeNamesType],
+        attributes: Optional[Union[str, List[str]]],
+        consistent: bool,
+        select: Literal["COUNT"],
+        index: Optional[str],
+        limit: Optional[Union[int, Limit]],
+        desc: bool,
+        return_capacity: Optional[ReturnCapacityType],
+        filter: Optional[str],
+        exclusive_start_key: Optional[DynamoObject],
+        **kwargs: ExpressionValueType
+    ) -> Count:
+        ...
+
+    @overload
+    def query2(
+        self,
+        tablename: str,
+        key_condition_expr: str,
+        expr_values: Optional[DynamoObject],
+        alias: Optional[ExpressionAttributeNamesType],
+        attributes: Optional[Union[str, List[str]]],
+        consistent: bool,
+        select: Optional[NonCountSelectType],
+        index: Optional[str],
+        limit: Optional[Union[int, Limit]],
+        desc: bool,
+        return_capacity: Optional[ReturnCapacityType],
+        filter: Optional[str],
+        exclusive_start_key: Optional[DynamoObject],
+        **kwargs: ExpressionValueType
+    ) -> ResultSet:
+        ...
+
+    def query2(
+        self,
+        tablename: str,
+        key_condition_expr: str,
+        expr_values: Optional[DynamoObject] = None,
+        alias: Optional[ExpressionAttributeNamesType] = None,
+        attributes: Optional[Union[str, List[str]]] = None,
+        consistent: bool = False,
+        select: Optional[SelectType] = None,
+        index: Optional[str] = None,
+        limit: Optional[Union[int, Limit]] = None,
+        desc: bool = False,
+        return_capacity: Optional[ReturnCapacityType] = None,
+        filter: Optional[str] = None,
+        exclusive_start_key: Optional[DynamoObject] = None,
+        **kwargs: ExpressionValueType
+    ) -> Union[Count, ResultSet]:
         """
         Perform an index query on a table
 
@@ -975,7 +1097,12 @@ class DynamoDBConnection(object):
         else:
             return ResultSet(self, limit, "query", **keywords)
 
-    def update_table(self, tablename, throughput=None, index_updates=None):
+    def update_table(
+        self,
+        tablename: str,
+        throughput: Optional[Throughput] = None,
+        index_updates: Optional[List[IndexUpdate]] = None,
+    ):
         """
         Update the throughput of a table and/or global indexes
 
@@ -989,7 +1116,7 @@ class DynamoDBConnection(object):
             List of IndexUpdates to perform
 
         """
-        kwargs = {"TableName": tablename}
+        kwargs: Dict[str, Any] = {"TableName": tablename}
         all_attrs = set()
         if throughput is not None:
             kwargs["ProvisionedThroughput"] = throughput.schema()

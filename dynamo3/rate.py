@@ -2,8 +2,14 @@
 import logging
 import math
 import time
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple
 
-from .result import Capacity
+from typing_extensions import TypedDict
+
+from .result import Capacity, ConsumedCapacity
+
+if TYPE_CHECKING:
+    from .connection import DynamoDBConnection
 
 LOG = logging.getLogger(__name__)
 
@@ -19,24 +25,29 @@ class DecayingCapacityStore(object):
 
     """
 
-    def __init__(self, window=1):
+    def __init__(self, window: int = 1):
         self.window = window
-        self.points = []
+        self.points: List[Tuple[int, int]] = []
 
-    def add(self, now, num):
+    def add(self, now: int, num: int):
         """ Add a timestamp and date to the data """
         if num == 0:
             return
         self.points.append((now, num))
 
     @property
-    def value(self):
+    def value(self) -> int:
         """ Get the summation of all non-expired points """
         now = time.time()
         cutoff = now - self.window
         while self.points and self.points[0][0] < cutoff:
             self.points.pop(0)
         return sum([p[1] for p in self.points])
+
+
+RemainingCapacity = TypedDict(
+    "RemainingCapacity", {"read": DecayingCapacityStore, "write": DecayingCapacityStore}
+)
 
 
 class RateLimit(object):
@@ -62,7 +73,7 @@ class RateLimit(object):
     table_caps : dict, optional
         Mapping of table name to dicts with two optional keys ('read' and
         'write') that provide the maximum units for the table and local
-        indexes. You can specity global indexes by adding a key to the dict or
+        indexes. You can specify global indexes by adding a key to the dict or
         by providing another key in ``table_caps`` that is the table name and
         index name joined by a ``:``.
     callback : callable, optional
@@ -74,14 +85,14 @@ class RateLimit(object):
 
     def __init__(
         self,
-        total_read=0,
-        total_write=0,
-        total=None,
-        default_read=0,
-        default_write=0,
-        default=None,
+        total_read: int = 0,
+        total_write: int = 0,
+        total: Optional[Capacity] = None,
+        default_read: int = 0,
+        default_write: int = 0,
+        default: Optional[Capacity] = None,
         table_caps=None,
-        callback=None,
+        callback: Optional[Callable] = None,
     ):
         if total is not None:
             self.total_cap = total
@@ -93,14 +104,14 @@ class RateLimit(object):
             self.default_cap = Capacity(default_read, default_write)
         self.table_caps = table_caps or {}
         self._old_default_return_capacity = False
-        self._consumed = {}
+        self._consumed: Dict[str, RemainingCapacity] = {}
         self._total_consumed = {
             "read": DecayingCapacityStore(),
             "write": DecayingCapacityStore(),
         }
         self.callback = callback
 
-    def get_consumed(self, key):
+    def get_consumed(self, key: str) -> RemainingCapacity:
         """ Getter for a consumed capacity storage dict """
         if key not in self._consumed:
             self._consumed[key] = {
@@ -109,7 +120,14 @@ class RateLimit(object):
             }
         return self._consumed[key]
 
-    def on_capacity(self, connection, command, query_kwargs, response, capacity):
+    def on_capacity(
+        self,
+        connection: "DynamoDBConnection",
+        command: str,
+        query_kwargs,
+        response,
+        capacity: ConsumedCapacity,
+    ):
         """ Hook that runs in response to a 'returned capacity' event """
         now = time.time()
         args = (connection, command, query_kwargs, response, capacity)

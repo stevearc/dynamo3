@@ -388,17 +388,17 @@ class IndexUpdate(object):
         self.extra = kwargs
 
     @classmethod
-    def update(cls, index_name, throughput):
+    def update(cls, index_name: str, throughput: Throughput) -> "IndexUpdate":
         """ Update the throughput on the index """
         return cls("Update", index_name, throughput=throughput)
 
     @classmethod
-    def create(cls, index):
+    def create(cls, index) -> "IndexUpdate":
         """ Create a new index """
         return cls("Create", None, index=index)
 
     @classmethod
-    def delete(cls, index_name):
+    def delete(cls, index_name: str) -> "IndexUpdate":
         """ Delete an index """
         return cls("Delete", index_name)
 

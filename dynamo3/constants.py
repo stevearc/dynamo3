@@ -1,48 +1,68 @@
 """ Constant values """
+from typing import FrozenSet
+
+from typing_extensions import Final, Literal
 
 # Data types
-NUMBER = "N"
-STRING = "S"
-BINARY = "B"
-NUMBER_SET = "NS"
-STRING_SET = "SS"
-BINARY_SET = "BS"
-LIST = "L"
-BOOL = "BOOL"
-MAP = "M"
-NULL = "NULL"
+NUMBER: Final[Literal["N"]] = "N"
+STRING: Final[Literal["S"]] = "S"
+BINARY: Final[Literal["B"]] = "B"
+NUMBER_SET: Final[Literal["NS"]] = "NS"
+STRING_SET: Final[Literal["SS"]] = "SS"
+BINARY_SET: Final[Literal["BS"]] = "BS"
+LIST: Final[Literal["L"]] = "L"
+BOOL: Final[Literal["BOOL"]] = "BOOL"
+MAP: Final[Literal["M"]] = "M"
+NULL: Final[Literal["NULL"]] = "NULL"
 
-NONE = "NONE"
+NONE: Final[Literal["NONE"]] = "NONE"
 
 # SELECT
-COUNT = "COUNT"
-ALL_ATTRIBUTES = "ALL_ATTRIBUTES"
-ALL_PROJECTED_ATTRIBUTES = "ALL_PROJECTED_ATTRIBUTES"
-SPECIFIC_ATTRIBUTES = "SPECIFIC_ATTRIBUTES"
+COUNT: Final[Literal["COUNT"]] = "COUNT"
+ALL_ATTRIBUTES: Final[Literal["ALL_ATTRIBUTES"]] = "ALL_ATTRIBUTES"
+ALL_PROJECTED_ATTRIBUTES: Final[
+    Literal["ALL_PROJECTED_ATTRIBUTES"]
+] = "ALL_PROJECTED_ATTRIBUTES"
+SPECIFIC_ATTRIBUTES: Final[Literal["SPECIFIC_ATTRIBUTES"]] = "SPECIFIC_ATTRIBUTES"
+SelectType = Literal[
+    Literal["COUNT"],
+    Literal["ALL_ATTRIBUTES"],
+    Literal["ALL_PROJECTED_ATTRIBUTES"],
+    Literal["SPECIFIC_ATTRIBUTES"],
+]
+NonCountSelectType = Literal[
+    Literal["ALL_ATTRIBUTES"],
+    Literal["ALL_PROJECTED_ATTRIBUTES"],
+    Literal["SPECIFIC_ATTRIBUTES"],
+]
 
 # ReturnValues
-ALL_OLD = "ALL_OLD"
-ALL_NEW = "ALL_NEW"
-UPDATED_OLD = "UPDATED_OLD"
-UPDATED_NEW = "UPDATED_NEW"
+ALL_OLD: Final[Literal["ALL_OLD"]] = "ALL_OLD"
+ALL_NEW: Final[Literal["ALL_NEW"]] = "ALL_NEW"
+UPDATED_OLD: Final[Literal["UPDATED_OLD"]] = "UPDATED_OLD"
+UPDATED_NEW: Final[Literal["UPDATED_NEW"]] = "UPDATED_NEW"
 
 # ReturnConsumedCapacity
-INDEXES = "INDEXES"
-TOTAL = "TOTAL"
+INDEXES: Final[Literal["INDEXES"]] = "INDEXES"
+TOTAL: Final[Literal["TOTAL"]] = "TOTAL"
+ReturnCapacityType = Literal[Literal["NONE"], Literal["INDEXES"], Literal["TOTAL"]]
 
 # ReturnItemCollectionMetrics
-SIZE = "SIZE"
+SIZE: Final[Literal["SIZE"]] = "SIZE"
+ReturnItemCollectionMetricsType = Literal[Literal["SIZE"], Literal["NONE"]]
 
 # Maximum number of keys in a BatchGetItem request
-MAX_GET_BATCH = 100
+MAX_GET_BATCH: Final[Literal[100]] = 100
 # Maximum number of items in a BatchWriteItem request
-MAX_WRITE_BATCH = 25
+MAX_WRITE_BATCH: Final[Literal[25]] = 25
 
-READ_COMMANDS = set(["batch_get_item", "get_item", "query", "scan"])
+READ_COMMANDS: Final[FrozenSet[str]] = frozenset(
+    ["batch_get_item", "get_item", "query", "scan"]
+)
 
 # Last fetched on 2015-11-10
 # http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ReservedWords.html
-RESERVED_WORDS = set(
+RESERVED_WORDS: Final[FrozenSet[str]] = frozenset(
     [
         "ABORT",
         "ABSOLUTE",
