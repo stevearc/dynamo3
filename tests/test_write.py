@@ -234,7 +234,7 @@ class TestBatchWrite(BaseSystemTest):
         self.dynamo.create_table("foobar", hash_key=hash_key)
         with self.dynamo.batch_write("foobar") as batch:
             batch.put({"id": "a"})
-        ret = list(self.dynamo.scan("foobar"))
+        ret = list(self.dynamo.scan2("foobar"))
         self.assertCountEqual(ret, [{"id": "a"}])
 
     def test_delete_items(self):
@@ -246,7 +246,7 @@ class TestBatchWrite(BaseSystemTest):
             batch.put({"id": "b"})
         with self.dynamo.batch_write("foobar") as batch:
             batch.delete({"id": "b"})
-        ret = list(self.dynamo.scan("foobar"))
+        ret = list(self.dynamo.scan2("foobar"))
         self.assertCountEqual(ret, [{"id": "a"}])
 
     def test_write_many(self):
@@ -256,12 +256,12 @@ class TestBatchWrite(BaseSystemTest):
         with self.dynamo.batch_write("foobar") as batch:
             for i in range(50):
                 batch.put({"id": str(i)})
-        count = self.dynamo.scan("foobar", count=True)
+        count = self.dynamo.scan2("foobar", select="COUNT")
         self.assertEqual(count, 50)
         with self.dynamo.batch_write("foobar") as batch:
             for i in range(50):
                 batch.delete({"id": str(i)})
-        count = self.dynamo.scan("foobar", count=True)
+        count = self.dynamo.scan2("foobar", select="COUNT")
         self.assertEqual(count, 0)
 
     def test_write_converts_none(self):
@@ -271,7 +271,7 @@ class TestBatchWrite(BaseSystemTest):
         self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
         with self.dynamo.batch_write("foobar") as batch:
             batch.put({"id": "a", "foo": None})
-        ret = list(self.dynamo.scan("foobar"))
+        ret = list(self.dynamo.scan2("foobar"))
         self.assertCountEqual(ret, [{"id": "a"}])
 
     def test_handle_unprocessed(self):
@@ -311,7 +311,7 @@ class TestBatchWrite(BaseSystemTest):
                 raise Exception
         except Exception:
             pass
-        ret = list(self.dynamo.scan("foobar"))
+        ret = list(self.dynamo.scan2("foobar"))
         self.assertEqual(len(ret), 0)
 
     def test_capacity(self):
@@ -361,7 +361,7 @@ class TestUpdateItem(BaseSystemTest):
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a"})
         self.dynamo.update_item("foobar", {"id": "a"}, [ItemUpdate.put("foo", "bar")])
-        item = list(self.dynamo.scan("foobar"))[0]
+        item = list(self.dynamo.scan2("foobar"))[0]
         self.assertEqual(item, {"id": "a", "foo": "bar"})
 
     def test_atomic_add_num(self):
@@ -370,7 +370,7 @@ class TestUpdateItem(BaseSystemTest):
         self.dynamo.put_item("foobar", {"id": "a"})
         self.dynamo.update_item("foobar", {"id": "a"}, [ItemUpdate.add("foo", 1)])
         self.dynamo.update_item("foobar", {"id": "a"}, [ItemUpdate.add("foo", 2)])
-        item = list(self.dynamo.scan("foobar"))[0]
+        item = list(self.dynamo.scan2("foobar"))[0]
         self.assertEqual(item, {"id": "a", "foo": 3})
 
     def test_atomic_add_set(self):
@@ -383,7 +383,7 @@ class TestUpdateItem(BaseSystemTest):
         self.dynamo.update_item(
             "foobar", {"id": "a"}, [ItemUpdate.add("foo", set([1, 2]))]
         )
-        item = list(self.dynamo.scan("foobar"))[0]
+        item = list(self.dynamo.scan2("foobar"))[0]
         self.assertEqual(item, {"id": "a", "foo": set([1, 2])})
 
     def test_delete_field(self):
@@ -391,7 +391,7 @@ class TestUpdateItem(BaseSystemTest):
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
         self.dynamo.update_item("foobar", {"id": "a"}, [ItemUpdate.delete("foo")])
-        item = list(self.dynamo.scan("foobar"))[0]
+        item = list(self.dynamo.scan2("foobar"))[0]
         self.assertEqual(item, {"id": "a"})
 
     def test_return_item(self):
@@ -472,7 +472,7 @@ class TestUpdateItem(BaseSystemTest):
         self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
         update = ItemUpdate.put("foo", None)
         self.dynamo.update_item("foobar", {"id": "a"}, [update])
-        ret = list(self.dynamo.scan("foobar"))
+        ret = list(self.dynamo.scan2("foobar"))
         self.assertCountEqual(ret, [{"id": "a"}])
 
     def test_condition_converts_eq_null(self):
@@ -512,7 +512,7 @@ class TestUpdateItem2(BaseSystemTest):
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a"})
         self.dynamo.update_item2("foobar", {"id": "a"}, "SET foo = :bar", bar="bar")
-        item = list(self.dynamo.scan("foobar"))[0]
+        item = list(self.dynamo.scan2("foobar"))[0]
         self.assertEqual(item, {"id": "a", "foo": "bar"})
 
     def test_atomic_add_num(self):
@@ -521,7 +521,7 @@ class TestUpdateItem2(BaseSystemTest):
         self.dynamo.put_item("foobar", {"id": "a"})
         self.dynamo.update_item2("foobar", {"id": "a"}, "ADD foo :foo", foo=1)
         self.dynamo.update_item2("foobar", {"id": "a"}, "ADD foo :foo", foo=2)
-        item = list(self.dynamo.scan("foobar"))[0]
+        item = list(self.dynamo.scan2("foobar"))[0]
         self.assertEqual(item, {"id": "a", "foo": 3})
 
     def test_atomic_add_set(self):
@@ -530,7 +530,7 @@ class TestUpdateItem2(BaseSystemTest):
         self.dynamo.put_item("foobar", {"id": "a"})
         self.dynamo.update_item2("foobar", {"id": "a"}, "ADD foo :foo", foo=set([1]))
         self.dynamo.update_item2("foobar", {"id": "a"}, "ADD foo :foo", foo=set([1, 2]))
-        item = list(self.dynamo.scan("foobar"))[0]
+        item = list(self.dynamo.scan2("foobar"))[0]
         self.assertEqual(item, {"id": "a", "foo": set([1, 2])})
 
     def test_delete_field(self):
@@ -538,7 +538,7 @@ class TestUpdateItem2(BaseSystemTest):
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
         self.dynamo.update_item2("foobar", {"id": "a"}, "REMOVE foo")
-        item = list(self.dynamo.scan("foobar"))[0]
+        item = list(self.dynamo.scan2("foobar"))[0]
         self.assertEqual(item, {"id": "a"})
 
     def test_return_item(self):
@@ -605,7 +605,7 @@ class TestUpdateItem2(BaseSystemTest):
             alias={"#f": "foo"},
             expr_values={":foo": 10},
         )
-        item = list(self.dynamo.scan("foobar"))[0]
+        item = list(self.dynamo.scan2("foobar"))[0]
         self.assertEqual(item, {"id": "a", "foo": 10})
 
 
@@ -622,7 +622,7 @@ class TestPutItem(BaseSystemTest):
         """ Can Put new item into table """
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a"})
-        ret = list(self.dynamo.scan("foobar"))[0]
+        ret = list(self.dynamo.scan2("foobar"))[0]
         self.assertEqual(ret, {"id": "a"})
 
     def test_overwrite_item(self):
@@ -699,7 +699,7 @@ class TestPutItem2(BaseSystemTest):
         """ Can Put new item into table """
         self.make_table()
         self.dynamo.put_item2("foobar", {"id": "a"})
-        ret = list(self.dynamo.scan("foobar"))[0]
+        ret = list(self.dynamo.scan2("foobar"))[0]
         self.assertEqual(ret, {"id": "a"})
 
     def test_overwrite_item(self):
@@ -768,7 +768,7 @@ class TestDeleteItem(BaseSystemTest):
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a"})
         self.dynamo.delete_item("foobar", {"id": "a"})
-        num = self.dynamo.scan("foobar", count=True)
+        num = self.dynamo.scan2("foobar", select="COUNT")
         self.assertEqual(num, 0)
 
     def test_return_item(self):
@@ -834,7 +834,7 @@ class TestDeleteItem2(BaseSystemTest):
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a"})
         self.dynamo.delete_item2("foobar", {"id": "a"})
-        num = self.dynamo.scan("foobar", count=True)
+        num = self.dynamo.scan2("foobar", select="COUNT")
         self.assertEqual(num, 0)
 
     def test_return_item(self):
