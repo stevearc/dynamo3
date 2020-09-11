@@ -6,7 +6,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Union, overloa
 import botocore.session
 from botocore.client import BaseClient
 from botocore.exceptions import ClientError
-from typing_extensions import Literal
+from typing_extensions import Literal, TypedDict
 
 from .batch import BatchWriter
 from .constants import (
@@ -31,12 +31,24 @@ from .result import (
     ResultSet,
     TableResultSet,
 )
-from .types import Dynamizer, is_null
+from .types import (
+    Dynamizer,
+    DynamoObject,
+    EncodedDynamoObject,
+    EncodedDynamoValue,
+    is_null,
+)
+
+ExpectedDict = TypedDict(
+    "ExpectedDict", {"Exists": bool, "Value": EncodedDynamoValue}, total=False
+)
 
 
-def build_expected(dynamizer: Dynamizer, expected: Dict[str, Any]) -> Dict[str, Any]:
+def build_expected(
+    dynamizer: Dynamizer, expected: DynamoObject
+) -> Dict[str, ExpectedDict]:
     """ Build the Expected parameters from a dict """
-    ret = {}
+    ret: Dict[str, ExpectedDict] = {}
     for k, v in expected.items():
         if is_null(v):
             ret[k] = {
@@ -53,8 +65,6 @@ def build_expected(dynamizer: Dynamizer, expected: Dict[str, Any]) -> Dict[str, 
 ExpressionValueType = Any
 ExpressionValuesType = Dict[str, ExpressionValueType]
 ExpressionAttributeNamesType = Dict[str, str]
-DynamoObject = Dict[str, Any]
-EncodedDynamoObject = Dict[str, Any]
 HookType = Literal[Literal["precall"], Literal["postcall"], Literal["capacity"]]
 
 
