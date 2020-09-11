@@ -1,6 +1,4 @@
 """ Test the write functions of Dynamo """
-from __future__ import unicode_literals
-
 from mock import ANY, MagicMock, call, patch
 
 from dynamo3 import (
