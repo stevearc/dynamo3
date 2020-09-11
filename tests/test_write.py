@@ -150,17 +150,6 @@ class TestUpdateTable(BaseSystemTest):
         table = self.dynamo.describe_table("foobar")
         self.assertEqual(table.throughput, tp)
 
-    def test_update_global_index_throughput_old(self):
-        """ Update throughput on a global index OLD API """
-        hash_key = DynamoKey("id", data_type=STRING)
-        index_field = DynamoKey("name")
-        index = GlobalIndex.all("name-index", index_field)
-        self.dynamo.create_table("foobar", hash_key=hash_key, global_indexes=[index])
-        tp = Throughput(2, 1)
-        self.dynamo.update_table("foobar", global_indexes={"name-index": tp})
-        table = self.dynamo.describe_table("foobar")
-        self.assertEqual(table.global_indexes[0].throughput, tp)
-
     def test_update_multiple_throughputs(self):
         """ Update table and global index throughputs """
         hash_key = DynamoKey("id", data_type=STRING)
@@ -169,7 +158,9 @@ class TestUpdateTable(BaseSystemTest):
         self.dynamo.create_table("foobar", hash_key=hash_key, global_indexes=[index])
         tp = Throughput(2, 1)
         self.dynamo.update_table(
-            "foobar", throughput=tp, global_indexes={"name-index": tp}
+            "foobar",
+            throughput=tp,
+            index_updates=[IndexUpdate.update("name-index", tp)],
         )
         table = self.dynamo.describe_table("foobar")
         self.assertEqual(table.throughput, tp)
@@ -559,7 +550,7 @@ class TestDeleteItem2(BaseSystemTest):
         self.assertTrue(isinstance(ret.indexes, dict))
         self.assertTrue(isinstance(ret.global_indexes, dict))
 
-    def test_expect_not_exists_deprecated(self):
+    def test_expect_not_exists(self):
         """ Delete can expect a field to not exist """
         self.make_table()
         self.dynamo.put_item2("foobar", {"id": "a", "foo": "bar"})
@@ -568,7 +559,7 @@ class TestDeleteItem2(BaseSystemTest):
                 "foobar", {"id": "a"}, condition="NOT attribute_exists(foo)"
             )
 
-    def test_expect_field_deprecated(self):
+    def test_expect_field(self):
         """ Delete can expect a field to have a value """
         self.make_table()
         self.dynamo.put_item2("foobar", {"id": "a", "foo": "bar"})

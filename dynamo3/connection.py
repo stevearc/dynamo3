@@ -975,9 +975,7 @@ class DynamoDBConnection(object):
         else:
             return ResultSet(self, limit, "query", **keywords)
 
-    def update_table(
-        self, tablename, throughput=None, global_indexes=None, index_updates=None
-    ):
+    def update_table(self, tablename, throughput=None, index_updates=None):
         """
         Update the throughput of a table and/or global indexes
 
@@ -987,9 +985,6 @@ class DynamoDBConnection(object):
             Name of the table to update
         throughput : :class:`~dynamo3.fields.Throughput`, optional
             The new throughput of the table
-        global_indexes : dict, optional
-            DEPRECATED. Use index_updates now.
-            Map of index name to :class:`~dynamo3.fields.Throughput`
         index_updates : list of :class:`~dynamo3.fields.IndexUpdate`, optional
             List of IndexUpdates to perform
 
@@ -1004,16 +999,6 @@ class DynamoDBConnection(object):
                 all_attrs.update(update.get_attrs())
                 updates.append(update.serialize())
             kwargs["GlobalSecondaryIndexUpdates"] = updates
-        elif global_indexes is not None:
-            kwargs["GlobalSecondaryIndexUpdates"] = [
-                {
-                    "Update": {
-                        "IndexName": key,
-                        "ProvisionedThroughput": value.schema(),
-                    }
-                }
-                for key, value in global_indexes.items()
-            ]
         if all_attrs:
             attr_definitions = [attr.definition() for attr in all_attrs]
             kwargs["AttributeDefinitions"] = attr_definitions
