@@ -64,23 +64,6 @@ class TestMisc(BaseSystemTest):
         """ Connection can access name of connected region """
         self.assertTrue(isinstance(self.dynamo.region, str))
 
-    def test_connect_to_region_old(self):
-        """ Can connect to a dynamo region """
-        conn = DynamoDBConnection.connect_to_region("us-west-1")
-        self.assertIsNotNone(conn.host)
-
-    def test_connect_to_region_creds_old(self):
-        """ Can connect to a dynamo region with credentials """
-        conn = DynamoDBConnection.connect_to_region(
-            "us-west-1", access_key="abc", secret_key="12345"
-        )
-        self.assertIsNotNone(conn.host)
-
-    def test_connect_to_host_without_session_old(self):
-        """ Can connect to a dynamo host without passing in a session """
-        conn = DynamoDBConnection.connect_to_host(access_key="abc", secret_key="12345")
-        self.assertIsNotNone(conn.host)
-
     def test_connect_to_region(self):
         """ Can connect to a dynamo region """
         conn = DynamoDBConnection.connect("us-west-1")

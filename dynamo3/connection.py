@@ -1,6 +1,5 @@
 """ Connection class for DynamoDB """
 import time
-import warnings
 from contextlib import contextmanager
 
 import botocore.session
@@ -91,87 +90,6 @@ class DynamoDBConnection(object):
     def region(self):
         """ The name of the current connected region """
         return self.client.meta.region_name
-
-    @classmethod
-    def connect_to_region(
-        cls, region, session=None, access_key=None, secret_key=None, **kwargs
-    ):
-        """
-        Connect to an AWS region.
-
-        This method has been deprecated in favor of :meth:`~.connect`
-
-        Parameters
-        ----------
-        region : str
-            Name of an AWS region
-        session : :class:`~botocore.session.Session`, optional
-            The Session object to use for the connection
-        access_key : str, optional
-            If session is None, set this access key when creating the session
-        secret_key : str, optional
-            If session is None, set this secret key when creating the session
-        **kwargs : dict
-            Keyword arguments to pass to the constructor
-
-        """
-        warnings.warn(
-            "connect_to_region is deprecated and will be removed. "
-            "Use connect instead."
-        )
-        if session is None:
-            session = botocore.session.get_session()
-            if access_key is not None:
-                session.set_credentials(access_key, secret_key)
-        client = session.create_client("dynamodb", region)
-        return cls(client, **kwargs)
-
-    @classmethod
-    def connect_to_host(
-        cls,
-        host="localhost",
-        port=8000,
-        is_secure=False,
-        session=None,
-        access_key=None,
-        secret_key=None,
-        **kwargs
-    ):
-        """
-        Connect to a specific host.
-
-        This method has been deprecated in favor of :meth:`~.connect`
-
-        Parameters
-        ----------
-        host : str, optional
-            Address of the host (default 'localhost')
-        port : int, optional
-            Connect to the host on this port (default 8000)
-        is_secure : bool, optional
-            Enforce https connection (default False)
-        session : :class:`~botocore.session.Session`, optional
-            The Session object to use for the connection
-        access_key : str, optional
-            If session is None, set this access key when creating the session
-        secret_key : str, optional
-            If session is None, set this secret key when creating the session
-        **kwargs : dict
-            Keyword arguments to pass to the constructor
-
-        """
-        warnings.warn(
-            "connect_to_host is deprecated and will be removed. " "Use connect instead."
-        )
-        if session is None:
-            session = botocore.session.get_session()
-            if access_key is not None:
-                session.set_credentials(access_key, secret_key)
-        url = "http://%s:%d" % (host, port)
-        client = session.create_client(
-            "dynamodb", "local", endpoint_url=url, use_ssl=is_secure
-        )
-        return cls(client, **kwargs)
 
     @classmethod
     def connect(
