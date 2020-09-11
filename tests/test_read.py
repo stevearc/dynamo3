@@ -664,56 +664,6 @@ class TestBatchGet(BaseSystemTest):
         self.assertEqual(rs.consumed_capacity, capacity)
 
 
-class TestGetItem(BaseSystemTest):
-
-    """ Tests for the GetItem call """
-
-    def make_table(self):
-        """ Convenience method for making a table """
-        hash_key = DynamoKey("id")
-        self.dynamo.create_table("foobar", hash_key=hash_key)
-
-    def test_get(self):
-        """ Can fetch an item by the primary key """
-        self.make_table()
-        item = {"id": "a", "foo": "bar"}
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.get_item("foobar", {"id": "a"})
-        self.assertTrue(ret.exists)
-        self.assertEqual(ret, item)
-
-    def test_get_missing(self):
-        """ Fetching a missing item returns None """
-        self.make_table()
-        ret = self.dynamo.get_item("foobar", {"id": "a"})
-        self.assertFalse(ret.exists)
-
-    def test_attribute(self):
-        """ Can fetch only certain attributes """
-        self.make_table()
-        item = {"id": "a", "foo": "bar"}
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.get_item("foobar", {"id": "a"}, attributes=["id"])
-        self.assertEqual(ret, {"id": "a"})
-
-    def test_capacity(self):
-        """ Can return the consumed capacity as well """
-        self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        ret = self.dynamo.get_item("foobar", {"id": "a"}, return_capacity=TOTAL)
-        self.assertTrue(is_number(ret.capacity))
-        self.assertTrue(is_number(ret.table_capacity))
-        self.assertTrue(isinstance(ret.indexes, dict))
-        self.assertTrue(isinstance(ret.global_indexes, dict))
-
-    def test_result_repr(self):
-        """ Result repr should not be the same as a dict """
-        d = {"a": "b"}
-        response = {"Item": self.dynamo.dynamizer.encode_keys(d)}
-        result = Result(self.dynamo.dynamizer, response, "Item")
-        self.assertNotEqual(repr(result), repr(d))
-
-
 class TestGetItem2(BaseSystemTest):
 
     """ Tests for new GetItem API """

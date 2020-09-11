@@ -467,7 +467,7 @@ class TestPutItem2(BaseSystemTest):
         self.make_table()
         self.dynamo.put_item2("foobar", {"id": "a", "foo": "bar"})
         self.dynamo.put_item2("foobar", {"id": "a", "foo": "baz"})
-        ret = self.dynamo.get_item("foobar", {"id": "a"})
+        ret = self.dynamo.get_item2("foobar", {"id": "a"})
         self.assertEqual(ret, {"id": "a", "foo": "baz"})
 
     def test_expect_condition(self):

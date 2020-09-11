@@ -33,7 +33,7 @@ class BaseSystemTest(unittest.TestCase):
 
     """ Base class for system tests """
 
-    dynamo = None
+    dynamo: DynamoDBConnection = None  # type: ignore
 
     def setUp(self):
         super(BaseSystemTest, self).setUp()

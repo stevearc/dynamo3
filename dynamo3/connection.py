@@ -507,43 +507,6 @@ class DynamoDBConnection(object):
         if result:
             return Result(self.dynamizer, result, "Attributes")
 
-    def get_item(
-        self, tablename, key, attributes=None, consistent=False, return_capacity=None
-    ):
-        """
-        Fetch a single item from a table
-
-        This uses the older version of the DynamoDB API.
-        See also: :meth:`~.get_item2`.
-
-        Parameters
-        ----------
-        tablename : str
-            Name of the table to fetch from
-        key : dict
-            Primary key dict specifying the hash key and, if applicable, the
-            range key of the item.
-        attributes : list, optional
-            If present, only fetch these attributes from the item
-        consistent : bool, optional
-            Perform a strongly consistent read of the data (default False)
-        return_capacity : {NONE, INDEXES, TOTAL}, optional
-            INDEXES will return the consumed capacity for indexes, TOTAL will
-            return the consumed capacity for the table and the indexes.
-            (default NONE)
-
-        """
-        kwargs = {
-            "TableName": tablename,
-            "Key": self.dynamizer.encode_keys(key),
-            "ConsistentRead": consistent,
-            "ReturnConsumedCapacity": self._default_capacity(return_capacity),
-        }
-        if attributes is not None:
-            kwargs["AttributesToGet"] = attributes
-        data = self.call("get_item", **kwargs)
-        return Result(self.dynamizer, data, "Item")
-
     def get_item2(
         self,
         tablename: str,
