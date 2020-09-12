@@ -1,6 +1,15 @@
 Changelog
 =========
 
+1.0.0 (upcoming)
+----------------
+* Removed the legacy API (scan, query, update_item, delete_item, put_item, get_item)
+* Renamed the new API methods to match the old ones (e.g. scan2 -> scan, query2 -> query)
+* Moved constant values into ``dynamo3.constants``. This is where you can now find STRING, BINARY, etc
+* Added mypy typing where possible
+* Drop support for Python 2
+* Add support for table billing mode (aka on-demand tables)
+
 0.4.10
 ------
 * Fixed DynamoDB Local link in testing framework
