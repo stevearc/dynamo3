@@ -8,7 +8,6 @@ from typing import (
     Iterable,
     Iterator,
     List,
-    NamedTuple,
     Optional,
     Union,
     overload,
