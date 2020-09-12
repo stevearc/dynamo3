@@ -96,6 +96,46 @@ def build_expression_values(
     return None
 
 
+def build_sse_dict(
+    sse: Union[None, bool, str] = None,
+) -> Dict[str, Any]:
+    if sse is None:
+        return {}
+    if isinstance(sse, bool):
+        return {
+            "SSESpecification": {
+                "Enabled": sse,
+            }
+        }
+    else:
+        return {
+            "SSESpecification": {
+                "Enabled": True,
+                "KMSMasterKeyId": sse,
+            }
+        }
+
+
+def build_stream_dict(
+    stream: Union[None, Literal[False], StreamViewType],
+) -> Dict[str, Any]:
+    if stream is None:
+        return {}
+    if stream:
+        return {
+            "StreamSpecification": {
+                "StreamEnabled": True,
+                "StreamViewType": stream,
+            }
+        }
+    else:
+        return {
+            "StreamSpecification": {
+                "StreamEnabled": False,
+            }
+        }
+
+
 class DynamoDBConnection(object):
 
     """
@@ -386,9 +426,9 @@ class DynamoDBConnection(object):
         global_indexes: Optional[List[GlobalIndex]] = None,
         billing_mode: Optional[BillingModeType] = None,
         throughput: Optional[ThroughputOrTuple] = None,
-        stream: Optional[StreamViewType] = None,
+        stream: Union[None, Literal[False], StreamViewType] = None,
         tags: Optional[Dict[str, str]] = None,
-        kms_id: Optional[str] = None,
+        sse: Union[None, bool, str] = None,
         wait: bool = False,
     ) -> Optional[Table]:
         """
@@ -407,6 +447,10 @@ class DynamoDBConnection(object):
         global_indexes : list, optional
             List of :class:`~dynamo3.fields.GlobalIndex`
         billing_mode : str, optional
+        sse : bool or str, optional
+            True/False will enable/disable server side encryption using the default
+            DynamoDB customer master key alias/aws/dynamodb. If this is a string, it
+            will enable SSE and be used as the AWS KMS customer master key (CMK)
         throughput : :class:`~dynamo3.fields.Throughput`, optional
             The throughput of the table
 
@@ -430,11 +474,7 @@ class DynamoDBConnection(object):
             kwargs["BillingMode"] = (
                 PAY_PER_REQUEST if throughput is None else PROVISIONED
             )
-        if stream is not None:
-            kwargs["StreamSpecification"] = {
-                "StreamEnabled": True,
-                "StreamViewType": stream,
-            }
+        kwargs.update(build_stream_dict(stream))
         if indexes:
             kwargs["LocalSecondaryIndexes"] = [idx.schema(hash_key) for idx in indexes]
             for idx in indexes:
@@ -450,12 +490,7 @@ class DynamoDBConnection(object):
                 if gidx.range_key is not None:
                     all_attrs.add(gidx.range_key)
 
-        if kms_id is not None:
-            kwargs["SSESpecification"] = {
-                "Enabled": True,
-                "KMSMasterKeyId": kms_id,
-                "SSEType": "KMS",
-            }
+        kwargs.update(build_sse_dict(sse))
         if tags is not None:
             kwargs["Tags"] = encode_tags(tags)
         kwargs["AttributeDefinitions"] = [attr.definition() for attr in all_attrs]
@@ -1137,6 +1172,8 @@ class DynamoDBConnection(object):
         throughput: Optional[ThroughputOrTuple] = None,
         index_updates: Optional[List[IndexUpdate]] = None,
         billing_mode: Optional[BillingModeType] = None,
+        sse: Union[None, bool, str] = None,
+        stream: Union[None, Literal[False], StreamViewType] = None,
     ) -> Table:
         """
         Update the throughput of a table and/or global indexes
@@ -1149,6 +1186,11 @@ class DynamoDBConnection(object):
             The new throughput of the table
         index_updates : list of :class:`~dynamo3.fields.IndexUpdate`, optional
             List of IndexUpdates to perform
+        billing_mode : str, optional
+        sse : bool or str, optional
+            True/False will enable/disable server side encryption using the default
+            DynamoDB customer master key alias/aws/dynamodb. If this is a string, it
+            will enable SSE and be used as the AWS KMS customer master key (CMK)
 
         """
         kwargs: Dict[str, Any] = {"TableName": tablename}
@@ -1166,5 +1208,7 @@ class DynamoDBConnection(object):
         if all_attrs:
             attr_definitions = [attr.definition() for attr in all_attrs]
             kwargs["AttributeDefinitions"] = attr_definitions
+        kwargs.update(build_sse_dict(sse))
+        kwargs.update(build_stream_dict(stream))
         response = self.call("update_table", **kwargs)
         return Table.from_response(response["TableDescription"])

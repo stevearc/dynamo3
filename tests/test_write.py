@@ -14,6 +14,7 @@ from dynamo3.batch import BatchWriter
 from dynamo3.constants import (
     ALL_NEW,
     ALL_OLD,
+    NEW_AND_OLD_IMAGES,
     NUMBER,
     PAY_PER_REQUEST,
     PROVISIONED,
@@ -234,6 +235,19 @@ class TestUpdateTable(BaseSystemTest):
         )
         self.assertEqual(new_table.billing_mode, PROVISIONED)
         self.assertEqual(new_table.throughput, Throughput(2, 3))
+
+    def test_update_streams(self):
+        """ Update a table streams """
+        hash_key = DynamoKey("id", data_type=STRING)
+        table = self.dynamo.create_table(
+            "foobar",
+            hash_key=hash_key,
+        )
+        self.assertIsNone(table.stream_type)
+        table = self.dynamo.update_table("foobar", stream=NEW_AND_OLD_IMAGES)
+        self.assertEqual(table.stream_type, NEW_AND_OLD_IMAGES)
+        table = self.dynamo.update_table("foobar", stream=False)
+        self.assertIsNone(table.stream_type)
 
 
 class TestBatchWrite(BaseSystemTest):

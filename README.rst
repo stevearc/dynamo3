@@ -26,7 +26,6 @@ Features
 
 DynamoDB features that are not yet supported
 --------------------------------------------
-* update_table - SSE, streaming
 * Reading from streams
 * Adding/removing tags on a table
 * TTL

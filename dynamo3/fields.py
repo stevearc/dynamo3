@@ -538,7 +538,7 @@ class Table(object):
         stream_type = None
         if (
             "StreamSpecification" in response
-            and response["StreamSpecification"]["Enabled"]
+            and response["StreamSpecification"]["StreamEnabled"]
         ):
             stream_type = response["StreamSpecification"]["StreamViewType"]
 
