@@ -62,6 +62,13 @@ TableStatusType = Literal[
     Literal["ARCHIVED"],
 ]
 
+IndexStatusType = Literal[
+    Literal["CREATING"],
+    Literal["UPDATING"],
+    Literal["DELETING"],
+    Literal["ACTIVE"],
+]
+
 # Billing mode
 PROVISIONED: Final[Literal["PROVISIONED"]] = "PROVISIONED"
 PAY_PER_REQUEST: Final[Literal["PAY_PER_REQUEST"]] = "PAY_PER_REQUEST"

@@ -157,7 +157,7 @@ class Binary(object):
         return not self.__eq__(other)
 
     def __repr__(self):
-        return "Binary(%s)" % self.value
+        return "Binary(%r)" % self.value
 
 
 def encode_set(
@@ -270,33 +270,33 @@ class Dynamizer(object):
         """ Encode a value into the Dynamo dict format """
         return dict([self.raw_encode(value)])  # type: ignore
 
-    def decode_keys(self, keys: Dict[str, DecodedDynamoObject]) -> DynamoObject:
+    def decode_keys(self, keys: dict) -> DynamoObject:
         """ Run the decoder on a dict of values """
         return {k: self.decode(v) for k, v in keys.items()}
 
-    def decode(self, dynamo_value: DecodedDynamoObject) -> Optional[Any]:
+    def decode(self, dynamo_value: dict) -> Optional[Any]:
         """ Decode a dynamo value into a python value """
         # mypy can't do the type refinement needed here :(
         type, value = next(iter(dynamo_value.items()))
         if type == STRING:
             return value
         elif type == BINARY:
-            return Binary(value)  # type: ignore
+            return Binary(value)
         elif type == NUMBER:
-            return Decimal(value)  # type: ignore
+            return Decimal(value)
         elif type == STRING_SET:
-            return set(value)  # type: ignore
+            return set(value)
         elif type == BINARY_SET:
-            return set((Binary(v) for v in value))  # type: ignore
+            return set((Binary(v) for v in value))
         elif type == NUMBER_SET:
-            return set((Decimal(v) for v in value))  # type: ignore
+            return set((Decimal(v) for v in value))
         elif type == BOOL:
             return value
         elif type == LIST:
-            return [self.decode(v) for v in value]  # type: ignore
+            return [self.decode(v) for v in value]
         elif type == MAP:
             decoded_dict = {}
-            for k, v in value.items():  # type: ignore
+            for k, v in value.items():
                 decoded_dict[k] = self.decode(v)
             return decoded_dict
         elif type == NULL:

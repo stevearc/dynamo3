@@ -106,21 +106,22 @@ class TestMisc(BaseSystemTest):
         self.assertIsNone(ret)
 
     def test_magic_table_props(self):
-        """ Table magically looks up properties on response object """
+        """ Table can look up properties on response object """
         hash_key = DynamoKey("id")
         self.dynamo.create_table("foobar", hash_key=hash_key)
         ret = self.dynamo.describe_table("foobar")
-        self.assertIsNotNone(ret.item_count)
-        with self.assertRaises(AttributeError):
-            self.assertIsNotNone(ret.crazy_property)
+        assert ret is not None
+        self.assertEqual(ret.item_count, ret["ItemCount"])
+        with self.assertRaises(KeyError):
+            self.assertIsNotNone(ret["Missing"])
 
     def test_magic_index_props(self):
-        """ Index magically looks up properties on response object """
+        """ Index can look up properties on response object """
         index = GlobalIndex.all("idx-name", DynamoKey("id"))
         index.response = {"FooBar": 2}
-        self.assertEqual(index.foo_bar, 2)
-        with self.assertRaises(AttributeError):
-            self.assertIsNotNone(index.crazy_property)
+        self.assertEqual(index["FooBar"], 2)
+        with self.assertRaises(KeyError):
+            self.assertIsNotNone(index["Missing"])
 
     def test_describe_during_delete(self):
         """ Describing a table during a delete operation should not crash """
@@ -315,7 +316,7 @@ class TestDataTypes(BaseSystemTest):
 
     def test_binary_repr(self):
         """ Binary repr should wrap the contained value """
-        self.assertEqual(repr(Binary("a")), "Binary(%s)" % b"a")
+        self.assertEqual(repr(Binary("a")), "Binary(%r)" % b"a")
 
     def test_binary_converts_unicode(self):
         """ Binary will convert unicode to bytes """
@@ -325,7 +326,7 @@ class TestDataTypes(BaseSystemTest):
     def test_binary_force_string(self):
         """ Binary must wrap a string type """
         with self.assertRaises(TypeError):
-            Binary(2)
+            Binary(2)  # type: ignore
 
     def test_bool(self):
         """ Store and retrieve a boolean """
@@ -670,7 +671,7 @@ class TestHooks(BaseSystemTest):
 
     def test_subscribe(self):
         """ Can subscribe and unsubscribe from hooks """
-        hook = object()
+        hook = lambda: None
         self.dynamo.subscribe("precall", hook)
         self.assertEqual(len(self.dynamo._hooks["precall"]), 1)
         self.dynamo.unsubscribe("precall", hook)

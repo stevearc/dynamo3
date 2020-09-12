@@ -156,6 +156,7 @@ class TestUpdateTable(BaseSystemTest):
         tp = Throughput(3, 4)
         self.dynamo.update_table("foobar", throughput=tp)
         table = self.dynamo.describe_table("foobar")
+        assert table is not None
         self.assertEqual(table.throughput, tp)
 
     def test_update_multiple_throughputs(self):
@@ -176,6 +177,7 @@ class TestUpdateTable(BaseSystemTest):
             index_updates=[IndexUpdate.update("name-index", tp)],
         )
         table = self.dynamo.describe_table("foobar")
+        assert table is not None
         self.assertEqual(table.throughput, tp)
         self.assertEqual(table.global_indexes[0].throughput, tp)
 
@@ -190,6 +192,7 @@ class TestUpdateTable(BaseSystemTest):
             "foobar", index_updates=[IndexUpdate.update("name-index", tp)]
         )
         table = self.dynamo.describe_table("foobar")
+        assert table is not None
         self.assertEqual(table.global_indexes[0].throughput, tp)
 
     def test_delete_index(self):
@@ -202,9 +205,10 @@ class TestUpdateTable(BaseSystemTest):
             "foobar", index_updates=[IndexUpdate.delete("name-index")]
         )
         table = self.dynamo.describe_table("foobar")
+        assert table is not None
         self.assertTrue(
             len(table.global_indexes) == 0
-            or table.global_indexes[0].index_status == "DELETING"
+            or table.global_indexes[0].status == "DELETING"
         )
 
     def test_create_index(self):
@@ -215,6 +219,7 @@ class TestUpdateTable(BaseSystemTest):
         index = GlobalIndex.all("name-index", index_field, hash_key)
         self.dynamo.update_table("foobar", index_updates=[IndexUpdate.create(index)])
         table = self.dynamo.describe_table("foobar")
+        assert table is not None
         self.assertEqual(len(table.global_indexes), 1)
 
     def test_index_update_equality(self):
@@ -230,10 +235,12 @@ class TestUpdateTable(BaseSystemTest):
         table = self.dynamo.create_table(
             "foobar", hash_key=hash_key, billing_mode=PAY_PER_REQUEST
         )
+        assert table is not None
         self.assertEqual(table.billing_mode, PAY_PER_REQUEST)
         new_table = self.dynamo.update_table(
             "foobar", billing_mode=PROVISIONED, throughput=(2, 3)
         )
+        assert new_table is not None
         self.assertEqual(new_table.billing_mode, PROVISIONED)
         self.assertEqual(new_table.throughput, Throughput(2, 3))
 
@@ -244,10 +251,13 @@ class TestUpdateTable(BaseSystemTest):
             "foobar",
             hash_key=hash_key,
         )
+        assert table is not None
         self.assertIsNone(table.stream_type)
         table = self.dynamo.update_table("foobar", stream=NEW_AND_OLD_IMAGES)
+        assert table is not None
         self.assertEqual(table.stream_type, NEW_AND_OLD_IMAGES)
         table = self.dynamo.update_table("foobar", stream=False)
+        assert table is not None
         self.assertIsNone(table.stream_type)
 
 
@@ -283,8 +293,10 @@ class TestTTL(BaseSystemTest):
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         table = self.dynamo.describe_table("foobar")
+        assert table is not None
         self.assertIsNone(table.ttl)
         table = self.dynamo.describe_table("foobar", include_ttl=True)
+        assert table is not None
         self.assertEqual(table.ttl, TTL.default())
 
 
@@ -406,6 +418,7 @@ class TestBatchWrite(BaseSystemTest):
             batch = self.dynamo.batch_write("foobar", return_capacity="INDEXES")
             with batch:
                 batch.put({"id": "a"})
+        assert batch.consumed_capacity is not None
         self.assertEqual(batch.consumed_capacity.total, Capacity(0, 3))
 
 
@@ -473,6 +486,8 @@ class TestUpdateItem2(BaseSystemTest):
             return_capacity=TOTAL,
             foo="bar",
         )
+        assert ret is not None
+        assert ret.consumed_capacity is not None
         self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
 
     def test_expect_condition(self):
@@ -579,6 +594,7 @@ class TestPutItem2(BaseSystemTest):
         ret = self.dynamo.put_item(
             "foobar", {"id": "a"}, returns=ALL_OLD, return_capacity=TOTAL
         )
+        assert ret.consumed_capacity is not None
         self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
 
 
@@ -613,6 +629,7 @@ class TestDeleteItem2(BaseSystemTest):
         ret = self.dynamo.delete_item(
             "foobar", {"id": "a"}, returns=ALL_OLD, return_capacity=TOTAL
         )
+        assert ret.consumed_capacity is not None
         self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
 
     def test_expect_not_exists(self):

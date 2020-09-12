@@ -91,7 +91,7 @@ class RateLimit(object):
         default_read: int = 0,
         default_write: int = 0,
         default: Optional[Capacity] = None,
-        table_caps: Optional[Dict[str, Capacity]] = None,
+        table_caps: Optional[Dict[str, Any]] = None,
         callback: Optional[Callable] = None,
     ):
         if total is not None:

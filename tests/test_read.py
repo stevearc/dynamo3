@@ -132,6 +132,7 @@ class TestQuery2(BaseSystemTest):
         self.dynamo.put_item("foobar", {"id": "a", "num": 1})
         ret = self.dynamo.query("foobar", "id = :id", return_capacity=TOTAL, id="a")
         list(ret)
+        assert ret.consumed_capacity is not None
         self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
 
     def test_eq(self):
@@ -354,6 +355,7 @@ class TestScan2(BaseSystemTest):
         self.dynamo.put_item("foobar", {"id": "a"})
         ret = self.dynamo.scan("foobar", return_capacity=TOTAL)
         list(ret)
+        assert ret.consumed_capacity is not None
         self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
 
     def test_eq(self):
@@ -621,35 +623,38 @@ class TestBatchGet(BaseSystemTest):
     def test_capacity(self):
         """ Can return consumed capacity """
         conn = MagicMock()
+        response_cap = {
+            "TableName": "foobar",
+            "CapacityUnits": 6,
+            "Table": {
+                "CapacityUnits": 1,
+            },
+            "LocalSecondaryIndexes": {
+                "l-index": {
+                    "CapacityUnits": 2,
+                },
+            },
+            "GlobalSecondaryIndexes": {
+                "g-index": {
+                    "CapacityUnits": 3,
+                },
+            },
+        }
         response = {
             "Responses": {
                 "foo": [],
             },
-            "ConsumedCapacity": [
-                {
-                    "TableName": "foobar",
-                    "CapacityUnits": 6,
-                    "Table": {
-                        "CapacityUnits": 1,
-                    },
-                    "LocalSecondaryIndexes": {
-                        "l-index": {
-                            "CapacityUnits": 2,
-                        },
-                    },
-                    "GlobalSecondaryIndexes": {
-                        "g-index": {
-                            "CapacityUnits": 3,
-                        },
-                    },
-                }
-            ],
+            "ConsumedCapacity": [response_cap],
         }
-        capacity = ConsumedCapacity.from_response(response["ConsumedCapacity"][0], True)
+        capacity = ConsumedCapacity.from_response(response_cap, True)
         response["consumed_capacity"] = [capacity]
         conn.call.return_value = response
         rs = GetResultSet(conn, "foo", [{"id": "a"}])
         list(rs)
+        assert rs.consumed_capacity is not None
+        assert rs.consumed_capacity.table_capacity is not None
+        assert rs.consumed_capacity.local_index_capacity is not None
+        assert rs.consumed_capacity.global_index_capacity is not None
         self.assertEqual(rs.consumed_capacity.total.read, 6)
         self.assertEqual(rs.consumed_capacity.table_capacity.read, 1)
         self.assertEqual(rs.consumed_capacity.local_index_capacity["l-index"].read, 2)
@@ -704,6 +709,7 @@ class TestGetItem2(BaseSystemTest):
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a"})
         ret = self.dynamo.get_item("foobar", {"id": "a"}, return_capacity=TOTAL)
+        assert ret.consumed_capacity is not None
         self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
 
     def test_result_repr(self):

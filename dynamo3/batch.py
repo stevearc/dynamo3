@@ -7,6 +7,7 @@ from .constants import (
     ReturnCapacityType,
     ReturnItemCollectionMetricsType,
 )
+from .result import ConsumedCapacity
 from .types import Dynamizer, DynamoObject, is_null
 
 if TYPE_CHECKING:
@@ -59,7 +60,7 @@ class BatchWriter(object):
         self._to_delete: List[DynamoObject] = []
         self._unprocessed: List[DynamoObject] = []
         self._attempt = 0
-        self.consumed_capacity = None
+        self.consumed_capacity: Optional[ConsumedCapacity] = None
 
     def __enter__(self):
         return self

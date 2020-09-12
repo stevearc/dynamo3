@@ -24,6 +24,7 @@ import subprocess
 import tarfile
 import tempfile
 from contextlib import closing
+from typing import Optional
 from urllib.request import urlretrieve
 
 import nose
@@ -33,6 +34,9 @@ from . import DynamoDBConnection
 DYNAMO_LOCAL = (
     "https://s3-us-west-2.amazonaws.com/dynamodb-local/dynamodb_local_latest.tar.gz"
 )
+
+DEFAULT_REGION = "us-east-1"
+DEFAULT_PORT = 8000
 
 
 class DynamoLocalPlugin(nose.plugins.Plugin):
@@ -48,40 +52,39 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
 
     def __init__(self):
         super(DynamoLocalPlugin, self).__init__()
-        self._dynamo_local = None
-        self._dynamo = None
-        self.port = None
-        self.path = None
-        self.link = None
-        self.region = None
-        self.live = False
+        self._dynamo_local: Optional[subprocess.Popen] = None
+        self._dynamo: Optional[DynamoDBConnection] = None
+        self.port: int = DEFAULT_PORT
+        self.path: str = ""
+        self.link: str = ""
+        self.region: str = DEFAULT_REGION
+        self.live: bool = False
 
     def options(self, parser, env):
         super(DynamoLocalPlugin, self).options(parser, env)
         parser.add_option(
             "--dynamo-port",
             type=int,
-            default=8000,
-            help="Run the DynamoDB Local service on this port " "(default 8000)",
+            default=DEFAULT_PORT,
+            help="Run the DynamoDB Local service on this port " "(default %(default)s)",
         )
         default_path = os.path.join(tempfile.gettempdir(), "dynamolocal")
         parser.add_option(
             "--dynamo-path",
             default=default_path,
             help="Download the Dynamo Local server to this "
-            "directory (default '%s')" % default_path,
+            "directory (default '%(default)s')",
         )
         parser.add_option(
             "--dynamo-link",
             default=DYNAMO_LOCAL,
             help="The link to the dynamodb local server code "
-            "(default '%s')" % DYNAMO_LOCAL,
+            "(default '%(default)s')",
         )
-        default_region = "us-east-1"
         parser.add_option(
             "--dynamo-region",
-            default=default_region,
-            help="Connect to this AWS region (default %s)" % default_region,
+            default=DEFAULT_REGION,
+            help="Connect to this AWS region (default %(default)s)",
         )
         parser.add_option(
             "--dynamo-live",
@@ -151,7 +154,9 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
         """ terminate the dynamo local service """
         if self._dynamo_local is not None:
             self._dynamo_local.terminate()
-            if not result.wasSuccessful():  # pragma: no cover
+            if (
+                not result.wasSuccessful() and self._dynamo_local.stdout is not None
+            ):  # pragma: no cover
                 output = self._dynamo_local.stdout.read()
                 encoding = locale.getdefaultlocale()[1] or "utf-8"
                 print("DynamoDB Local output:")

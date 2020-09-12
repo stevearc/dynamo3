@@ -34,6 +34,10 @@ class Count(int):
 
     """ Wrapper for response to query with Select=COUNT """
 
+    count: int
+    scanned_count: int
+    consumed_capacity: Optional["Capacity"]
+
     def __new__(
         cls,
         count: int,
@@ -293,7 +297,7 @@ class ResultSet(PagedIterator):
         self.args = args
         self.kwargs = kwargs
         self.last_evaluated_key: Optional[dict] = None
-        self.consumed_capacity = None
+        self.consumed_capacity: Optional[ConsumedCapacity] = None
 
     @property
     def can_fetch_more(self) -> bool:
@@ -347,7 +351,7 @@ class GetResultSet(PagedIterator):
         self.alias = alias
         self.return_capacity = return_capacity
         self._attempt = 0
-        self.consumed_capacity = None
+        self.consumed_capacity: Optional[ConsumedCapacity] = None
 
     @property
     def can_fetch_more(self) -> bool:

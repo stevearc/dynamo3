@@ -591,12 +591,12 @@ class DynamoDBConnection(object):
         self,
         tablename: str,
         item: DynamoObject,
-        expr_values: Optional[ExpressionValuesType],
-        alias: Optional[ExpressionAttributeNamesType],
-        condition: Optional[str],
-        returns: Union[None, Literal["NONE"]],
-        return_capacity: Optional[ReturnCapacityType],
-        return_item_collection_metrics: Optional[ReturnItemCollectionMetricsType],
+        expr_values: Optional[ExpressionValuesType] = ...,
+        alias: Optional[ExpressionAttributeNamesType] = ...,
+        condition: Optional[str] = ...,
+        return_capacity: Optional[ReturnCapacityType] = ...,
+        return_item_collection_metrics: Optional[ReturnItemCollectionMetricsType] = ...,
+        returns: Union[None, Literal["NONE"]] = ...,
         **kwargs: ExpressionValueType
     ) -> None:
         ...
@@ -606,12 +606,13 @@ class DynamoDBConnection(object):
         self,
         tablename: str,
         item: DynamoObject,
-        expr_values: Optional[ExpressionValuesType],
-        alias: Optional[ExpressionAttributeNamesType],
-        condition: Optional[str],
+        expr_values: Optional[ExpressionValuesType] = ...,
+        alias: Optional[ExpressionAttributeNamesType] = ...,
+        condition: Optional[str] = ...,
+        return_capacity: Optional[ReturnCapacityType] = ...,
+        return_item_collection_metrics: Optional[ReturnItemCollectionMetricsType] = ...,
+        *,
         returns: Literal["ALL_OLD"],
-        return_capacity: Optional[ReturnCapacityType],
-        return_item_collection_metrics: Optional[ReturnItemCollectionMetricsType],
         **kwargs: ExpressionValueType
     ) -> Result:
         ...
@@ -623,11 +624,11 @@ class DynamoDBConnection(object):
         expr_values: Optional[ExpressionValuesType] = None,
         alias: Optional[ExpressionAttributeNamesType] = None,
         condition: Optional[str] = None,
-        returns: Optional[Literal[Literal["NONE"], Literal["ALL_OLD"]]] = None,
         return_capacity: Optional[ReturnCapacityType] = None,
         return_item_collection_metrics: Optional[
             ReturnItemCollectionMetricsType
         ] = None,
+        returns: Optional[Literal[Literal["NONE"], Literal["ALL_OLD"]]] = None,
         **kwargs: ExpressionValueType
     ) -> Optional[Result]:
         """
@@ -732,6 +733,37 @@ class DynamoDBConnection(object):
         data = self.call("get_item", **kwargs)
         return Result(self.dynamizer, data, "Item")
 
+    @overload
+    def delete_item(
+        self,
+        tablename: str,
+        key: DynamoObject,
+        expr_values: Optional[ExpressionValuesType] = ...,
+        alias: Optional[ExpressionAttributeNamesType] = ...,
+        condition: Optional[str] = ...,
+        return_capacity: Optional[ReturnCapacityType] = ...,
+        return_item_collection_metrics: Optional[ReturnItemCollectionMetricsType] = ...,
+        returns: Optional[Literal["NONE"]] = ...,
+        **kwargs: ExpressionValueType
+    ) -> None:
+        ...
+
+    @overload
+    def delete_item(
+        self,
+        tablename: str,
+        key: DynamoObject,
+        expr_values: Optional[ExpressionValuesType] = ...,
+        alias: Optional[ExpressionAttributeNamesType] = ...,
+        condition: Optional[str] = ...,
+        return_capacity: Optional[ReturnCapacityType] = ...,
+        return_item_collection_metrics: Optional[ReturnItemCollectionMetricsType] = ...,
+        *,
+        returns: Literal["ALL_OLD"],
+        **kwargs: ExpressionValueType
+    ) -> Result:
+        ...
+
     def delete_item(
         self,
         tablename: str,
@@ -739,11 +771,11 @@ class DynamoDBConnection(object):
         expr_values: Optional[ExpressionValuesType] = None,
         alias: Optional[ExpressionAttributeNamesType] = None,
         condition: Optional[str] = None,
-        returns: Optional[Literal[Literal["NONE"], Literal["ALL_OLD"]]] = None,
         return_capacity: Optional[ReturnCapacityType] = None,
         return_item_collection_metrics: Optional[
             ReturnItemCollectionMetricsType
         ] = None,
+        returns: Optional[Literal[Literal["NONE"], Literal["ALL_OLD"]]] = None,
         **kwargs: ExpressionValueType
     ) -> Optional[Result]:
         """
@@ -973,18 +1005,19 @@ class DynamoDBConnection(object):
     def scan(
         self,
         tablename: str,
-        expr_values: Optional[ExpressionValuesType],
-        alias: Optional[ExpressionAttributeNamesType],
-        attributes: Optional[Union[str, List[str]]],
-        consistent: bool,
+        expr_values: Optional[ExpressionValuesType] = ...,
+        alias: Optional[ExpressionAttributeNamesType] = ...,
+        attributes: Optional[Union[str, List[str]]] = ...,
+        consistent: bool = ...,
+        index: Optional[str] = ...,
+        limit: Optional[Union[Limit, int]] = ...,
+        return_capacity: Optional[ReturnCapacityType] = ...,
+        filter: Optional[str] = ...,
+        segment: Optional[int] = ...,
+        total_segments: Optional[int] = ...,
+        exclusive_start_key: Optional[DynamoObject] = ...,
+        *,
         select: Literal["COUNT"],
-        index: Optional[str],
-        limit: Optional[Union[Limit, int]],
-        return_capacity: Optional[ReturnCapacityType],
-        filter: Optional[str],
-        segment: Optional[int],
-        total_segments: Optional[int],
-        exclusive_start_key: Optional[DynamoObject],
         **kwargs: ExpressionValueType
     ) -> Count:
         ...
@@ -993,18 +1026,18 @@ class DynamoDBConnection(object):
     def scan(
         self,
         tablename: str,
-        expr_values: Optional[ExpressionValuesType],
-        alias: Optional[ExpressionAttributeNamesType],
-        attributes: Optional[Union[str, List[str]]],
-        consistent: bool,
-        select: Optional[NonCountSelectType],
-        index: Optional[str],
-        limit: Optional[Union[Limit, int]],
-        return_capacity: Optional[ReturnCapacityType],
-        filter: Optional[str],
-        segment: Optional[int],
-        total_segments: Optional[int],
-        exclusive_start_key: Optional[DynamoObject],
+        expr_values: Optional[ExpressionValuesType] = ...,
+        alias: Optional[ExpressionAttributeNamesType] = ...,
+        attributes: Optional[Union[str, List[str]]] = ...,
+        consistent: bool = ...,
+        index: Optional[str] = ...,
+        limit: Optional[Union[Limit, int]] = ...,
+        return_capacity: Optional[ReturnCapacityType] = ...,
+        filter: Optional[str] = ...,
+        segment: Optional[int] = ...,
+        total_segments: Optional[int] = ...,
+        exclusive_start_key: Optional[DynamoObject] = ...,
+        select: Optional[NonCountSelectType] = ...,
         **kwargs: ExpressionValueType
     ) -> ResultSet:
         ...
@@ -1016,7 +1049,6 @@ class DynamoDBConnection(object):
         alias: Optional[ExpressionAttributeNamesType] = None,
         attributes: Optional[Union[str, List[str]]] = None,
         consistent: bool = False,
-        select: Optional[SelectType] = None,
         index: Optional[str] = None,
         limit: Optional[Union[Limit, int]] = None,
         return_capacity: Optional[ReturnCapacityType] = None,
@@ -1024,6 +1056,7 @@ class DynamoDBConnection(object):
         segment: Optional[int] = None,
         total_segments: Optional[int] = None,
         exclusive_start_key: Optional[DynamoObject] = None,
+        select: Optional[SelectType] = None,
         **kwargs: ExpressionValueType
     ) -> Union[Count, ResultSet]:
         """
@@ -1120,17 +1153,18 @@ class DynamoDBConnection(object):
         self,
         tablename: str,
         key_condition_expr: str,
-        expr_values: Optional[DynamoObject],
-        alias: Optional[ExpressionAttributeNamesType],
-        attributes: Optional[Union[str, List[str]]],
-        consistent: bool,
+        expr_values: Optional[DynamoObject] = ...,
+        alias: Optional[ExpressionAttributeNamesType] = ...,
+        attributes: Optional[Union[str, List[str]]] = ...,
+        consistent: bool = ...,
+        index: Optional[str] = ...,
+        limit: Optional[Union[int, Limit]] = ...,
+        desc: bool = ...,
+        return_capacity: Optional[ReturnCapacityType] = ...,
+        filter: Optional[str] = ...,
+        exclusive_start_key: Optional[DynamoObject] = ...,
+        *,
         select: Literal["COUNT"],
-        index: Optional[str],
-        limit: Optional[Union[int, Limit]],
-        desc: bool,
-        return_capacity: Optional[ReturnCapacityType],
-        filter: Optional[str],
-        exclusive_start_key: Optional[DynamoObject],
         **kwargs: ExpressionValueType
     ) -> Count:
         ...
@@ -1140,17 +1174,17 @@ class DynamoDBConnection(object):
         self,
         tablename: str,
         key_condition_expr: str,
-        expr_values: Optional[DynamoObject],
-        alias: Optional[ExpressionAttributeNamesType],
-        attributes: Optional[Union[str, List[str]]],
-        consistent: bool,
-        select: Optional[NonCountSelectType],
-        index: Optional[str],
-        limit: Optional[Union[int, Limit]],
-        desc: bool,
-        return_capacity: Optional[ReturnCapacityType],
-        filter: Optional[str],
-        exclusive_start_key: Optional[DynamoObject],
+        expr_values: Optional[DynamoObject] = ...,
+        alias: Optional[ExpressionAttributeNamesType] = ...,
+        attributes: Optional[Union[str, List[str]]] = ...,
+        consistent: bool = ...,
+        index: Optional[str] = ...,
+        limit: Optional[Union[int, Limit]] = ...,
+        desc: bool = ...,
+        return_capacity: Optional[ReturnCapacityType] = ...,
+        filter: Optional[str] = ...,
+        exclusive_start_key: Optional[DynamoObject] = ...,
+        select: Optional[NonCountSelectType] = ...,
         **kwargs: ExpressionValueType
     ) -> ResultSet:
         ...
@@ -1163,13 +1197,13 @@ class DynamoDBConnection(object):
         alias: Optional[ExpressionAttributeNamesType] = None,
         attributes: Optional[Union[str, List[str]]] = None,
         consistent: bool = False,
-        select: Optional[SelectType] = None,
         index: Optional[str] = None,
         limit: Optional[Union[int, Limit]] = None,
         desc: bool = False,
         return_capacity: Optional[ReturnCapacityType] = None,
         filter: Optional[str] = None,
         exclusive_start_key: Optional[DynamoObject] = None,
+        select: Optional[SelectType] = None,
         **kwargs: ExpressionValueType
     ) -> Union[Count, ResultSet]:
         """

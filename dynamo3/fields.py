@@ -8,13 +8,13 @@ from .constants import (
     PAY_PER_REQUEST,
     STRING,
     BillingModeType,
+    IndexStatusType,
     KeyType,
     StreamViewType,
     TableStatusType,
     TimeToLiveStatusType,
 )
 from .types import TYPES_REV
-from .util import snake_to_camel
 
 
 class TTL(NamedTuple):
@@ -175,11 +175,11 @@ class BaseIndex(object):
         self.include_fields = includes
         self.response: Dict[str, Any] = {}
 
-    def __getattr__(self, name: str) -> Any:
-        camel_name = snake_to_camel(name)
-        if camel_name in self.response:
-            return self.response[camel_name]
-        return super(BaseIndex, self).__getattribute__(name)
+    def __getitem__(self, key: str) -> Any:
+        return self.response[key]
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.response
 
     def _schema(self, hash_key: DynamoKey) -> Dict[str, Any]:
         """
@@ -315,10 +315,12 @@ class GlobalIndex(BaseIndex):
         range_key: Optional[DynamoKey] = None,
         includes: Optional[List[str]] = None,
         throughput: Optional[ThroughputOrTuple] = None,
+        status: Optional[IndexStatusType] = None,
     ):
         super(GlobalIndex, self).__init__(projection_type, name, range_key, includes)
         self.hash_key = hash_key
         self.throughput = Throughput.normalize(throughput)
+        self.status: Optional[IndexStatusType] = status
 
     @classmethod
     def all(
@@ -387,6 +389,7 @@ class GlobalIndex(BaseIndex):
             range_key,
             proj.get("NonKeyAttributes"),
             throughput,
+            response["IndexStatus"],
         )
         index.response = response
         return index
@@ -639,7 +642,7 @@ class IndexUpdate(ABC):
         return IndexUpdateUpdate(index_name, throughput)
 
     @staticmethod
-    def create(index: BaseIndex) -> "IndexUpdateCreate":
+    def create(index: GlobalIndex) -> "IndexUpdateCreate":
         """ Create a new index """
         return IndexUpdateCreate(index)
 
@@ -675,13 +678,15 @@ class IndexUpdate(ABC):
 class IndexUpdateCreate(IndexUpdate):
     def __init__(
         self,
-        index: BaseIndex,
+        index: GlobalIndex,
     ):
         super().__init__("Create")
         self.index = index
 
-    def get_attrs(self):
-        ret = [self.index.hash_key]
+    def get_attrs(self) -> List[DynamoKey]:
+        ret = []
+        if self.index.hash_key is not None:
+            ret.append(self.index.hash_key)
         if self.index.range_key is not None:
             ret.append(self.index.range_key)
         return ret
@@ -710,7 +715,7 @@ class IndexUpdateUpdate(IndexUpdate):
         self.index_name = index_name
         self.throughput = Throughput.normalize(throughput)
 
-    def get_attrs(self):
+    def get_attrs(self) -> List[DynamoKey]:
         return []
 
     def _get_schema(self):
@@ -739,7 +744,7 @@ class IndexUpdateDelete(IndexUpdate):
         super().__init__("Delete")
         self.index_name = index_name
 
-    def get_attrs(self):
+    def get_attrs(self) -> List[DynamoKey]:
         return []
 
     def _get_schema(self):
