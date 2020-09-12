@@ -14,6 +14,7 @@ LIST: Final[Literal["L"]] = "L"
 BOOL: Final[Literal["BOOL"]] = "BOOL"
 MAP: Final[Literal["M"]] = "M"
 NULL: Final[Literal["NULL"]] = "NULL"
+KeyType = Literal[Literal["S"], Literal["N"], Literal["B"]]
 
 NONE: Final[Literal["NONE"]] = "NONE"
 
@@ -50,6 +51,16 @@ ReturnCapacityType = Literal[Literal["NONE"], Literal["INDEXES"], Literal["TOTAL
 # ReturnItemCollectionMetrics
 SIZE: Final[Literal["SIZE"]] = "SIZE"
 ReturnItemCollectionMetricsType = Literal[Literal["SIZE"], Literal["NONE"]]
+
+TableStatusType = Literal[
+    Literal["CREATING"],
+    Literal["UPDATING"],
+    Literal["DELETING"],
+    Literal["ACTIVE"],
+    Literal["INACCESSIBLE_ENCRYPTION_CREDENTIALS"],
+    Literal["ARCHIVING"],
+    Literal["ARCHIVED"],
+]
 
 # Maximum number of keys in a BatchGetItem request
 MAX_GET_BATCH: Final[Literal[100]] = 100

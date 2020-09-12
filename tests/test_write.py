@@ -18,7 +18,7 @@ from dynamo3 import (
 from dynamo3.batch import BatchWriter
 from dynamo3.result import Capacity
 
-from . import BaseSystemTest, is_number
+from . import BaseSystemTest
 
 
 class TestCreate(BaseSystemTest):
@@ -399,10 +399,7 @@ class TestUpdateItem2(BaseSystemTest):
             return_capacity=TOTAL,
             foo="bar",
         )
-        self.assertTrue(is_number(ret.capacity))
-        self.assertTrue(is_number(ret.table_capacity))
-        self.assertTrue(isinstance(ret.indexes, dict))
-        self.assertTrue(isinstance(ret.global_indexes, dict))
+        self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
 
     def test_expect_condition(self):
         """ Update can expect a field to meet a condition """
@@ -508,10 +505,7 @@ class TestPutItem2(BaseSystemTest):
         ret = self.dynamo.put_item2(
             "foobar", {"id": "a"}, returns=ALL_OLD, return_capacity=TOTAL
         )
-        self.assertTrue(is_number(ret.capacity))
-        self.assertTrue(is_number(ret.table_capacity))
-        self.assertTrue(isinstance(ret.indexes, dict))
-        self.assertTrue(isinstance(ret.global_indexes, dict))
+        self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
 
 
 class TestDeleteItem2(BaseSystemTest):
@@ -545,10 +539,7 @@ class TestDeleteItem2(BaseSystemTest):
         ret = self.dynamo.delete_item2(
             "foobar", {"id": "a"}, returns=ALL_OLD, return_capacity=TOTAL
         )
-        self.assertTrue(is_number(ret.capacity))
-        self.assertTrue(is_number(ret.table_capacity))
-        self.assertTrue(isinstance(ret.indexes, dict))
-        self.assertTrue(isinstance(ret.global_indexes, dict))
+        self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
 
     def test_expect_not_exists(self):
         """ Delete can expect a field to not exist """

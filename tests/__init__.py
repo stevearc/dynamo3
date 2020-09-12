@@ -24,11 +24,6 @@ from dynamo3 import (
 from dynamo3.result import Capacity, ConsumedCapacity, Count, ResultSet, add_dicts
 
 
-def is_number(value):
-    """ Check if a value is a float or int """
-    return isinstance(value, float) or isinstance(value, int)
-
-
 class BaseSystemTest(unittest.TestCase):
 
     """ Base class for system tests """

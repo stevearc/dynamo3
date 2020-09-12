@@ -3,9 +3,9 @@
 from mock import MagicMock
 
 from dynamo3 import NUMBER, STRING, TOTAL, DynamoKey, GlobalIndex, LocalIndex
-from dynamo3.result import ConsumedCapacity, GetResultSet, Limit, Result
+from dynamo3.result import Capacity, ConsumedCapacity, GetResultSet, Limit, Result
 
-from . import BaseSystemTest, is_number
+from . import BaseSystemTest
 
 
 class TestQuery2(BaseSystemTest):
@@ -131,10 +131,7 @@ class TestQuery2(BaseSystemTest):
         self.dynamo.put_item2("foobar", {"id": "a", "num": 1})
         ret = self.dynamo.query2("foobar", "id = :id", return_capacity=TOTAL, id="a")
         list(ret)
-        self.assertTrue(is_number(ret.capacity))
-        self.assertTrue(is_number(ret.table_capacity))
-        self.assertTrue(isinstance(ret.indexes, dict))
-        self.assertTrue(isinstance(ret.global_indexes, dict))
+        self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
 
     def test_eq(self):
         """ Can query with EQ constraint """
@@ -356,10 +353,7 @@ class TestScan2(BaseSystemTest):
         self.dynamo.put_item2("foobar", {"id": "a"})
         ret = self.dynamo.scan2("foobar", return_capacity=TOTAL)
         list(ret)
-        self.assertTrue(is_number(ret.capacity))
-        self.assertTrue(is_number(ret.table_capacity))
-        self.assertTrue(isinstance(ret.indexes, dict))
-        self.assertTrue(isinstance(ret.global_indexes, dict))
+        self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
 
     def test_eq(self):
         """ Can scan with EQ constraint """
@@ -635,18 +629,18 @@ class TestBatchGet(BaseSystemTest):
             "ConsumedCapacity": [
                 {
                     "TableName": "foobar",
-                    "CapacityUnits": 3,
+                    "CapacityUnits": 6,
                     "Table": {
                         "CapacityUnits": 1,
                     },
                     "LocalSecondaryIndexes": {
                         "l-index": {
-                            "CapacityUnits": 1,
+                            "CapacityUnits": 2,
                         },
                     },
                     "GlobalSecondaryIndexes": {
                         "g-index": {
-                            "CapacityUnits": 1,
+                            "CapacityUnits": 3,
                         },
                     },
                 }
@@ -657,10 +651,10 @@ class TestBatchGet(BaseSystemTest):
         conn.call.return_value = response
         rs = GetResultSet(conn, "foo", [{"id": "a"}])
         list(rs)
-        self.assertEqual(rs.capacity, 3)
-        self.assertEqual(rs.table_capacity, 1)
-        self.assertEqual(rs.indexes, {"l-index": 1})
-        self.assertEqual(rs.global_indexes, {"g-index": 1})
+        self.assertEqual(rs.consumed_capacity.total.read, 6)
+        self.assertEqual(rs.consumed_capacity.table_capacity.read, 1)
+        self.assertEqual(rs.consumed_capacity.local_index_capacity["l-index"].read, 2)
+        self.assertEqual(rs.consumed_capacity.global_index_capacity["g-index"].read, 3)
         self.assertEqual(rs.consumed_capacity, capacity)
 
 
@@ -711,10 +705,7 @@ class TestGetItem2(BaseSystemTest):
         self.make_table()
         self.dynamo.put_item2("foobar", {"id": "a"})
         ret = self.dynamo.get_item2("foobar", {"id": "a"}, return_capacity=TOTAL)
-        self.assertTrue(is_number(ret.capacity))
-        self.assertTrue(is_number(ret.table_capacity))
-        self.assertTrue(isinstance(ret.indexes, dict))
-        self.assertTrue(isinstance(ret.global_indexes, dict))
+        self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
 
     def test_result_repr(self):
         """ Result repr should not be the same as a dict """

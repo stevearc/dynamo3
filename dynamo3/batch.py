@@ -1,13 +1,24 @@
 """ Code for batch processing """
 import logging
+from typing import TYPE_CHECKING, Dict, List
 
-from .constants import MAX_WRITE_BATCH, NONE
-from .types import is_null
+from .constants import (
+    MAX_WRITE_BATCH,
+    NONE,
+    ReturnCapacityType,
+    ReturnItemCollectionMetricsType,
+)
+from .types import Dynamizer, DynamoObject, is_null
+
+if TYPE_CHECKING:
+    from .connection import DynamoDBConnection
 
 LOG = logging.getLogger(__name__)
 
 
-def _encode_write(dynamizer, data, action, key):
+def _encode_write(
+    dynamizer: Dynamizer, data: DynamoObject, action: str, key: str
+) -> Dict:
     """ Encode an item write command """
     # Strip null values out of data
     data = dict(((k, dynamizer.encode(v)) for k, v in data.items() if not is_null(v)))
@@ -18,12 +29,12 @@ def _encode_write(dynamizer, data, action, key):
     }
 
 
-def encode_put(dynamizer, data):
+def encode_put(dynamizer: Dynamizer, data: DynamoObject) -> Dict:
     """ Encode an item put command """
     return _encode_write(dynamizer, data, "PutRequest", "Item")
 
 
-def encode_delete(dynamizer, data):
+def encode_delete(dynamizer: Dynamizer, data: DynamoObject) -> Dict:
     """ Encode an item delete command """
     return _encode_write(dynamizer, data, "DeleteRequest", "Key")
 
@@ -34,18 +45,18 @@ class BatchWriter(object):
 
     def __init__(
         self,
-        connection,
-        tablename,
-        return_capacity=NONE,
-        return_item_collection_metrics=NONE,
+        connection: "DynamoDBConnection",
+        tablename: str,
+        return_capacity: ReturnCapacityType = NONE,
+        return_item_collection_metrics: ReturnItemCollectionMetricsType = NONE,
     ):
         self.connection = connection
         self.tablename = tablename
         self.return_capacity = return_capacity
         self.return_item_collection_metrics = return_item_collection_metrics
-        self._to_put = []
-        self._to_delete = []
-        self._unprocessed = []
+        self._to_put: List[DynamoObject] = []
+        self._to_delete: List[DynamoObject] = []
+        self._unprocessed: List[DynamoObject] = []
         self._attempt = 0
         self.consumed_capacity = None
 
@@ -64,7 +75,7 @@ class BatchWriter(object):
         if self._unprocessed:
             self.resend_unprocessed()
 
-    def put(self, data):
+    def put(self, data: DynamoObject):
         """
         Write an item (will overwrite existing data)
 
@@ -79,7 +90,7 @@ class BatchWriter(object):
         if self.should_flush():
             self.flush()
 
-    def delete(self, kwargs):
+    def delete(self, kwargs: DynamoObject):
         """
         Delete an item
 
@@ -94,7 +105,7 @@ class BatchWriter(object):
         if self.should_flush():
             self.flush()
 
-    def should_flush(self):
+    def should_flush(self) -> bool:
         """ True if a flush is needed """
         return len(self._to_put) + len(self._to_delete) == MAX_WRITE_BATCH
 
@@ -111,7 +122,7 @@ class BatchWriter(object):
         self._to_put = []
         self._to_delete = []
 
-    def _write(self, items):
+    def _write(self, items: List[Dict]):
         """ Perform a batch write and handle the response """
         response = self._batch_write_item(items)
         if "consumed_capacity" in response:
@@ -149,7 +160,7 @@ class BatchWriter(object):
             self._write(to_resend)
             LOG.info("%d unprocessed items left", len(self._unprocessed))
 
-    def _batch_write_item(self, items):
+    def _batch_write_item(self, items: List[Dict]):
         """ Make a BatchWriteItem call to Dynamo """
         kwargs = {
             "RequestItems": {

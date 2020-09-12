@@ -417,7 +417,8 @@ class DynamoDBConnection(object):
                 gidx.schema() for gidx in global_indexes
             ]
             for gidx in global_indexes:
-                all_attrs.add(gidx.hash_key)
+                if gidx.hash_key is not None:
+                    all_attrs.add(gidx.hash_key)
                 if gidx.range_key is not None:
                     all_attrs.add(gidx.range_key)
 

@@ -2,7 +2,7 @@
 import logging
 import math
 import time
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from typing_extensions import TypedDict
 
@@ -124,8 +124,8 @@ class RateLimit(object):
         self,
         connection: "DynamoDBConnection",
         command: str,
-        query_kwargs,
-        response,
+        query_kwargs: Dict[str, Any],
+        response: Dict[str, Any],
         capacity: ConsumedCapacity,
     ):
         """ Hook that runs in response to a 'returned capacity' event """
