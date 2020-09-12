@@ -860,7 +860,7 @@ class DynamoDBConnection(object):
         exclusive_start_key: Optional[DynamoObject],
         **kwargs: ExpressionValueType
     ) -> Count:
-        ...
+        ...  # pylint:disable=W0104
 
     @overload
     def scan(  # pylint:disable=E0102
@@ -880,7 +880,7 @@ class DynamoDBConnection(object):
         exclusive_start_key: Optional[DynamoObject],
         **kwargs: ExpressionValueType
     ) -> ResultSet:
-        ...
+        ...  # pylint:disable=W0104
 
     def scan(  # pylint:disable=E0102
         self,
@@ -1006,7 +1006,7 @@ class DynamoDBConnection(object):
         exclusive_start_key: Optional[DynamoObject],
         **kwargs: ExpressionValueType
     ) -> Count:
-        ...
+        ...  # pylint:disable=W0104
 
     @overload
     def query(  # pylint:disable=E0102
@@ -1026,7 +1026,7 @@ class DynamoDBConnection(object):
         exclusive_start_key: Optional[DynamoObject],
         **kwargs: ExpressionValueType
     ) -> ResultSet:
-        ...
+        ...  # pylint:disable=W0104
 
     def query(  # pylint:disable=E0102
         self,
