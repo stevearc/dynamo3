@@ -1,10 +1,18 @@
 """ Objects for defining fields and indexes """
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
 from typing_extensions import Final, Literal
 
-from .constants import STRING, KeyType, TableStatusType
+from .constants import (
+    PAY_PER_REQUEST,
+    STRING,
+    BillingModeType,
+    KeyType,
+    StreamViewType,
+    TableStatusType,
+)
+from .types import TYPES_REV
 from .util import snake_to_camel
 
 
@@ -50,6 +58,12 @@ class DynamoKey(object):
             "KeyType": key_type,
         }
 
+    def __str__(self):
+        return "DynamoKey(%s, %s)" % (self.name, TYPES_REV[self.data_type])
+
+    def __repr__(self):
+        return str(self)
+
     def __hash__(self):
         return hash(self.name)
 
@@ -58,6 +72,9 @@ class DynamoKey(object):
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+
+ThroughputOrTuple = Union["Throughput", Tuple[int, int]]
 
 
 class Throughput(object):
@@ -78,8 +95,14 @@ class Throughput(object):
         self.read = read
         self.write = write
 
-    def __repr__(self):
+    def __str__(self):
         return "Throughput({0}, {1})".format(self.read, self.write)
+
+    def __repr__(self):
+        return str(self)
+
+    def __bool__(self):
+        return bool(self.read and self.write)
 
     def schema(self) -> Dict[str, int]:
         """ Construct the schema definition for the throughput """
@@ -87,6 +110,14 @@ class Throughput(object):
             "ReadCapacityUnits": self.read,
             "WriteCapacityUnits": self.write,
         }
+
+    @classmethod
+    def normalize(cls, instance: Optional[ThroughputOrTuple]) -> "Throughput":
+        if instance is None:
+            return cls(0, 0)
+        if isinstance(instance, Throughput):
+            return instance
+        return cls(instance[0], instance[1])
 
     @classmethod
     def from_response(cls, response: Dict[str, int]) -> "Throughput":
@@ -237,6 +268,24 @@ class LocalIndex(BaseIndex):
         index.response = response
         return index
 
+    def __str__(self):
+        if self.include_fields:
+            return "LocalIndex(%s, %s, %s, [%s])" % (
+                self.name,
+                self.projection_type,
+                self.range_key,
+                ", ".join(self.include_fields),
+            )
+        else:
+            return "LocalIndex(%s, %s, %s)" % (
+                self.name,
+                self.projection_type,
+                self.range_key,
+            )
+
+    def __repr__(self):
+        return "LocalIndex(%s)" % self.name
+
 
 class GlobalIndex(BaseIndex):
 
@@ -255,11 +304,11 @@ class GlobalIndex(BaseIndex):
         hash_key: Optional[DynamoKey],
         range_key: Optional[DynamoKey] = None,
         includes: Optional[List[str]] = None,
-        throughput: Optional[Throughput] = None,
+        throughput: Optional[ThroughputOrTuple] = None,
     ):
         super(GlobalIndex, self).__init__(projection_type, name, range_key, includes)
         self.hash_key = hash_key
-        self.throughput = throughput or Throughput()
+        self.throughput = Throughput.normalize(throughput)
 
     @classmethod
     def all(
@@ -267,7 +316,7 @@ class GlobalIndex(BaseIndex):
         name: str,
         hash_key: DynamoKey,
         range_key: Optional[DynamoKey] = None,
-        throughput: Optional[Throughput] = None,
+        throughput: Optional[ThroughputOrTuple] = None,
     ) -> "GlobalIndex":
         """ Create an index that projects all attributes """
         return cls(cls.ALL, name, hash_key, range_key, throughput=throughput)
@@ -278,7 +327,7 @@ class GlobalIndex(BaseIndex):
         name: str,
         hash_key: DynamoKey,
         range_key: Optional[DynamoKey] = None,
-        throughput: Optional[Throughput] = None,
+        throughput: Optional[ThroughputOrTuple] = None,
     ) -> "GlobalIndex":
         """ Create an index that projects only key attributes """
         return cls(cls.KEYS, name, hash_key, range_key, throughput=throughput)
@@ -290,7 +339,7 @@ class GlobalIndex(BaseIndex):
         hash_key: DynamoKey,
         range_key: Optional[DynamoKey] = None,
         includes: Optional[List[str]] = None,
-        throughput: Optional[Throughput] = None,
+        throughput: Optional[ThroughputOrTuple] = None,
     ) -> "GlobalIndex":
         """ Create an index that projects key attributes plus some others """
         return cls(
@@ -304,7 +353,8 @@ class GlobalIndex(BaseIndex):
                 "Cannot construct schema for index %r. Missing hash key" % self.name
             )
         schema_data = super(GlobalIndex, self)._schema(self.hash_key)
-        schema_data["ProvisionedThroughput"] = self.throughput.schema()
+        if self.throughput:
+            schema_data["ProvisionedThroughput"] = self.throughput.schema()
         return schema_data
 
     @classmethod
@@ -317,7 +367,9 @@ class GlobalIndex(BaseIndex):
         range_key = None
         if len(response["KeySchema"]) > 1:
             range_key = attrs[response["KeySchema"][1]["AttributeName"]]
-        throughput = Throughput.from_response(response["ProvisionedThroughput"])
+        throughput = None
+        if "ProvisionedThroughput" in response:
+            throughput = Throughput.from_response(response["ProvisionedThroughput"])
         index = cls(
             proj["ProjectionType"],
             response["IndexName"],
@@ -329,6 +381,22 @@ class GlobalIndex(BaseIndex):
         index.response = response
         return index
 
+    def __str__(self):
+        lines = ["GlobalIndex(%s, %s)" % (self.name, self.projection_type)]
+        if self.hash_key:
+            lines.append("Hash key: %s" % self.hash_key)
+        if self.range_key:
+            lines.append("Hash key: %s" % self.range_key)
+        if self.include_fields:
+            lines.append("Includes: %s" % ", ".join(self.include_fields))
+        if self.throughput:
+            lines.append("Throughput: %s" % self.throughput)
+
+        return "\n  ".join(lines)
+
+    def __repr__(self):
+        return "GlobalIndex(%s)" % self.name
+
     def __hash__(self):  # pylint: disable=W0235
         return super().__hash__()
 
@@ -338,6 +406,60 @@ class GlobalIndex(BaseIndex):
             and self.hash_key == other.hash_key
             and self.throughput == other.throughput
         )
+
+
+class RestoreSummary(NamedTuple):
+    in_progress: bool
+    time: int
+    source_backup_arn: Optional[str]
+    source_table_arn: Optional[str]
+
+    @classmethod
+    def from_response(cls, response: Dict[str, Any]) -> Optional["RestoreSummary"]:
+        summary = response.get("RestoreSummary")
+        if summary is None:
+            return None
+        return cls(
+            response["RestoreInProgress"],
+            response["RestoreDateTime"],
+            response.get("SourceBackupArn"),
+            response.get("SourceTableArn"),
+        )
+
+    @classmethod
+    def default(cls):
+        return cls(False, 0, None, None)
+
+
+class SSEDescription(NamedTuple):
+    status: Optional[
+        Literal[
+            Literal["ENABLING"],
+            Literal["ENABLED"],
+            Literal["DISABLING"],
+            Literal["DISABLED"],
+            Literal["UPDATING"],
+        ]
+    ]
+    type: Optional[Literal[Literal["AES256"], Literal["KMS"]]]
+    kms_arn: Optional[str]
+    inaccessible_encryption_time: Optional[int]
+
+    @classmethod
+    def from_response(cls, response: Dict[str, Any]) -> Optional["SSEDescription"]:
+        summary = response.get("SSEDescription")
+        if summary is None:
+            return None
+        return cls(
+            response.get("Status"),
+            response.get("SSEType"),
+            response.get("KMSMasterKeyArn"),
+            response.get("InaccessibleEncryptionDateTime"),
+        )
+
+    @classmethod
+    def default(cls):
+        return cls(None, None, None, None)
 
 
 class Table(object):
@@ -352,8 +474,14 @@ class Table(object):
         range_key: Optional[DynamoKey] = None,
         indexes: Optional[List[LocalIndex]] = None,
         global_indexes: Optional[List[GlobalIndex]] = None,
-        throughput: Optional[Throughput] = None,
-        status=None,
+        throughput: Optional[ThroughputOrTuple] = None,
+        status: TableStatusType = "ACTIVE",
+        billing_mode: Optional[BillingModeType] = None,
+        arn: Optional[str] = None,
+        stream_type: Optional[StreamViewType] = None,
+        restore_summary: Optional[RestoreSummary] = None,
+        sse_description: Optional[SSEDescription] = None,
+        item_count: int = 0,
         size: int = 0,
     ):
         self.name = name
@@ -361,16 +489,22 @@ class Table(object):
         self.range_key = range_key
         self.indexes = indexes or []
         self.global_indexes = global_indexes or []
-        self.throughput = throughput or Throughput()
-        self.status: TableStatusType = status
+        self.throughput = Throughput.normalize(throughput)
+        self.status = status
+        self.billing_mode = billing_mode
+        self.arn = arn
+        self.stream_type = stream_type
+        self.restore_summary = restore_summary or RestoreSummary.default()
+        self.sse_description = sse_description or SSEDescription.default()
+        self.item_count = item_count
         self.size = size
         self.response: Dict[str, Any] = {}
 
-    def __getattr__(self, name: str) -> Any:
-        camel_name = snake_to_camel(name)
-        if camel_name in self.response:
-            return self.response[camel_name]
-        return super(Table, self).__getattribute__(name)
+    def __getitem__(self, key: str) -> Any:
+        return self.response[key]
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.response
 
     @classmethod
     def from_response(cls, response: Dict[str, Any]) -> "Table":
@@ -398,6 +532,17 @@ class Table(object):
         global_indexes = []
         for idx in response.get("GlobalSecondaryIndexes", []):
             global_indexes.append(GlobalIndex.from_response(idx, attrs))
+        throughput = None
+        if "ProvisionedThroughput" in response:
+            throughput = Throughput.from_response(response["ProvisionedThroughput"])
+        stream_type = None
+        if (
+            "StreamSpecification" in response
+            and response["StreamSpecification"]["Enabled"]
+        ):
+            stream_type = response["StreamSpecification"]["StreamViewType"]
+
+        # TODO Replicas
 
         table = cls(
             name=response["TableName"],
@@ -405,12 +550,44 @@ class Table(object):
             range_key=range_key,
             indexes=indexes,
             global_indexes=global_indexes,
-            throughput=Throughput.from_response(response["ProvisionedThroughput"]),
+            throughput=throughput,
             status=response["TableStatus"],
+            billing_mode=response.get("BillingModeSummary", {}).get("BillingMode"),
+            arn=response.get("TableArn"),
+            stream_type=stream_type,
+            restore_summary=RestoreSummary.from_response(response),
+            sse_description=SSEDescription.from_response(response),
+            item_count=response["ItemCount"],
             size=response["TableSizeBytes"],
         )
         table.response = response
         return table
+
+    @property
+    def is_on_demand(self):
+        """ Getter for is_on_demand """
+        return self.billing_mode == PAY_PER_REQUEST
+
+    def __str__(self):
+        lines = [
+            "Table(%s)" % self.name,
+        ]
+        if self.hash_key is not None:
+            lines.append("Hash key: %s" % self.hash_key)
+        if self.range_key is not None:
+            lines.append("Range key: %s" % self.range_key)
+        if self.indexes:
+            lines.append("Local indexes:")
+            for index in self.indexes:
+                lines.append("  %s" % index)
+        if self.global_indexes:
+            lines.append("Global indexes:")
+            for gindex in self.global_indexes:
+                lines.append("  %s" % gindex)
+        return "\n  ".join(lines)
+
+    def __repr__(self):
+        return "Table(%s)" % self.name
 
     def __hash__(self):
         return hash(self.name)
@@ -423,7 +600,6 @@ class Table(object):
             and self.range_key == other.range_key
             and self.indexes == other.indexes
             and self.global_indexes == other.global_indexes
-            and self.throughput == other.throughput
         )
 
     def __ne__(self, other):
@@ -447,7 +623,7 @@ class IndexUpdate(ABC):
         self.action = action
 
     @staticmethod
-    def update(index_name: str, throughput: Throughput) -> "IndexUpdateUpdate":
+    def update(index_name: str, throughput: ThroughputOrTuple) -> "IndexUpdateUpdate":
         """ Update the throughput on the index """
         return IndexUpdateUpdate(index_name, throughput)
 
@@ -517,11 +693,11 @@ class IndexUpdateUpdate(IndexUpdate):
     def __init__(
         self,
         index_name: str,
-        throughput: Throughput,
+        throughput: ThroughputOrTuple,
     ):
         super().__init__("Update")
         self.index_name = index_name
-        self.throughput = throughput
+        self.throughput = Throughput.normalize(throughput)
 
     def get_attrs(self):
         return []

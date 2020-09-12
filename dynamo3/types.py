@@ -195,6 +195,13 @@ def encode_dict(dynamizer: "Dynamizer", value):
     return "M", encoded_dict
 
 
+TagDict = TypedDict("TagDict", {"Key": str, "Value": str})
+
+
+def encode_tags(tags: Dict[str, str]) -> List[TagDict]:
+    return [{"Key": k, "Value": v} for k, v in tags.items()]
+
+
 class Dynamizer(object):
 
     """ Handles the encoding/decoding of Dynamo values """

@@ -13,14 +13,26 @@ from .constants import (
     COUNT,
     INDEXES,
     NONE,
+    PAY_PER_REQUEST,
+    PROVISIONED,
     READ_COMMANDS,
+    BillingModeType,
     NonCountSelectType,
     ReturnCapacityType,
     ReturnItemCollectionMetricsType,
     SelectType,
+    StreamViewType,
 )
 from .exception import DynamoDBError, ThroughputException, translate_exception
-from .fields import DynamoKey, GlobalIndex, IndexUpdate, LocalIndex, Table, Throughput
+from .fields import (
+    DynamoKey,
+    GlobalIndex,
+    IndexUpdate,
+    LocalIndex,
+    Table,
+    Throughput,
+    ThroughputOrTuple,
+)
 from .rate import RateLimit
 from .result import (
     ConsumedCapacity,
@@ -36,6 +48,7 @@ from .types import (
     DynamoObject,
     EncodedDynamoObject,
     EncodedDynamoValue,
+    encode_tags,
     is_null,
 )
 
@@ -371,7 +384,11 @@ class DynamoDBConnection(object):
         range_key: Optional[DynamoKey] = None,
         indexes: Optional[List[LocalIndex]] = None,
         global_indexes: Optional[List[GlobalIndex]] = None,
-        throughput: Optional[Throughput] = None,
+        billing_mode: Optional[BillingModeType] = None,
+        throughput: Optional[ThroughputOrTuple] = None,
+        stream: Optional[StreamViewType] = None,
+        tags: Optional[Dict[str, str]] = None,
+        kms_id: Optional[str] = None,
         wait: bool = False,
     ):
         """
@@ -389,12 +406,11 @@ class DynamoDBConnection(object):
             List of :class:`~dynamo3.fields.LocalIndex`
         global_indexes : list, optional
             List of :class:`~dynamo3.fields.GlobalIndex`
+        billing_mode : str, optional
         throughput : :class:`~dynamo3.fields.Throughput`, optional
             The throughput of the table
 
         """
-        if throughput is None:
-            throughput = Throughput()
         all_attrs = set([hash_key])
         if range_key is not None:
             all_attrs.add(range_key)
@@ -402,11 +418,23 @@ class DynamoDBConnection(object):
         if range_key is not None:
             key_schema.append(range_key.range_schema())
 
-        kwargs = {
+        kwargs: Dict[str, Any] = {
             "TableName": tablename,
             "KeySchema": key_schema,
-            "ProvisionedThroughput": throughput.schema(),
         }
+        if throughput is not None:
+            kwargs["ProvisionedThroughput"] = Throughput.normalize(throughput).schema()
+        if billing_mode is not None:
+            kwargs["BillingMode"] = billing_mode
+        else:
+            kwargs["BillingMode"] = (
+                PAY_PER_REQUEST if throughput is None else PROVISIONED
+            )
+        if stream is not None:
+            kwargs["StreamSpecification"] = {
+                "StreamEnabled": True,
+                "StreamViewType": stream,
+            }
         if indexes:
             kwargs["LocalSecondaryIndexes"] = [idx.schema(hash_key) for idx in indexes]
             for idx in indexes:
@@ -422,6 +450,14 @@ class DynamoDBConnection(object):
                 if gidx.range_key is not None:
                     all_attrs.add(gidx.range_key)
 
+        if kms_id is not None:
+            kwargs["SSESpecification"] = {
+                "Enabled": True,
+                "KMSMasterKeyId": kms_id,
+                "SSEType": "KMS",
+            }
+        if tags is not None:
+            kwargs["Tags"] = encode_tags(tags)
         kwargs["AttributeDefinitions"] = [attr.definition() for attr in all_attrs]
         result = self.call("create_table", **kwargs)
         if wait:
@@ -776,10 +812,11 @@ class DynamoDBConnection(object):
             "TableName": tablename,
             "Key": self.dynamizer.encode_keys(key),
             "UpdateExpression": expression,
-            "ReturnValues": returns,
             "ReturnConsumedCapacity": self._default_capacity(return_capacity),
             "ReturnItemCollectionMetrics": return_item_collection_metrics,
         }
+        if returns is not None:
+            keywords["ReturnValues"] = returns
         values = build_expression_values(self.dynamizer, expr_values, kwargs)
         if values:
             keywords["ExpressionAttributeValues"] = values
@@ -1082,7 +1119,7 @@ class DynamoDBConnection(object):
     def update_table(
         self,
         tablename: str,
-        throughput: Optional[Throughput] = None,
+        throughput: Optional[ThroughputOrTuple] = None,
         index_updates: Optional[List[IndexUpdate]] = None,
     ):
         """
@@ -1101,7 +1138,7 @@ class DynamoDBConnection(object):
         kwargs: Dict[str, Any] = {"TableName": tablename}
         all_attrs = set()
         if throughput is not None:
-            kwargs["ProvisionedThroughput"] = throughput.schema()
+            kwargs["ProvisionedThroughput"] = Throughput.normalize(throughput).schema()
         if index_updates is not None:
             updates = []
             for update in index_updates:

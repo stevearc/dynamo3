@@ -131,8 +131,10 @@ class TestCreate(BaseSystemTest):
         throughput = Throughput(8, 2)
         index_field = DynamoKey("name")
         index = GlobalIndex.all("name-index", index_field, throughput=throughput)
-        table = Table("foobar", hash_key, global_indexes=[index])
-        self.dynamo.create_table("foobar", hash_key=hash_key, global_indexes=[index])
+        table = Table("foobar", hash_key, global_indexes=[index], throughput=throughput)
+        self.dynamo.create_table(
+            "foobar", hash_key=hash_key, global_indexes=[index], throughput=throughput
+        )
         desc = self.dynamo.describe_table("foobar")
         self.assertEqual(desc, table)
 
@@ -144,8 +146,8 @@ class TestUpdateTable(BaseSystemTest):
     def test_update_table_throughput(self):
         """ Update the table throughput """
         hash_key = DynamoKey("id", data_type=STRING)
-        self.dynamo.create_table("foobar", hash_key=hash_key)
-        tp = Throughput(2, 1)
+        self.dynamo.create_table("foobar", hash_key=hash_key, throughput=(1, 1))
+        tp = Throughput(3, 4)
         self.dynamo.update_table("foobar", throughput=tp)
         table = self.dynamo.describe_table("foobar")
         self.assertEqual(table.throughput, tp)
@@ -154,9 +156,14 @@ class TestUpdateTable(BaseSystemTest):
         """ Update table and global index throughputs """
         hash_key = DynamoKey("id", data_type=STRING)
         index_field = DynamoKey("name")
-        index = GlobalIndex.all("name-index", index_field)
-        self.dynamo.create_table("foobar", hash_key=hash_key, global_indexes=[index])
-        tp = Throughput(2, 1)
+        index = GlobalIndex.all("name-index", index_field, throughput=(2, 3))
+        self.dynamo.create_table(
+            "foobar",
+            hash_key=hash_key,
+            global_indexes=[index],
+            throughput=Throughput(1, 1),
+        )
+        tp = Throughput(3, 4)
         self.dynamo.update_table(
             "foobar",
             throughput=tp,

@@ -62,6 +62,23 @@ TableStatusType = Literal[
     Literal["ARCHIVED"],
 ]
 
+# Billing mode
+PROVISIONED: Final[Literal["PROVISIONED"]] = "PROVISIONED"
+PAY_PER_REQUEST: Final[Literal["PAY_PER_REQUEST"]] = "PAY_PER_REQUEST"
+BillingModeType = Literal[Literal["PROVISIONED"], Literal["PAY_PER_REQUEST"]]
+
+# Stream view type
+KEYS_ONLY: Final[Literal["KEYS_ONLY"]] = "KEYS_ONLY"
+NEW_IMAGE: Final[Literal["NEW_IMAGE"]] = "NEW_IMAGE"
+OLD_IMAGE: Final[Literal["OLD_IMAGE"]] = "OLD_IMAGE"
+NEW_AND_OLD_IMAGES: Final[Literal["NEW_AND_OLD_IMAGES"]] = "NEW_AND_OLD_IMAGES"
+StreamViewType = Literal[
+    Literal["KEYS_ONLY"],
+    Literal["NEW_IMAGE"],
+    Literal["OLD_IMAGE"],
+    Literal["NEW_AND_OLD_IMAGES"],
+]
+
 # Maximum number of keys in a BatchGetItem request
 MAX_GET_BATCH: Final[Literal[100]] = 100
 # Maximum number of items in a BatchWriteItem request
