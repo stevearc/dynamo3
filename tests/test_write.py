@@ -222,7 +222,7 @@ class TestBatchWrite(BaseSystemTest):
         self.dynamo.create_table("foobar", hash_key=hash_key)
         with self.dynamo.batch_write("foobar") as batch:
             batch.put({"id": "a"})
-        ret = list(self.dynamo.scan2("foobar"))
+        ret = list(self.dynamo.scan("foobar"))
         self.assertCountEqual(ret, [{"id": "a"}])
 
     def test_delete_items(self):
@@ -234,7 +234,7 @@ class TestBatchWrite(BaseSystemTest):
             batch.put({"id": "b"})
         with self.dynamo.batch_write("foobar") as batch:
             batch.delete({"id": "b"})
-        ret = list(self.dynamo.scan2("foobar"))
+        ret = list(self.dynamo.scan("foobar"))
         self.assertCountEqual(ret, [{"id": "a"}])
 
     def test_write_many(self):
@@ -244,22 +244,22 @@ class TestBatchWrite(BaseSystemTest):
         with self.dynamo.batch_write("foobar") as batch:
             for i in range(50):
                 batch.put({"id": str(i)})
-        count = self.dynamo.scan2("foobar", select="COUNT")
+        count = self.dynamo.scan("foobar", select="COUNT")
         self.assertEqual(count, 50)
         with self.dynamo.batch_write("foobar") as batch:
             for i in range(50):
                 batch.delete({"id": str(i)})
-        count = self.dynamo.scan2("foobar", select="COUNT")
+        count = self.dynamo.scan("foobar", select="COUNT")
         self.assertEqual(count, 0)
 
     def test_write_converts_none(self):
         """ Write operation converts None values to a DELETE """
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
-        self.dynamo.put_item2("foobar", {"id": "a", "foo": "bar"})
+        self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
         with self.dynamo.batch_write("foobar") as batch:
             batch.put({"id": "a", "foo": None})
-        ret = list(self.dynamo.scan2("foobar"))
+        ret = list(self.dynamo.scan("foobar"))
         self.assertCountEqual(ret, [{"id": "a"}])
 
     def test_handle_unprocessed(self):
@@ -299,7 +299,7 @@ class TestBatchWrite(BaseSystemTest):
                 raise Exception
         except Exception:
             pass
-        ret = list(self.dynamo.scan2("foobar"))
+        ret = list(self.dynamo.scan("foobar"))
         self.assertEqual(len(ret), 0)
 
     def test_capacity(self):
@@ -347,42 +347,42 @@ class TestUpdateItem2(BaseSystemTest):
     def test_update_field(self):
         """ Update an item field """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        self.dynamo.update_item2("foobar", {"id": "a"}, "SET foo = :bar", bar="bar")
-        item = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", {"id": "a"})
+        self.dynamo.update_item("foobar", {"id": "a"}, "SET foo = :bar", bar="bar")
+        item = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(item, {"id": "a", "foo": "bar"})
 
     def test_atomic_add_num(self):
         """ Update can atomically add to a number """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        self.dynamo.update_item2("foobar", {"id": "a"}, "ADD foo :foo", foo=1)
-        self.dynamo.update_item2("foobar", {"id": "a"}, "ADD foo :foo", foo=2)
-        item = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", {"id": "a"})
+        self.dynamo.update_item("foobar", {"id": "a"}, "ADD foo :foo", foo=1)
+        self.dynamo.update_item("foobar", {"id": "a"}, "ADD foo :foo", foo=2)
+        item = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(item, {"id": "a", "foo": 3})
 
     def test_atomic_add_set(self):
         """ Update can atomically add to a set """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        self.dynamo.update_item2("foobar", {"id": "a"}, "ADD foo :foo", foo=set([1]))
-        self.dynamo.update_item2("foobar", {"id": "a"}, "ADD foo :foo", foo=set([1, 2]))
-        item = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", {"id": "a"})
+        self.dynamo.update_item("foobar", {"id": "a"}, "ADD foo :foo", foo=set([1]))
+        self.dynamo.update_item("foobar", {"id": "a"}, "ADD foo :foo", foo=set([1, 2]))
+        item = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(item, {"id": "a", "foo": set([1, 2])})
 
     def test_delete_field(self):
         """ Update can delete fields from an item """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "foo": "bar"})
-        self.dynamo.update_item2("foobar", {"id": "a"}, "REMOVE foo")
-        item = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
+        self.dynamo.update_item("foobar", {"id": "a"}, "REMOVE foo")
+        item = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(item, {"id": "a"})
 
     def test_return_item(self):
         """ Update can return the updated item """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        ret = self.dynamo.update_item2(
+        self.dynamo.put_item("foobar", {"id": "a"})
+        ret = self.dynamo.update_item(
             "foobar", {"id": "a"}, "SET foo = :foo", returns=ALL_NEW, foo="bar"
         )
         self.assertEqual(ret, {"id": "a", "foo": "bar"})
@@ -390,8 +390,8 @@ class TestUpdateItem2(BaseSystemTest):
     def test_return_metadata(self):
         """ The Update return value contains capacity metadata """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        ret = self.dynamo.update_item2(
+        self.dynamo.put_item("foobar", {"id": "a"})
+        ret = self.dynamo.update_item(
             "foobar",
             {"id": "a"},
             "SET foo = :foo",
@@ -404,9 +404,9 @@ class TestUpdateItem2(BaseSystemTest):
     def test_expect_condition(self):
         """ Update can expect a field to meet a condition """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "foo": 5})
+        self.dynamo.put_item("foobar", {"id": "a", "foo": 5})
         with self.assertRaises(CheckFailed):
-            self.dynamo.update_item2(
+            self.dynamo.update_item(
                 "foobar",
                 {"id": "a"},
                 "SET foo = :foo",
@@ -418,8 +418,8 @@ class TestUpdateItem2(BaseSystemTest):
     def test_expect_condition_or(self):
         """ Expected conditionals can be OR'd together """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "foo": 5})
-        self.dynamo.update_item2(
+        self.dynamo.put_item("foobar", {"id": "a", "foo": 5})
+        self.dynamo.update_item(
             "foobar",
             {"id": "a"},
             "SET foo = :foo",
@@ -431,15 +431,15 @@ class TestUpdateItem2(BaseSystemTest):
     def test_expression_values(self):
         """ Can pass in expression values directly """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "foo": 5})
-        self.dynamo.update_item2(
+        self.dynamo.put_item("foobar", {"id": "a", "foo": 5})
+        self.dynamo.update_item(
             "foobar",
             {"id": "a"},
             "SET #f = :foo",
             alias={"#f": "foo"},
             expr_values={":foo": 10},
         )
-        item = list(self.dynamo.scan2("foobar"))[0]
+        item = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(item, {"id": "a", "foo": 10})
 
 
@@ -455,24 +455,24 @@ class TestPutItem2(BaseSystemTest):
     def test_new_item(self):
         """ Can Put new item into table """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        ret = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", {"id": "a"})
+        ret = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(ret, {"id": "a"})
 
     def test_overwrite_item(self):
         """ Can overwrite an existing item """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "foo": "bar"})
-        self.dynamo.put_item2("foobar", {"id": "a", "foo": "baz"})
-        ret = self.dynamo.get_item2("foobar", {"id": "a"})
+        self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
+        self.dynamo.put_item("foobar", {"id": "a", "foo": "baz"})
+        ret = self.dynamo.get_item("foobar", {"id": "a"})
         self.assertEqual(ret, {"id": "a", "foo": "baz"})
 
     def test_expect_condition(self):
         """ Put can expect a field to meet a condition """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "foo": 5})
+        self.dynamo.put_item("foobar", {"id": "a", "foo": 5})
         with self.assertRaises(CheckFailed):
-            self.dynamo.put_item2(
+            self.dynamo.put_item(
                 "foobar",
                 {"id": "a", "foo": 13},
                 condition="#f < :v",
@@ -483,8 +483,8 @@ class TestPutItem2(BaseSystemTest):
     def test_expect_condition_or(self):
         """ Expected conditionals can be OR'd together """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "foo": 5})
-        self.dynamo.put_item2(
+        self.dynamo.put_item("foobar", {"id": "a", "foo": 5})
+        self.dynamo.put_item(
             "foobar",
             {"id": "a", "foo": 13},
             condition="foo < :v OR attribute_not_exists(baz)",
@@ -494,15 +494,15 @@ class TestPutItem2(BaseSystemTest):
     def test_return_item(self):
         """ PutItem can return the item that was Put """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        ret = self.dynamo.put_item2("foobar", {"id": "a"}, returns=ALL_OLD)
+        self.dynamo.put_item("foobar", {"id": "a"})
+        ret = self.dynamo.put_item("foobar", {"id": "a"}, returns=ALL_OLD)
         self.assertEqual(ret, {"id": "a"})
 
     def test_return_capacity(self):
         """ PutItem can return the consumed capacity """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        ret = self.dynamo.put_item2(
+        self.dynamo.put_item("foobar", {"id": "a"})
+        ret = self.dynamo.put_item(
             "foobar", {"id": "a"}, returns=ALL_OLD, return_capacity=TOTAL
         )
         self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
@@ -520,23 +520,23 @@ class TestDeleteItem2(BaseSystemTest):
     def test_delete(self):
         """ Delete an item """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        self.dynamo.delete_item2("foobar", {"id": "a"})
-        num = self.dynamo.scan2("foobar", select="COUNT")
+        self.dynamo.put_item("foobar", {"id": "a"})
+        self.dynamo.delete_item("foobar", {"id": "a"})
+        num = self.dynamo.scan("foobar", select="COUNT")
         self.assertEqual(num, 0)
 
     def test_return_item(self):
         """ Delete can return the deleted item """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "foo": "bar"})
-        ret = self.dynamo.delete_item2("foobar", {"id": "a"}, returns=ALL_OLD)
+        self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
+        ret = self.dynamo.delete_item("foobar", {"id": "a"}, returns=ALL_OLD)
         self.assertEqual(ret, {"id": "a", "foo": "bar"})
 
     def test_return_metadata(self):
         """ The Delete return value contains capacity metadata """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        ret = self.dynamo.delete_item2(
+        self.dynamo.put_item("foobar", {"id": "a"})
+        ret = self.dynamo.delete_item(
             "foobar", {"id": "a"}, returns=ALL_OLD, return_capacity=TOTAL
         )
         self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
@@ -544,18 +544,18 @@ class TestDeleteItem2(BaseSystemTest):
     def test_expect_not_exists(self):
         """ Delete can expect a field to not exist """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "foo": "bar"})
+        self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
         with self.assertRaises(CheckFailed):
-            self.dynamo.delete_item2(
+            self.dynamo.delete_item(
                 "foobar", {"id": "a"}, condition="NOT attribute_exists(foo)"
             )
 
     def test_expect_field(self):
         """ Delete can expect a field to have a value """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "foo": "bar"})
+        self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
         with self.assertRaises(CheckFailed):
-            self.dynamo.delete_item2(
+            self.dynamo.delete_item(
                 "foobar",
                 {"id": "a"},
                 condition="#f = :foo",
@@ -566,17 +566,17 @@ class TestDeleteItem2(BaseSystemTest):
     def test_expect_condition(self):
         """ Delete can expect a field to meet a condition """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "foo": 5})
+        self.dynamo.put_item("foobar", {"id": "a", "foo": 5})
         with self.assertRaises(CheckFailed):
-            self.dynamo.delete_item2(
+            self.dynamo.delete_item(
                 "foobar", {"id": "a"}, condition="foo < :low", expr_values={":low": 4}
             )
 
     def test_expect_condition_or(self):
         """ Expected conditionals can be OR'd together """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "foo": 5})
-        self.dynamo.delete_item2(
+        self.dynamo.put_item("foobar", {"id": "a", "foo": 5})
+        self.dynamo.delete_item(
             "foobar",
             {"id": "a"},
             condition="foo < :foo OR NOT attribute_exists(baz)",

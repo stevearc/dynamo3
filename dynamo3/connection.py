@@ -454,7 +454,7 @@ class DynamoDBConnection(object):
             else:  # pragma: no cover
                 raise
 
-    def put_item2(
+    def put_item(
         self,
         tablename: str,
         item: DynamoObject,
@@ -518,7 +518,7 @@ class DynamoDBConnection(object):
         if result:
             return Result(self.dynamizer, result, "Attributes")
 
-    def get_item2(
+    def get_item(
         self,
         tablename: str,
         key: DynamoObject,
@@ -565,7 +565,7 @@ class DynamoDBConnection(object):
         data = self.call("get_item", **kwargs)
         return Result(self.dynamizer, data, "Item")
 
-    def delete_item2(
+    def delete_item(
         self,
         tablename: str,
         key: DynamoObject,
@@ -714,17 +714,25 @@ class DynamoDBConnection(object):
         )
         return ret
 
-    def update_item2(
+    def update_item(
         self,
-        tablename,
-        key,
-        expression,
-        expr_values=None,
-        alias=None,
-        condition=None,
-        returns=NONE,
-        return_capacity=None,
-        return_item_collection_metrics=NONE,
+        tablename: str,
+        key: DynamoObject,
+        expression: str,
+        expr_values: Optional[ExpressionValuesType] = None,
+        alias: Optional[ExpressionAttributeNamesType] = None,
+        condition: Optional[str] = None,
+        returns: Optional[
+            Literal[
+                Literal["NONE"],
+                Literal["ALL_OLD"],
+                Literal["UPDATED_OLD"],
+                Literal["ALL_NEW"],
+                Literal["UPDATED_NEW"],
+            ]
+        ] = None,
+        return_capacity: Optional[ReturnCapacityType] = None,
+        return_item_collection_metrics: ReturnItemCollectionMetricsType = NONE,
         **kwargs
     ) -> Optional[Result]:
         """
@@ -785,7 +793,7 @@ class DynamoDBConnection(object):
         return None
 
     @overload
-    def scan2(
+    def scan(
         self,
         tablename: str,
         expr_values: Optional[ExpressionValuesType],
@@ -805,7 +813,7 @@ class DynamoDBConnection(object):
         ...
 
     @overload
-    def scan2(  # pylint:disable=E0102
+    def scan(  # pylint:disable=E0102
         self,
         tablename: str,
         expr_values: Optional[ExpressionValuesType],
@@ -824,7 +832,7 @@ class DynamoDBConnection(object):
     ) -> ResultSet:
         ...
 
-    def scan2(  # pylint:disable=E0102
+    def scan(  # pylint:disable=E0102
         self,
         tablename: str,
         expr_values: Optional[ExpressionValuesType] = None,
@@ -890,8 +898,8 @@ class DynamoDBConnection(object):
 
         .. code-block:: python
 
-            connection.scan2('mytable', filter='contains(tags, :search)', search='text)
-            connection.scan2('mytable', filter='id = :id', expr_values={':id': 'dsa'})
+            connection.scan('mytable', filter='contains(tags, :search)', search='text)
+            connection.scan('mytable', filter='id = :id', expr_values={':id': 'dsa'})
 
         """
         keywords = {
@@ -931,7 +939,7 @@ class DynamoDBConnection(object):
             return ResultSet(self, limit, "scan", **keywords)
 
     @overload
-    def query2(
+    def query(
         self,
         tablename: str,
         key_condition_expr: str,
@@ -951,7 +959,7 @@ class DynamoDBConnection(object):
         ...
 
     @overload
-    def query2(  # pylint:disable=E0102
+    def query(  # pylint:disable=E0102
         self,
         tablename: str,
         key_condition_expr: str,
@@ -970,7 +978,7 @@ class DynamoDBConnection(object):
     ) -> ResultSet:
         ...
 
-    def query2(  # pylint:disable=E0102
+    def query(  # pylint:disable=E0102
         self,
         tablename: str,
         key_condition_expr: str,
@@ -1034,8 +1042,8 @@ class DynamoDBConnection(object):
 
         .. code-block:: python
 
-            connection.query2('mytable', 'foo = :foo', foo=5)
-            connection.query2('mytable', 'foo = :foo', expr_values={':foo': 5})
+            connection.query('mytable', 'foo = :foo', foo=5)
+            connection.query('mytable', 'foo = :foo', expr_values={':foo': 5})
 
         """
         values = build_expression_values(self.dynamizer, expr_values, kwargs)

@@ -22,8 +22,8 @@ class TestQuery2(BaseSystemTest):
         """ Can query on the hash key """
         hash_key = DynamoKey("id")
         self.dynamo.create_table("foobar", hash_key)
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        results = self.dynamo.query2("foobar", "id = :id", id="a")
+        self.dynamo.put_item("foobar", {"id": "a"})
+        results = self.dynamo.query("foobar", "id = :id", id="a")
         self.assertCountEqual(list(results), [{"id": "a"}])
 
     def test_local_index(self):
@@ -38,8 +38,8 @@ class TestQuery2(BaseSystemTest):
             "num": 1,
             "name": "baz",
         }
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.query2(
+        self.dynamo.put_item("foobar", item)
+        ret = self.dynamo.query(
             "foobar",
             "id = :id and #name = :name",
             alias={"#name": "name"},
@@ -59,8 +59,8 @@ class TestQuery2(BaseSystemTest):
             "id": "a",
             "name": "baz",
         }
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.query2(
+        self.dynamo.put_item("foobar", item)
+        ret = self.dynamo.query(
             "foobar",
             "#name = :name",
             alias={"#name": "name"},
@@ -79,8 +79,8 @@ class TestQuery2(BaseSystemTest):
             "id": "a",
             "foo": "bar",
         }
-        self.dynamo.put_item2("foobar", item)
-        results = self.dynamo.query2("foobar", "id = :id", attributes="id", id="a")
+        self.dynamo.put_item("foobar", item)
+        results = self.dynamo.query("foobar", "id = :id", attributes="id", id="a")
         self.assertCountEqual(list(results), [{"id": "a"}])
 
     def test_attributes_list(self):
@@ -91,8 +91,8 @@ class TestQuery2(BaseSystemTest):
             "id": "a",
             "foo": "bar",
         }
-        self.dynamo.put_item2("foobar", item)
-        results = self.dynamo.query2("foobar", "id = :id", attributes=["id"], id="a")
+        self.dynamo.put_item("foobar", item)
+        results = self.dynamo.query("foobar", "id = :id", attributes=["id"], id="a")
         self.assertCountEqual(list(results), [{"id": "a"}])
 
     def test_order_desc(self):
@@ -101,7 +101,7 @@ class TestQuery2(BaseSystemTest):
         with self.dynamo.batch_write("foobar") as batch:
             for i in range(3):
                 batch.put({"id": "a", "num": i})
-        ret = self.dynamo.query2(
+        ret = self.dynamo.query(
             "foobar", "id = :id", attributes="num", desc=True, id="a"
         )
         self.assertEqual(list(ret), [{"num": i} for i in range(2, -1, -1)])
@@ -112,7 +112,7 @@ class TestQuery2(BaseSystemTest):
         with self.dynamo.batch_write("foobar") as batch:
             for i in range(3):
                 batch.put({"id": "a", "num": i})
-        ret = self.dynamo.query2("foobar", "id = :id", limit=1, id="a")
+        ret = self.dynamo.query("foobar", "id = :id", limit=1, id="a")
         self.assertEqual(len(list(ret)), 1)
 
     def test_count(self):
@@ -121,15 +121,15 @@ class TestQuery2(BaseSystemTest):
         with self.dynamo.batch_write("foobar") as batch:
             for i in range(3):
                 batch.put({"id": "a", "num": i})
-        ret = self.dynamo.query2("foobar", "id = :id", select="COUNT", id="a")
+        ret = self.dynamo.query("foobar", "id = :id", select="COUNT", id="a")
         self.assertEqual(ret, 3)
         self.assertEqual(ret.scanned_count, 3)
 
     def test_capacity(self):
         """ Can return consumed capacity """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "num": 1})
-        ret = self.dynamo.query2("foobar", "id = :id", return_capacity=TOTAL, id="a")
+        self.dynamo.put_item("foobar", {"id": "a", "num": 1})
+        ret = self.dynamo.query("foobar", "id = :id", return_capacity=TOTAL, id="a")
         list(ret)
         self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
 
@@ -137,45 +137,45 @@ class TestQuery2(BaseSystemTest):
         """ Can query with EQ constraint """
         self.make_table()
         item = {"id": "a", "num": 1}
-        self.dynamo.put_item2("foobar", item)
-        self.dynamo.put_item2("foobar", {"id": "a", "num": 2})
-        ret = self.dynamo.query2("foobar", "id = :id and num = :num", id="a", num=1)
+        self.dynamo.put_item("foobar", item)
+        self.dynamo.put_item("foobar", {"id": "a", "num": 2})
+        ret = self.dynamo.query("foobar", "id = :id and num = :num", id="a", num=1)
         self.assertCountEqual(list(ret), [item])
 
     def test_le(self):
         """ Can query with <= constraint """
         self.make_table()
         item = {"id": "a", "num": 1}
-        self.dynamo.put_item2("foobar", item)
-        self.dynamo.put_item2("foobar", {"id": "a", "num": 2})
-        ret = self.dynamo.query2("foobar", "id = :id and num <= :num", id="a", num=1)
+        self.dynamo.put_item("foobar", item)
+        self.dynamo.put_item("foobar", {"id": "a", "num": 2})
+        ret = self.dynamo.query("foobar", "id = :id and num <= :num", id="a", num=1)
         self.assertCountEqual(list(ret), [item])
 
     def test_lt(self):
         """ Can query with < constraint """
         self.make_table()
         item = {"id": "a", "num": 1}
-        self.dynamo.put_item2("foobar", item)
-        self.dynamo.put_item2("foobar", {"id": "a", "num": 2})
-        ret = self.dynamo.query2("foobar", "id = :id and num < :num", id="a", num=2)
+        self.dynamo.put_item("foobar", item)
+        self.dynamo.put_item("foobar", {"id": "a", "num": 2})
+        ret = self.dynamo.query("foobar", "id = :id and num < :num", id="a", num=2)
         self.assertCountEqual(list(ret), [item])
 
     def test_ge(self):
         """ Can query with >= constraint """
         self.make_table()
         item = {"id": "a", "num": 2}
-        self.dynamo.put_item2("foobar", {"id": "a", "num": 1})
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.query2("foobar", "id = :id and num >= :num", id="a", num=2)
+        self.dynamo.put_item("foobar", {"id": "a", "num": 1})
+        self.dynamo.put_item("foobar", item)
+        ret = self.dynamo.query("foobar", "id = :id and num >= :num", id="a", num=2)
         self.assertCountEqual(list(ret), [item])
 
     def test_gt(self):
         """ Can query with > constraint """
         self.make_table()
         item = {"id": "a", "num": 2}
-        self.dynamo.put_item2("foobar", {"id": "a", "num": 1})
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.query2("foobar", "id = :id and num > :num", id="a", num=1)
+        self.dynamo.put_item("foobar", {"id": "a", "num": 1})
+        self.dynamo.put_item("foobar", item)
+        ret = self.dynamo.query("foobar", "id = :id and num > :num", id="a", num=1)
         self.assertCountEqual(list(ret), [item])
 
     def test_beginswith(self):
@@ -184,9 +184,9 @@ class TestQuery2(BaseSystemTest):
         range_key = DynamoKey("name")
         self.dynamo.create_table("foobar", hash_key=hash_key, range_key=range_key)
         item = {"id": "a", "name": "David"}
-        self.dynamo.put_item2("foobar", {"id": "a", "name": "Steven"})
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.query2(
+        self.dynamo.put_item("foobar", {"id": "a", "name": "Steven"})
+        self.dynamo.put_item("foobar", item)
+        ret = self.dynamo.query(
             "foobar",
             "id = :id and begins_with(#name, :name)",
             alias={"#name": "name"},
@@ -199,9 +199,9 @@ class TestQuery2(BaseSystemTest):
         """ Can query with 'between' constraint """
         self.make_table()
         item = {"id": "a", "num": 2}
-        self.dynamo.put_item2("foobar", {"id": "a", "num": 1})
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.query2(
+        self.dynamo.put_item("foobar", {"id": "a", "num": 1})
+        self.dynamo.put_item("foobar", item)
+        ret = self.dynamo.query(
             "foobar", "id = :id and num between :low and :high", id="a", low=2, high=10
         )
         self.assertCountEqual(list(ret), [item])
@@ -210,16 +210,16 @@ class TestQuery2(BaseSystemTest):
         """ Expression values can be passed in as a dict """
         hash_key = DynamoKey("id")
         self.dynamo.create_table("foobar", hash_key)
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        results = self.dynamo.query2("foobar", "id = :id", expr_values={":id": "a"})
+        self.dynamo.put_item("foobar", {"id": "a"})
+        results = self.dynamo.query("foobar", "id = :id", expr_values={":id": "a"})
         self.assertCountEqual(list(results), [{"id": "a"}])
 
     def test_filter(self):
         """ Query can filter returned results """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "num": 1, "a": "a"})
-        self.dynamo.put_item2("foobar", {"id": "a", "num": 2, "b": "b"})
-        results = self.dynamo.query2(
+        self.dynamo.put_item("foobar", {"id": "a", "num": 1, "a": "a"})
+        self.dynamo.put_item("foobar", {"id": "a", "num": 2, "b": "b"})
+        results = self.dynamo.query(
             "foobar", "id = :id", filter="a = :a", id="a", a="a"
         )
         self.assertCountEqual(list(results), [{"id": "a", "num": 1, "a": "a"}])
@@ -228,10 +228,10 @@ class TestQuery2(BaseSystemTest):
         """ Can 'and' the filter arguments """
         self.make_table()
         a = {"id": "a", "num": 1, "a": "a", "b": "a"}
-        self.dynamo.put_item2("foobar", a)
+        self.dynamo.put_item("foobar", a)
         b = {"id": "a", "num": 2, "a": "a", "b": "b"}
-        self.dynamo.put_item2("foobar", b)
-        results = self.dynamo.query2(
+        self.dynamo.put_item("foobar", b)
+        results = self.dynamo.query(
             "foobar", "id = :id", filter="a = :a and b = :b", id="a", a="a", b="a"
         )
         self.assertCountEqual(list(results), [a])
@@ -240,10 +240,10 @@ class TestQuery2(BaseSystemTest):
         """ Can 'or' the filter arguments """
         self.make_table()
         a = {"id": "a", "num": 1, "a": "a", "b": "a"}
-        self.dynamo.put_item2("foobar", a)
+        self.dynamo.put_item("foobar", a)
         b = {"id": "a", "num": 2, "a": "a", "b": "b"}
-        self.dynamo.put_item2("foobar", b)
-        results = self.dynamo.query2(
+        self.dynamo.put_item("foobar", b)
+        results = self.dynamo.query(
             "foobar", "id = :id", filter="a = :a or b = :b", id="a", a="a", b="a"
         )
         self.assertCountEqual(list(results), [a, b])
@@ -251,10 +251,10 @@ class TestQuery2(BaseSystemTest):
     def test_exclusive_start_key(self):
         """ Provide an ExclusiveStartKey to resume a query """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "num": 1})
-        self.dynamo.put_item2("foobar", {"id": "a", "num": 2})
-        self.dynamo.put_item2("foobar", {"id": "a", "num": 3})
-        results = self.dynamo.query2(
+        self.dynamo.put_item("foobar", {"id": "a", "num": 1})
+        self.dynamo.put_item("foobar", {"id": "a", "num": 2})
+        self.dynamo.put_item("foobar", {"id": "a", "num": 3})
+        results = self.dynamo.query(
             "foobar", "id = :id", exclusive_start_key={"id": "a", "num": 2}, id="a"
         )
         self.assertEqual(list(results), [{"id": "a", "num": 3}])
@@ -262,9 +262,9 @@ class TestQuery2(BaseSystemTest):
     def test_exclusive_start_key_format(self):
         """ Provide an ExclusiveStartKey already in DynamoDB format """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "num": 1})
-        self.dynamo.put_item2("foobar", {"id": "a", "num": 2})
-        self.dynamo.put_item2("foobar", {"id": "a", "num": 3})
+        self.dynamo.put_item("foobar", {"id": "a", "num": 1})
+        self.dynamo.put_item("foobar", {"id": "a", "num": 2})
+        self.dynamo.put_item("foobar", {"id": "a", "num": 3})
         key = {
             "id": {
                 "S": "a",
@@ -273,7 +273,7 @@ class TestQuery2(BaseSystemTest):
                 "N": "2",
             },
         }
-        results = self.dynamo.query2(
+        results = self.dynamo.query(
             "foobar", "id = :id", exclusive_start_key=key, id="a"
         )
         self.assertEqual(list(results), [{"id": "a", "num": 3}])
@@ -296,8 +296,8 @@ class TestScan2(BaseSystemTest):
             "id": "a",
             "foo": "bar",
         }
-        self.dynamo.put_item2("foobar", item)
-        results = self.dynamo.scan2("foobar", attributes="id")
+        self.dynamo.put_item("foobar", item)
+        results = self.dynamo.scan("foobar", attributes="id")
         self.assertCountEqual(list(results), [{"id": "a"}])
 
     def test_attributes_list(self):
@@ -308,8 +308,8 @@ class TestScan2(BaseSystemTest):
             "id": "a",
             "foo": "bar",
         }
-        self.dynamo.put_item2("foobar", item)
-        results = self.dynamo.scan2("foobar", attributes=["id"])
+        self.dynamo.put_item("foobar", item)
+        results = self.dynamo.scan("foobar", attributes=["id"])
         self.assertCountEqual(list(results), [{"id": "a"}])
 
     def test_limit(self):
@@ -318,7 +318,7 @@ class TestScan2(BaseSystemTest):
         with self.dynamo.batch_write("foobar") as batch:
             for i in range(3):
                 batch.put({"id": str(i)})
-        ret = self.dynamo.scan2("foobar", limit=1)
+        ret = self.dynamo.scan("foobar", limit=1)
         self.assertEqual(len(list(ret)), 1)
 
     def test_count(self):
@@ -327,7 +327,7 @@ class TestScan2(BaseSystemTest):
         with self.dynamo.batch_write("foobar") as batch:
             for i in range(3):
                 batch.put({"id": str(i)})
-        ret = self.dynamo.scan2("foobar", select="COUNT")
+        ret = self.dynamo.scan("foobar", select="COUNT")
         self.assertEqual(ret.count, 3)
         self.assertEqual(ret, 3)
         self.assertEqual(ret.scanned_count, 3)
@@ -335,8 +335,8 @@ class TestScan2(BaseSystemTest):
     def test_count_page(self):
         """ Count queries should page the results """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        self.dynamo.put_item2("foobar", {"id": "b"})
+        self.dynamo.put_item("foobar", {"id": "a"})
+        self.dynamo.put_item("foobar", {"id": "b"})
 
         def key_hook(connection, command, kwargs, data):
             """ Inject a fake LastEvaluatedKey and unsubscribe """
@@ -344,75 +344,75 @@ class TestScan2(BaseSystemTest):
             self.dynamo.unsubscribe("postcall", key_hook)
 
         self.dynamo.subscribe("postcall", key_hook)
-        ret = self.dynamo.scan2("foobar", select="COUNT")
+        ret = self.dynamo.scan("foobar", select="COUNT")
         self.assertEqual(ret, 3)
 
     def test_capacity(self):
         """ Can return consumed capacity """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        ret = self.dynamo.scan2("foobar", return_capacity=TOTAL)
+        self.dynamo.put_item("foobar", {"id": "a"})
+        ret = self.dynamo.scan("foobar", return_capacity=TOTAL)
         list(ret)
         self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
 
     def test_eq(self):
         """ Can scan with EQ constraint """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        self.dynamo.put_item2("foobar", {"id": "b"})
-        ret = self.dynamo.scan2("foobar", filter="id = :id", id="a")
+        self.dynamo.put_item("foobar", {"id": "a"})
+        self.dynamo.put_item("foobar", {"id": "b"})
+        ret = self.dynamo.scan("foobar", filter="id = :id", id="a")
         self.assertCountEqual(list(ret), [{"id": "a"}])
 
     def test_expr_values(self):
         """ Can pass in ExpressionAttributeValues direcly """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        self.dynamo.put_item2("foobar", {"id": "b"})
-        ret = self.dynamo.scan2("foobar", filter="id = :id", expr_values={":id": "a"})
+        self.dynamo.put_item("foobar", {"id": "a"})
+        self.dynamo.put_item("foobar", {"id": "b"})
+        ret = self.dynamo.scan("foobar", filter="id = :id", expr_values={":id": "a"})
         self.assertCountEqual(list(ret), [{"id": "a"}])
 
     def test_ne(self):
         """ Can scan with NE constraint """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        self.dynamo.put_item2("foobar", {"id": "b"})
-        ret = self.dynamo.scan2("foobar", filter="id <> :id", id="b")
+        self.dynamo.put_item("foobar", {"id": "a"})
+        self.dynamo.put_item("foobar", {"id": "b"})
+        ret = self.dynamo.scan("foobar", filter="id <> :id", id="b")
         self.assertCountEqual(list(ret), [{"id": "a"}])
 
     def test_le(self):
         """ Can scan with <= constraint """
         self.make_table()
         item = {"id": "a", "num": 1}
-        self.dynamo.put_item2("foobar", item)
-        self.dynamo.put_item2("foobar", {"id": "b", "num": 2})
-        ret = self.dynamo.scan2("foobar", filter="num <= :num", num=1)
+        self.dynamo.put_item("foobar", item)
+        self.dynamo.put_item("foobar", {"id": "b", "num": 2})
+        ret = self.dynamo.scan("foobar", filter="num <= :num", num=1)
         self.assertCountEqual(list(ret), [item])
 
     def test_lt(self):
         """ Can scan with < constraint """
         self.make_table()
         item = {"id": "a", "num": 1}
-        self.dynamo.put_item2("foobar", item)
-        self.dynamo.put_item2("foobar", {"id": "b", "num": 2})
-        ret = list(self.dynamo.scan2("foobar", filter="num < :num", num=2))
+        self.dynamo.put_item("foobar", item)
+        self.dynamo.put_item("foobar", {"id": "b", "num": 2})
+        ret = list(self.dynamo.scan("foobar", filter="num < :num", num=2))
         self.assertCountEqual(ret, [item])
 
     def test_ge(self):
         """ Can scan with >= constraint """
         self.make_table()
         item = {"id": "a", "num": 2}
-        self.dynamo.put_item2("foobar", {"id": "b", "num": 1})
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.scan2("foobar", filter="num >= :num", num=2)
+        self.dynamo.put_item("foobar", {"id": "b", "num": 1})
+        self.dynamo.put_item("foobar", item)
+        ret = self.dynamo.scan("foobar", filter="num >= :num", num=2)
         self.assertCountEqual(list(ret), [item])
 
     def test_gt(self):
         """ Can scan with > constraint """
         self.make_table()
         item = {"id": "a", "num": 2}
-        self.dynamo.put_item2("foobar", {"id": "b", "num": 1})
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.scan2("foobar", filter="num > :num", num=1)
+        self.dynamo.put_item("foobar", {"id": "b", "num": 1})
+        self.dynamo.put_item("foobar", item)
+        ret = self.dynamo.scan("foobar", filter="num > :num", num=1)
         self.assertCountEqual(list(ret), [item])
 
     def test_beginswith(self):
@@ -420,9 +420,9 @@ class TestScan2(BaseSystemTest):
         hash_key = DynamoKey("id")
         self.dynamo.create_table("foobar", hash_key=hash_key)
         item = {"id": "a", "name": "David"}
-        self.dynamo.put_item2("foobar", {"id": "b", "name": "Steven"})
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.scan2(
+        self.dynamo.put_item("foobar", {"id": "b", "name": "Steven"})
+        self.dynamo.put_item("foobar", item)
+        ret = self.dynamo.scan(
             "foobar",
             filter="begins_with(#name, :name)",
             alias={"#name": "name"},
@@ -434,9 +434,9 @@ class TestScan2(BaseSystemTest):
         """ Can scan with 'between' constraint """
         self.make_table()
         item = {"id": "a", "num": 2}
-        self.dynamo.put_item2("foobar", {"id": "b", "num": 1})
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.scan2(
+        self.dynamo.put_item("foobar", {"id": "b", "num": 1})
+        self.dynamo.put_item("foobar", item)
+        ret = self.dynamo.scan(
             "foobar", filter="num between :low and :high", low=2, high=10
         )
         self.assertCountEqual(list(ret), [item])
@@ -445,9 +445,9 @@ class TestScan2(BaseSystemTest):
         """ Can scan with 'in' constraint """
         self.make_table()
         item = {"id": "a", "num": 2}
-        self.dynamo.put_item2("foobar", {"id": "b", "num": 1})
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.scan2(
+        self.dynamo.put_item("foobar", {"id": "b", "num": 1})
+        self.dynamo.put_item("foobar", item)
+        ret = self.dynamo.scan(
             "foobar", filter="num in (:v1, :v2, :v3, :v4)", v1=2, v2=3, v3=4, v4=4
         )
         self.assertCountEqual(list(ret), [item])
@@ -456,56 +456,54 @@ class TestScan2(BaseSystemTest):
         """ Can scan with 'contains' constraint """
         self.make_table()
         item = {"id": "a", "nums": set([1, 2, 3])}
-        self.dynamo.put_item2("foobar", {"id": "b", "nums": set([4, 5, 6])})
-        self.dynamo.put_item2("foobar", item)
-        ret = list(self.dynamo.scan2("foobar", filter="contains(nums, :num)", num=2))
+        self.dynamo.put_item("foobar", {"id": "b", "nums": set([4, 5, 6])})
+        self.dynamo.put_item("foobar", item)
+        ret = list(self.dynamo.scan("foobar", filter="contains(nums, :num)", num=2))
         self.assertCountEqual(ret, [item])
 
     def test_ncontains(self):
         """ Can scan with 'not contains' constraint """
         self.make_table()
         item = {"id": "a", "nums": set([1, 2, 3])}
-        self.dynamo.put_item2("foobar", {"id": "b", "nums": set([4, 5, 6])})
-        self.dynamo.put_item2("foobar", item)
-        ret = list(
-            self.dynamo.scan2("foobar", filter="not contains(nums, :num)", num=4)
-        )
+        self.dynamo.put_item("foobar", {"id": "b", "nums": set([4, 5, 6])})
+        self.dynamo.put_item("foobar", item)
+        ret = list(self.dynamo.scan("foobar", filter="not contains(nums, :num)", num=4))
         self.assertCountEqual(ret, [item])
 
     def test_is_null(self):
         """ Can scan with 'is null' constraint """
         self.make_table()
         item = {"id": "a"}
-        self.dynamo.put_item2("foobar", {"id": "b", "num": 1})
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.scan2("foobar", filter="not attribute_exists(num)")
+        self.dynamo.put_item("foobar", {"id": "b", "num": 1})
+        self.dynamo.put_item("foobar", item)
+        ret = self.dynamo.scan("foobar", filter="not attribute_exists(num)")
         self.assertCountEqual(list(ret), [item])
 
     def test_is_not_null(self):
         """ Can scan with 'is not null' constraint """
         self.make_table()
         item = {"id": "a", "num": 1}
-        self.dynamo.put_item2("foobar", {"id": "b"})
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.scan2("foobar", filter="attribute_exists(num)")
+        self.dynamo.put_item("foobar", {"id": "b"})
+        self.dynamo.put_item("foobar", item)
+        ret = self.dynamo.scan("foobar", filter="attribute_exists(num)")
         self.assertCountEqual(list(ret), [item])
 
     def test_filter_and(self):
         """ Multiple filter args are ANDed together """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "a": "a", "b": "a"})
-        self.dynamo.put_item2("foobar", {"id": "b", "a": "a", "b": "b"})
-        ret = self.dynamo.scan2("foobar", filter="a = :a and b = :b", a="a", b="a")
+        self.dynamo.put_item("foobar", {"id": "a", "a": "a", "b": "a"})
+        self.dynamo.put_item("foobar", {"id": "b", "a": "a", "b": "b"})
+        ret = self.dynamo.scan("foobar", filter="a = :a and b = :b", a="a", b="a")
         self.assertCountEqual(list(ret), [{"id": "a", "a": "a", "b": "a"}])
 
     def test_filter_or(self):
         """ Can 'or' the filter arguments """
         self.make_table()
         a = {"id": "a", "a": "a", "b": "a"}
-        self.dynamo.put_item2("foobar", a)
+        self.dynamo.put_item("foobar", a)
         b = {"id": "b", "a": "a", "b": "b"}
-        self.dynamo.put_item2("foobar", b)
-        ret = self.dynamo.scan2("foobar", filter="a = :a or b = :b", a="a", b="a")
+        self.dynamo.put_item("foobar", b)
+        ret = self.dynamo.scan("foobar", filter="a = :a or b = :b", a="a", b="a")
         self.assertCountEqual(list(ret), [a, b])
 
     def test_scan_index(self):
@@ -518,23 +516,23 @@ class TestScan2(BaseSystemTest):
             "id": "a",
             "name": "baz",
         }
-        self.dynamo.put_item2("foobar", item)
+        self.dynamo.put_item("foobar", item)
         item2 = {
             "id": "b",
         }
-        self.dynamo.put_item2("foobar", item2)
-        ret = self.dynamo.scan2("foobar", index="name-index")
+        self.dynamo.put_item("foobar", item2)
+        ret = self.dynamo.scan("foobar", index="name-index")
         self.assertCountEqual(list(ret), [item])
 
     def test_parallel_scan(self):
         """ Can scan a table in segments """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        self.dynamo.put_item2("foobar", {"id": "b"})
-        self.dynamo.put_item2("foobar", {"id": "c"})
-        self.dynamo.put_item2("foobar", {"id": "d"})
-        ret1 = self.dynamo.scan2("foobar", segment=0, total_segments=2)
-        ret2 = self.dynamo.scan2("foobar", segment=1, total_segments=2)
+        self.dynamo.put_item("foobar", {"id": "a"})
+        self.dynamo.put_item("foobar", {"id": "b"})
+        self.dynamo.put_item("foobar", {"id": "c"})
+        self.dynamo.put_item("foobar", {"id": "d"})
+        ret1 = self.dynamo.scan("foobar", segment=0, total_segments=2)
+        ret2 = self.dynamo.scan("foobar", segment=1, total_segments=2)
         self.assertCountEqual(
             list(ret1) + list(ret2),
             [{"id": "a"}, {"id": "b"}, {"id": "c"}, {"id": "d"}],
@@ -545,12 +543,12 @@ class TestScan2(BaseSystemTest):
         self.make_table()
         items = [{"id": x} for x in ["a", "b", "c"]]
         a, b, c = items
-        self.dynamo.put_item2("foobar", a)
-        self.dynamo.put_item2("foobar", b)
-        self.dynamo.put_item2("foobar", c)
-        first_item = list(self.dynamo.scan2("foobar", limit=1))[0]
+        self.dynamo.put_item("foobar", a)
+        self.dynamo.put_item("foobar", b)
+        self.dynamo.put_item("foobar", c)
+        first_item = list(self.dynamo.scan("foobar", limit=1))[0]
         items.remove(first_item)
-        results = self.dynamo.scan2("foobar", exclusive_start_key=first_item)
+        results = self.dynamo.scan("foobar", exclusive_start_key=first_item)
         self.assertCountEqual(list(results), items)
 
 
@@ -567,8 +565,8 @@ class TestBatchGet(BaseSystemTest):
         """ Can get multiple items """
         self.make_table()
         keys = [{"id": "a"}, {"id": "b"}]
-        self.dynamo.put_item2("foobar", keys[0])
-        self.dynamo.put_item2("foobar", keys[1])
+        self.dynamo.put_item("foobar", keys[0])
+        self.dynamo.put_item("foobar", keys[1])
         ret = list(self.dynamo.batch_get("foobar", keys))
         self.assertCountEqual(ret, keys)
 
@@ -585,14 +583,14 @@ class TestBatchGet(BaseSystemTest):
     def test_attributes(self):
         """ Can limit fetch to specific attributes """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "foo": "bar"})
+        self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
         ret = list(self.dynamo.batch_get("foobar", [{"id": "a"}], attributes=["id"]))
         self.assertCountEqual(ret, [{"id": "a"}])
 
     def test_alias_attributes(self):
         """ Can alias the names of certain attributes """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "foo": "bar"})
+        self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
         ret = self.dynamo.batch_get(
             "foobar", [{"id": "a"}], attributes=["#f"], alias={"#f": "id"}
         )
@@ -671,31 +669,31 @@ class TestGetItem2(BaseSystemTest):
         """ Can fetch an item by the primary key """
         self.make_table()
         item = {"id": "a", "foo": "bar"}
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.get_item2("foobar", {"id": "a"})
+        self.dynamo.put_item("foobar", item)
+        ret = self.dynamo.get_item("foobar", {"id": "a"})
         self.assertTrue(ret.exists)
         self.assertEqual(ret, item)
 
     def test_get_missing(self):
         """ Fetching a missing item returns None """
         self.make_table()
-        ret = self.dynamo.get_item2("foobar", {"id": "a"})
+        ret = self.dynamo.get_item("foobar", {"id": "a"})
         self.assertFalse(ret.exists)
 
     def test_attribute(self):
         """ Can fetch only certain attributes """
         self.make_table()
         item = {"id": "a", "foo": "bar"}
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.get_item2("foobar", {"id": "a"}, attributes="id")
+        self.dynamo.put_item("foobar", item)
+        ret = self.dynamo.get_item("foobar", {"id": "a"}, attributes="id")
         self.assertEqual(ret, {"id": "a"})
 
     def test_attribute_alias(self):
         """ GetItem with ExpressionAttributeNames """
         self.make_table()
         item = {"id": "a", "foo": "bar"}
-        self.dynamo.put_item2("foobar", item)
-        ret = self.dynamo.get_item2(
+        self.dynamo.put_item("foobar", item)
+        ret = self.dynamo.get_item(
             "foobar", {"id": "a"}, attributes=["#i"], alias={"#i": "id"}
         )
         self.assertEqual(ret, {"id": "a"})
@@ -703,8 +701,8 @@ class TestGetItem2(BaseSystemTest):
     def test_capacity(self):
         """ Can return the consumed capacity as well """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a"})
-        ret = self.dynamo.get_item2("foobar", {"id": "a"}, return_capacity=TOTAL)
+        self.dynamo.put_item("foobar", {"id": "a"})
+        ret = self.dynamo.get_item("foobar", {"id": "a"}, return_capacity=TOTAL)
         self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
 
     def test_result_repr(self):
@@ -729,25 +727,25 @@ class TestLimit(BaseSystemTest):
     def test_scan_limit(self):
         """ Limit can specify a max number of items to scan """
         self.make_table()
-        ret = self.dynamo.scan2("foobar", limit=Limit(5))
+        ret = self.dynamo.scan("foobar", limit=Limit(5))
         self.assertEqual(len(list(ret)), 5)
 
     def test_item_limit(self):
         """ An item_limit will fetch until reached or exceeded """
         self.make_table()
         limit = Limit(item_limit=5)
-        ret = self.dynamo.scan2("foobar", limit=limit)
+        ret = self.dynamo.scan("foobar", limit=limit)
         self.assertEqual(len(list(ret)), 10)
 
     def test_strict(self):
         """ Strict=True will end the list exactly at the item_limit """
         self.make_table()
-        ret = self.dynamo.scan2("foobar", limit=Limit(item_limit=5, strict=True))
+        ret = self.dynamo.scan("foobar", limit=Limit(item_limit=5, strict=True))
         self.assertEqual(len(list(ret)), 5)
 
     def test_filter(self):
         """ Limit can post-process to filter items """
         self.make_table()
         limit = Limit(filter=lambda x: x["num"] > 5)
-        ret = self.dynamo.scan2("foobar", limit=limit)
+        ret = self.dynamo.scan("foobar", limit=limit)
         self.assertEqual(len(list(ret)), 4)

@@ -44,7 +44,7 @@ class TestRateLimit(BaseSystemTest):
         limiter = RateLimit(3, 3)
         cap = ConsumedCapacity("foobar", Capacity(0, 2))
         with self.inject_capacity(cap, limiter) as sleep:
-            list(self.dynamo.query2("foobar", "id = :id", id="a"))
+            list(self.dynamo.query("foobar", "id = :id", id="a"))
         sleep.assert_not_called()
 
     def test_throttle_total(self):
@@ -52,7 +52,7 @@ class TestRateLimit(BaseSystemTest):
         limiter = RateLimit(3, 3)
         cap = ConsumedCapacity("foobar", Capacity(3, 0))
         with self.inject_capacity(cap, limiter) as sleep:
-            list(self.dynamo.query2("foobar", "id = :id", id="a"))
+            list(self.dynamo.query("foobar", "id = :id", id="a"))
         sleep.assert_called_with(1)
 
     def test_throttle_total_cap(self):
@@ -60,7 +60,7 @@ class TestRateLimit(BaseSystemTest):
         limiter = RateLimit(total=Capacity(3, 3))
         cap = ConsumedCapacity("foobar", Capacity(3, 0))
         with self.inject_capacity(cap, limiter) as sleep:
-            list(self.dynamo.query2("foobar", "id = :id", id="a"))
+            list(self.dynamo.query("foobar", "id = :id", id="a"))
         sleep.assert_called_with(1)
 
     def test_throttle_multiply(self):
@@ -68,7 +68,7 @@ class TestRateLimit(BaseSystemTest):
         limiter = RateLimit(3, 3)
         cap = ConsumedCapacity("foobar", Capacity(8, 0))
         with self.inject_capacity(cap, limiter) as sleep:
-            list(self.dynamo.query2("foobar", "id = :id", id="a"))
+            list(self.dynamo.query("foobar", "id = :id", id="a"))
         sleep.assert_called_with(3)
 
     def test_throttle_multiple(self):
@@ -76,8 +76,8 @@ class TestRateLimit(BaseSystemTest):
         limiter = RateLimit(4, 4)
         cap = ConsumedCapacity("foobar", Capacity(3, 0))
         with self.inject_capacity(cap, limiter) as sleep:
-            list(self.dynamo.query2("foobar", "id = :id", id="a"))
-            list(self.dynamo.query2("foobar", "id = :id", id="a"))
+            list(self.dynamo.query("foobar", "id = :id", id="a"))
+            list(self.dynamo.query("foobar", "id = :id", id="a"))
         sleep.assert_called_with(2)
 
     def test_throttle_table(self):
@@ -91,7 +91,7 @@ class TestRateLimit(BaseSystemTest):
         )
         cap = ConsumedCapacity("foobar", Capacity(8, 0), Capacity(0, 8))
         with self.inject_capacity(cap, limiter) as sleep:
-            list(self.dynamo.query2("foobar", "id = :id", id="a"))
+            list(self.dynamo.query("foobar", "id = :id", id="a"))
         sleep.assert_called_with(2)
 
     def test_throttle_table_default(self):
@@ -99,7 +99,7 @@ class TestRateLimit(BaseSystemTest):
         limiter = RateLimit(default_read=4, default_write=4)
         cap = ConsumedCapacity("foobar", Capacity(8, 0), Capacity(8, 0))
         with self.inject_capacity(cap, limiter) as sleep:
-            list(self.dynamo.query2("foobar", "id = :id", id="a"))
+            list(self.dynamo.query("foobar", "id = :id", id="a"))
         sleep.assert_called_with(2)
 
     def test_throttle_table_default_cap(self):
@@ -107,7 +107,7 @@ class TestRateLimit(BaseSystemTest):
         limiter = RateLimit(default=Capacity(4, 4))
         cap = ConsumedCapacity("foobar", Capacity(8, 0), Capacity(8, 0))
         with self.inject_capacity(cap, limiter) as sleep:
-            list(self.dynamo.query2("foobar", "id = :id", id="a"))
+            list(self.dynamo.query("foobar", "id = :id", id="a"))
         sleep.assert_called_with(2)
 
     def test_local_index(self):
@@ -125,7 +125,7 @@ class TestRateLimit(BaseSystemTest):
             },
         )
         with self.inject_capacity(cap, limiter) as sleep:
-            list(self.dynamo.query2("foobar", "id = :id", id="a"))
+            list(self.dynamo.query("foobar", "id = :id", id="a"))
         sleep.assert_called_with(1)
 
     def test_global_index(self):
@@ -145,7 +145,7 @@ class TestRateLimit(BaseSystemTest):
             },
         )
         with self.inject_capacity(cap, limiter) as sleep:
-            list(self.dynamo.query2("foobar", "id = :id", id="a"))
+            list(self.dynamo.query("foobar", "id = :id", id="a"))
         sleep.assert_called_with(2)
 
     def test_global_index_by_name(self):
@@ -163,7 +163,7 @@ class TestRateLimit(BaseSystemTest):
             },
         )
         with self.inject_capacity(cap, limiter) as sleep:
-            list(self.dynamo.query2("foobar", "id = :id", id="a"))
+            list(self.dynamo.query("foobar", "id = :id", id="a"))
         sleep.assert_called_with(2)
 
     def test_global_default_table(self):
@@ -181,7 +181,7 @@ class TestRateLimit(BaseSystemTest):
             },
         )
         with self.inject_capacity(cap, limiter) as sleep:
-            list(self.dynamo.query2("foobar", "id = :id", id="a"))
+            list(self.dynamo.query("foobar", "id = :id", id="a"))
         sleep.assert_called_with(2)
 
     def test_global_default(self):
@@ -195,7 +195,7 @@ class TestRateLimit(BaseSystemTest):
             },
         )
         with self.inject_capacity(cap, limiter) as sleep:
-            list(self.dynamo.query2("foobar", "id = :id", id="a"))
+            list(self.dynamo.query("foobar", "id = :id", id="a"))
         sleep.assert_called_with(2)
 
     def test_store_decays(self):
@@ -211,6 +211,6 @@ class TestRateLimit(BaseSystemTest):
         limiter = RateLimit(3, 3, callback=callback)
         cap = ConsumedCapacity("foobar", Capacity(3, 0))
         with self.inject_capacity(cap, limiter) as sleep:
-            list(self.dynamo.query2("foobar", "id = :id", id="a"))
+            list(self.dynamo.query("foobar", "id = :id", id="a"))
         sleep.assert_not_called()
         self.assertTrue(callback.called)

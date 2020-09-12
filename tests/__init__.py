@@ -183,7 +183,7 @@ class TestMisc(BaseSystemTest):
         self.dynamo.default_return_capacity = True
         with patch.object(self.dynamo, "call") as call:
             call().get.return_value = None
-            rs = self.dynamo.scan2("foobar")
+            rs = self.dynamo.scan("foobar")
             list(rs)
         call.assert_called_with(
             "scan",
@@ -233,45 +233,45 @@ class TestDataTypes(BaseSystemTest):
     def test_string(self):
         """ Store and retrieve a string """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "abc"})
-        item = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", {"id": "abc"})
+        item = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(item["id"], "abc")
         self.assertTrue(isinstance(item["id"], str))
 
     def test_int(self):
         """ Store and retrieve an int """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "num": 1})
-        item = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", {"id": "a", "num": 1})
+        item = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(item["num"], 1)
 
     def test_float(self):
         """ Store and retrieve a float """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "num": 1.1})
-        item = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", {"id": "a", "num": 1.1})
+        item = list(self.dynamo.scan("foobar"))[0]
         self.assertAlmostEqual(float(item["num"]), 1.1)
 
     def test_decimal(self):
         """ Store and retrieve a Decimal """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "num": Decimal("1.1")})
-        item = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", {"id": "a", "num": Decimal("1.1")})
+        item = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(item["num"], Decimal("1.1"))
 
     def test_binary(self):
         """ Store and retrieve a binary """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "a", "data": Binary("abc")})
-        item = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", {"id": "a", "data": Binary("abc")})
+        item = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(item["data"].value, b"abc")
 
     def test_binary_bytes(self):
         """ Store and retrieve bytes as a binary """
         self.make_table()
         data = {"a": 1, "b": 2}
-        self.dynamo.put_item2("foobar", {"id": "a", "data": Binary(dumps(data))})
-        item = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", {"id": "a", "data": Binary(dumps(data))})
+        item = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(loads(item["data"].value), data)
 
     def test_string_set(self):
@@ -281,8 +281,8 @@ class TestDataTypes(BaseSystemTest):
             "id": "a",
             "datas": set(["a", "b"]),
         }
-        self.dynamo.put_item2("foobar", item)
-        ret = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", item)
+        ret = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(ret, item)
 
     def test_number_set(self):
@@ -292,8 +292,8 @@ class TestDataTypes(BaseSystemTest):
             "id": "a",
             "datas": set([1, 2, 3]),
         }
-        self.dynamo.put_item2("foobar", item)
-        ret = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", item)
+        ret = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(ret, item)
 
     def test_binary_set(self):
@@ -303,8 +303,8 @@ class TestDataTypes(BaseSystemTest):
             "id": "a",
             "datas": set([Binary("a"), Binary("b")]),
         }
-        self.dynamo.put_item2("foobar", item)
-        ret = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", item)
+        ret = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(ret, item)
 
     def test_binary_equal(self):
@@ -330,16 +330,16 @@ class TestDataTypes(BaseSystemTest):
     def test_bool(self):
         """ Store and retrieve a boolean """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "abc", "b": True})
-        item = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", {"id": "abc", "b": True})
+        item = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(item["b"], True)
         self.assertTrue(isinstance(item["b"], bool))
 
     def test_list(self):
         """ Store and retrieve a list """
         self.make_table()
-        self.dynamo.put_item2("foobar", {"id": "abc", "l": ["a", 1, False]})
-        item = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", {"id": "abc", "l": ["a", 1, False]})
+        item = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(item["l"], ["a", 1, False])
 
     def test_dict(self):
@@ -352,8 +352,8 @@ class TestDataTypes(BaseSystemTest):
             "l": ["a", 1, True],
             "b": False,
         }
-        self.dynamo.put_item2("foobar", {"id": "abc", "d": data})
-        item = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", {"id": "abc", "d": data})
+        item = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(item["d"], data)
 
     def test_nested_dict(self):
@@ -365,8 +365,8 @@ class TestDataTypes(BaseSystemTest):
                 "i": 42,
             },
         }
-        self.dynamo.put_item2("foobar", {"id": "abc", "d": data})
-        item = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", {"id": "abc", "d": data})
+        item = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(item["d"], data)
 
     def test_nested_list(self):
@@ -380,8 +380,8 @@ class TestDataTypes(BaseSystemTest):
                 "abc",
             ],
         ]
-        self.dynamo.put_item2("foobar", {"id": "abc", "l": data})
-        item = list(self.dynamo.scan2("foobar"))[0]
+        self.dynamo.put_item("foobar", {"id": "abc", "l": data})
+        item = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(item["l"], data)
 
     def test_unrecognized_type(self):
@@ -663,7 +663,7 @@ class TestHooks(BaseSystemTest):
                     "CapacityUnits": 4,
                 },
             }
-            rs = self.dynamo.scan2("foobar")
+            rs = self.dynamo.scan("foobar")
             list(rs)
         cap = ConsumedCapacity("foobar", Capacity(4, 0))
         hook.assert_called_with(self.dynamo, "scan", ANY, ANY, cap)
