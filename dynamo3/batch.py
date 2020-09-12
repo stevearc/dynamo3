@@ -1,10 +1,9 @@
 """ Code for batch processing """
 import logging
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from .constants import (
     MAX_WRITE_BATCH,
-    NONE,
     ReturnCapacityType,
     ReturnItemCollectionMetricsType,
 )
@@ -47,8 +46,10 @@ class BatchWriter(object):
         self,
         connection: "DynamoDBConnection",
         tablename: str,
-        return_capacity: ReturnCapacityType = NONE,
-        return_item_collection_metrics: ReturnItemCollectionMetricsType = NONE,
+        return_capacity: Optional[ReturnCapacityType] = None,
+        return_item_collection_metrics: Optional[
+            ReturnItemCollectionMetricsType
+        ] = None,
     ):
         self.connection = connection
         self.tablename = tablename
@@ -162,11 +163,13 @@ class BatchWriter(object):
 
     def _batch_write_item(self, items: List[Dict]):
         """ Make a BatchWriteItem call to Dynamo """
-        kwargs = {
+        kwargs: Dict[str, Any] = {
             "RequestItems": {
                 self.tablename: items,
             },
-            "ReturnConsumedCapacity": self.return_capacity,
-            "ReturnItemCollectionMetrics": self.return_item_collection_metrics,
         }
+        if self.return_capacity is not None:
+            kwargs["ReturnConsumedCapacity"] = self.return_capacity
+        if self.return_item_collection_metrics is not None:
+            kwargs["ReturnItemCollectionMetrics"] = self.return_item_collection_metrics
         return self.connection.call("batch_write_item", **kwargs)

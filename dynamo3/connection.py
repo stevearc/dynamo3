@@ -497,9 +497,11 @@ class DynamoDBConnection(object):
         expr_values: Optional[ExpressionValuesType] = None,
         alias: Optional[ExpressionAttributeNamesType] = None,
         condition: Optional[str] = None,
-        returns: Literal[Literal["NONE"], Literal["ALL_OLD"]] = NONE,
-        return_capacity: ReturnCapacityType = None,
-        return_item_collection_metrics=NONE,
+        returns: Optional[Literal[Literal["NONE"], Literal["ALL_OLD"]]] = None,
+        return_capacity: Optional[ReturnCapacityType] = None,
+        return_item_collection_metrics: Optional[
+            ReturnItemCollectionMetricsType
+        ] = None,
         **kwargs: ExpressionValueType
     ):
         """
@@ -539,10 +541,12 @@ class DynamoDBConnection(object):
         keywords = {
             "TableName": tablename,
             "Item": self.dynamizer.encode_keys(item),
-            "ReturnValues": returns,
             "ReturnConsumedCapacity": self._default_capacity(return_capacity),
-            "ReturnItemCollectionMetrics": return_item_collection_metrics,
         }
+        if returns is not None:
+            keywords["ReturnValues"] = returns
+        if return_item_collection_metrics is not None:
+            keywords["ReturnItemCollectionMetrics"] = return_item_collection_metrics
         values = build_expression_values(self.dynamizer, expr_values, kwargs)
         if values:
             keywords["ExpressionAttributeValues"] = values
@@ -608,9 +612,11 @@ class DynamoDBConnection(object):
         expr_values: Optional[ExpressionValuesType] = None,
         alias: Optional[ExpressionAttributeNamesType] = None,
         condition: Optional[str] = None,
-        returns: Literal[Literal["NONE"], Literal["ALL_OLD"]] = NONE,
+        returns: Optional[Literal[Literal["NONE"], Literal["ALL_OLD"]]] = None,
         return_capacity: Optional[ReturnCapacityType] = None,
-        return_item_collection_metrics: ReturnItemCollectionMetricsType = NONE,
+        return_item_collection_metrics: Optional[
+            ReturnItemCollectionMetricsType
+        ] = None,
         **kwargs
     ) -> Optional[Result]:
         """
@@ -651,10 +657,12 @@ class DynamoDBConnection(object):
         keywords = {
             "TableName": tablename,
             "Key": self.dynamizer.encode_keys(key),
-            "ReturnValues": returns,
             "ReturnConsumedCapacity": self._default_capacity(return_capacity),
-            "ReturnItemCollectionMetrics": return_item_collection_metrics,
         }
+        if returns is not None:
+            keywords["ReturnValues"] = returns
+        if return_item_collection_metrics is not None:
+            keywords["ReturnItemCollectionMetrics"] = return_item_collection_metrics
         values = build_expression_values(self.dynamizer, expr_values, kwargs)
         if values:
             keywords["ExpressionAttributeValues"] = values
@@ -671,7 +679,9 @@ class DynamoDBConnection(object):
         self,
         tablename: str,
         return_capacity: Optional[ReturnCapacityType] = None,
-        return_item_collection_metrics: ReturnItemCollectionMetricsType = NONE,
+        return_item_collection_metrics: Optional[
+            ReturnItemCollectionMetricsType
+        ] = None,
     ) -> BatchWriter:
         """
         Perform a batch write on a table
@@ -768,7 +778,9 @@ class DynamoDBConnection(object):
             ]
         ] = None,
         return_capacity: Optional[ReturnCapacityType] = None,
-        return_item_collection_metrics: ReturnItemCollectionMetricsType = NONE,
+        return_item_collection_metrics: Optional[
+            ReturnItemCollectionMetricsType
+        ] = None,
         **kwargs
     ) -> Optional[Result]:
         """
@@ -813,8 +825,9 @@ class DynamoDBConnection(object):
             "Key": self.dynamizer.encode_keys(key),
             "UpdateExpression": expression,
             "ReturnConsumedCapacity": self._default_capacity(return_capacity),
-            "ReturnItemCollectionMetrics": return_item_collection_metrics,
         }
+        if return_item_collection_metrics is not None:
+            keywords["ReturnItemCollectionMetrics"] = return_item_collection_metrics
         if returns is not None:
             keywords["ReturnValues"] = returns
         values = build_expression_values(self.dynamizer, expr_values, kwargs)

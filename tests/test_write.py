@@ -1,5 +1,5 @@
 """ Test the write functions of Dynamo """
-from mock import ANY, MagicMock, call, patch
+from mock import MagicMock, call, patch
 
 from dynamo3 import (
     ALL_NEW,
@@ -289,8 +289,6 @@ class TestBatchWrite(BaseSystemTest):
             "RequestItems": {
                 "foo": [key1],
             },
-            "ReturnConsumedCapacity": ANY,
-            "ReturnItemCollectionMetrics": ANY,
         }
         self.assertEqual(conn.call.mock_calls[1], call("batch_write_item", **kwargs))
         kwargs["RequestItems"]["foo"][0] = key2
