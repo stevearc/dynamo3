@@ -21,6 +21,7 @@ from dynamo3.constants import (
     STRING,
     TOTAL,
 )
+from dynamo3.fields import TTL
 from dynamo3.result import Capacity
 
 from . import BaseSystemTest
@@ -248,6 +249,43 @@ class TestUpdateTable(BaseSystemTest):
         self.assertEqual(table.stream_type, NEW_AND_OLD_IMAGES)
         table = self.dynamo.update_table("foobar", stream=False)
         self.assertIsNone(table.stream_type)
+
+
+class TestTTL(BaseSystemTest):
+
+    """ Test the TTL features """
+
+    def test_missing_ttl(self):
+        """ If no table, TTL should be None """
+        ttl = self.dynamo.describe_ttl("foobar")
+        self.assertIsNone(ttl)
+
+    def test_default_ttl(self):
+        """ If no TTL configured, should be default value (disabled) """
+        hash_key = DynamoKey("id", data_type=STRING)
+        self.dynamo.create_table("foobar", hash_key=hash_key)
+        ttl = self.dynamo.describe_ttl("foobar")
+        self.assertEqual(ttl, TTL.default())
+
+    def test_set_ttl(self):
+        """ Can set the TTL for a table """
+        hash_key = DynamoKey("id", data_type=STRING)
+        self.dynamo.create_table("foobar", hash_key=hash_key)
+        self.dynamo.update_ttl("foobar", "expire", True)
+        ttl = self.dynamo.describe_ttl("foobar")
+        self.assertEqual(ttl, TTL("expire", "ENABLED"))
+        self.dynamo.update_ttl("foobar", "expire", False)
+        ttl = self.dynamo.describe_ttl("foobar")
+        self.assertEqual(ttl, TTL.default())
+
+    def test_describe_table_ttl(self):
+        """ Can make describe_table include the TTL """
+        hash_key = DynamoKey("id", data_type=STRING)
+        self.dynamo.create_table("foobar", hash_key=hash_key)
+        table = self.dynamo.describe_table("foobar")
+        self.assertIsNone(table.ttl)
+        table = self.dynamo.describe_table("foobar", include_ttl=True)
+        self.assertEqual(table.ttl, TTL.default())
 
 
 class TestBatchWrite(BaseSystemTest):

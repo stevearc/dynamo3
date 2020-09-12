@@ -11,9 +11,19 @@ from .constants import (
     KeyType,
     StreamViewType,
     TableStatusType,
+    TimeToLiveStatusType,
 )
 from .types import TYPES_REV
 from .util import snake_to_camel
+
+
+class TTL(NamedTuple):
+    attribute_name: Optional[str]
+    status: TimeToLiveStatusType
+
+    @classmethod
+    def default(cls) -> "TTL":
+        return cls(None, "DISABLED")
 
 
 class DynamoKey(object):
@@ -499,6 +509,7 @@ class Table(object):
         self.item_count = item_count
         self.size = size
         self.response: Dict[str, Any] = {}
+        self.ttl: Optional[TTL] = None
 
     def __getitem__(self, key: str) -> Any:
         return self.response[key]

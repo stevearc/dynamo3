@@ -1,7 +1,17 @@
 """ Connection class for DynamoDB """
 import time
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, Iterable, List, Optional, Union, overload
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    NamedTuple,
+    Optional,
+    Union,
+    overload,
+)
 
 import botocore.session
 from botocore.client import BaseClient
@@ -25,6 +35,7 @@ from .constants import (
 )
 from .exception import DynamoDBError, ThroughputException, translate_exception
 from .fields import (
+    TTL,
     DynamoKey,
     GlobalIndex,
     IndexUpdate,
@@ -394,7 +405,9 @@ class DynamoDBConnection(object):
         """
         return TableResultSet(self, limit)
 
-    def describe_table(self, tablename: str) -> Optional[Table]:
+    def describe_table(
+        self, tablename: str, include_ttl: bool = False
+    ) -> Optional[Table]:
         """
         Get the details about a table
 
@@ -402,6 +415,8 @@ class DynamoDBConnection(object):
         ----------
         tablename : str
             Name of the table
+        include_ttl : bool
+            Also return the TimeToLiveDescription for the table
 
         Returns
         -------
@@ -410,12 +425,55 @@ class DynamoDBConnection(object):
         """
         try:
             response = self.call("describe_table", TableName=tablename)["Table"]
-            return Table.from_response(response)
         except DynamoDBError as e:
             if e.kwargs["Code"] == "ResourceNotFoundException":
                 return None
             else:  # pragma: no cover
                 raise
+        table = Table.from_response(response)
+        if include_ttl:
+            table.ttl = self.describe_ttl(tablename)
+        return table
+
+    def describe_ttl(self, tablename: str) -> Optional[TTL]:
+        """
+
+        Returns
+        -------
+        ttl : :class:`~dynamo3.fields.TTL`
+            Will be None if the table does not exist
+        """
+        try:
+            response = self.call("describe_time_to_live", TableName=tablename)
+        except DynamoDBError as e:
+            if e.kwargs["Code"] == "ResourceNotFoundException":
+                return None
+            else:  # pragma: no cover
+                raise
+        desc = response["TimeToLiveDescription"]
+        if desc:
+            return TTL(desc.get("AttributeName"), desc["TimeToLiveStatus"])
+        return TTL.default()
+
+    def update_ttl(
+        self, tablename: str, attribute_name: str, enabled: bool
+    ) -> Dict[str, Any]:
+        """
+        Parameters
+        ----------
+        tablename : str
+        attribute_name : str
+        enabled : bool
+        """
+        response = self.call(
+            "update_time_to_live",
+            TableName=tablename,
+            TimeToLiveSpecification={
+                "Enabled": enabled,
+                "AttributeName": attribute_name,
+            },
+        )
+        return response["TimeToLiveSpecification"]
 
     def create_table(
         self,

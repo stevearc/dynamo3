@@ -28,7 +28,6 @@ DynamoDB features that are not yet supported
 --------------------------------------------
 * Reading from streams
 * Adding/removing tags on a table
-* TTL
 * Table backups
 * transact get items
 * transact write items

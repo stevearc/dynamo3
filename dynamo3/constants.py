@@ -79,6 +79,14 @@ StreamViewType = Literal[
     Literal["NEW_AND_OLD_IMAGES"],
 ]
 
+# TTL
+TimeToLiveStatusType = Literal[
+    Literal["ENABLING"],
+    Literal["DISABLING"],
+    Literal["ENABLED"],
+    Literal["DISABLED"],
+]
+
 # Maximum number of keys in a BatchGetItem request
 MAX_GET_BATCH: Final[Literal[100]] = 100
 # Maximum number of items in a BatchWriteItem request
