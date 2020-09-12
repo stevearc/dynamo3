@@ -665,10 +665,10 @@ class IndexUpdate(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: Any) -> bool:
         raise NotImplementedError()
 
-    def __ne__(self, other) -> bool:
+    def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
 
 

@@ -6,6 +6,7 @@ from typing import (
     Callable,
     Dict,
     Iterable,
+    Iterator,
     List,
     NamedTuple,
     Optional,
@@ -305,12 +306,12 @@ class DynamoDBConnection(object):
                     hook(self, command, kwargs, data, cap)
         return data
 
-    def exponential_sleep(self, attempt: int):
+    def exponential_sleep(self, attempt: int) -> None:
         """ Sleep with exponential backoff """
         if attempt > 1:
             time.sleep(0.1 * 2 ** attempt)
 
-    def subscribe(self, event: HookType, hook: Callable):
+    def subscribe(self, event: HookType, hook: Callable) -> None:
         """
         Subscribe a callback to an event
 
@@ -327,25 +328,25 @@ class DynamoDBConnection(object):
         if hook not in self._hooks[event]:
             self._hooks[event].append(hook)
 
-    def unsubscribe(self, event: HookType, hook: Callable):
+    def unsubscribe(self, event: HookType, hook: Callable) -> None:
         """ Unsubscribe a hook from an event """
         if hook in self._hooks[event]:
             self._hooks[event].remove(hook)
 
-    def add_rate_limit(self, limiter: RateLimit):
+    def add_rate_limit(self, limiter: RateLimit) -> None:
         """ Add a RateLimit to the connection """
         if limiter not in self.rate_limiters:
             self.subscribe("capacity", limiter.on_capacity)
             self.rate_limiters.append(limiter)
 
-    def remove_rate_limit(self, limiter: RateLimit):
+    def remove_rate_limit(self, limiter: RateLimit) -> None:
         """ Remove a RateLimit from the connection """
         if limiter in self.rate_limiters:
             self.unsubscribe("capacity", limiter.on_capacity)
             self.rate_limiters.remove(limiter)
 
     @contextmanager
-    def limit(self, limiter: RateLimit):
+    def limit(self, limiter: RateLimit) -> Iterator[None]:
         """ Context manager that applies a RateLimit to the connection """
         self.add_rate_limit(limiter)
         try:
@@ -585,6 +586,36 @@ class DynamoDBConnection(object):
             else:  # pragma: no cover
                 raise
 
+    @overload
+    def put_item(
+        self,
+        tablename: str,
+        item: DynamoObject,
+        expr_values: Optional[ExpressionValuesType],
+        alias: Optional[ExpressionAttributeNamesType],
+        condition: Optional[str],
+        returns: Union[None, Literal["NONE"]],
+        return_capacity: Optional[ReturnCapacityType],
+        return_item_collection_metrics: Optional[ReturnItemCollectionMetricsType],
+        **kwargs: ExpressionValueType
+    ) -> None:
+        ...
+
+    @overload
+    def put_item(
+        self,
+        tablename: str,
+        item: DynamoObject,
+        expr_values: Optional[ExpressionValuesType],
+        alias: Optional[ExpressionAttributeNamesType],
+        condition: Optional[str],
+        returns: Literal["ALL_OLD"],
+        return_capacity: Optional[ReturnCapacityType],
+        return_item_collection_metrics: Optional[ReturnItemCollectionMetricsType],
+        **kwargs: ExpressionValueType
+    ) -> Result:
+        ...
+
     def put_item(
         self,
         tablename: str,
@@ -598,7 +629,7 @@ class DynamoDBConnection(object):
             ReturnItemCollectionMetricsType
         ] = None,
         **kwargs: ExpressionValueType
-    ):
+    ) -> Optional[Result]:
         """
         Put a new item into a table
 
@@ -652,6 +683,7 @@ class DynamoDBConnection(object):
         result = self.call("put_item", **keywords)
         if result:
             return Result(self.dynamizer, result, "Attributes")
+        return None
 
     def get_item(
         self,
@@ -712,7 +744,7 @@ class DynamoDBConnection(object):
         return_item_collection_metrics: Optional[
             ReturnItemCollectionMetricsType
         ] = None,
-        **kwargs
+        **kwargs: ExpressionValueType
     ) -> Optional[Result]:
         """
         Delete an item from a table
@@ -876,7 +908,7 @@ class DynamoDBConnection(object):
         return_item_collection_metrics: Optional[
             ReturnItemCollectionMetricsType
         ] = None,
-        **kwargs
+        **kwargs: ExpressionValueType
     ) -> Optional[Result]:
         """
         Update a single item in a table
@@ -955,10 +987,10 @@ class DynamoDBConnection(object):
         exclusive_start_key: Optional[DynamoObject],
         **kwargs: ExpressionValueType
     ) -> Count:
-        ...  # pylint:disable=W0104
+        ...
 
     @overload
-    def scan(  # pylint:disable=E0102
+    def scan(
         self,
         tablename: str,
         expr_values: Optional[ExpressionValuesType],
@@ -975,9 +1007,9 @@ class DynamoDBConnection(object):
         exclusive_start_key: Optional[DynamoObject],
         **kwargs: ExpressionValueType
     ) -> ResultSet:
-        ...  # pylint:disable=W0104
+        ...
 
-    def scan(  # pylint:disable=E0102
+    def scan(
         self,
         tablename: str,
         expr_values: Optional[ExpressionValuesType] = None,
@@ -1101,10 +1133,10 @@ class DynamoDBConnection(object):
         exclusive_start_key: Optional[DynamoObject],
         **kwargs: ExpressionValueType
     ) -> Count:
-        ...  # pylint:disable=W0104
+        ...
 
     @overload
-    def query(  # pylint:disable=E0102
+    def query(
         self,
         tablename: str,
         key_condition_expr: str,
@@ -1121,9 +1153,9 @@ class DynamoDBConnection(object):
         exclusive_start_key: Optional[DynamoObject],
         **kwargs: ExpressionValueType
     ) -> ResultSet:
-        ...  # pylint:disable=W0104
+        ...
 
-    def query(  # pylint:disable=E0102
+    def query(
         self,
         tablename: str,
         key_condition_expr: str,

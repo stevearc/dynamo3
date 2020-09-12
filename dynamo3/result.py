@@ -39,7 +39,7 @@ class Count(int):
         count: int,
         scanned_count: int,
         consumed_capacity: Optional["Capacity"] = None,
-    ):
+    ) -> "Count":
         ret = super(Count, cls).__new__(cls, count)  # type: ignore
         ret.count = count
         ret.scanned_count = scanned_count
@@ -47,7 +47,7 @@ class Count(int):
         return ret
 
     @classmethod
-    def from_response(cls, response: Dict[str, Any]):
+    def from_response(cls, response: Dict[str, Any]) -> "Count":
         """ Factory method """
         return cls(
             response["Count"],
@@ -280,7 +280,11 @@ class ResultSet(PagedIterator):
     """ Iterator that pages results from Dynamo """
 
     def __init__(
-        self, connection: "DynamoDBConnection", limit: "Limit", *args, **kwargs
+        self,
+        connection: "DynamoDBConnection",
+        limit: "Limit",
+        *args: Any,
+        **kwargs: Any
     ):
         super(ResultSet, self).__init__()
         self.connection = connection
@@ -514,7 +518,7 @@ class Limit(object):
             self.filter,
         )
 
-    def set_request_args(self, args: Dict[str, Any]):
+    def set_request_args(self, args: Dict[str, Any]) -> None:
         """ Set the Limit parameter into the request args """
         if self.scan_limit is not None:
             args["Limit"] = self.scan_limit
@@ -532,7 +536,7 @@ class Limit(object):
             return True
         return False
 
-    def post_fetch(self, response: Dict[str, Any]):
+    def post_fetch(self, response: Dict[str, Any]) -> None:
         """ Called after a fetch. Updates the ScannedCount """
         if self.scan_limit is not None:
             self.scan_limit -= response["ScannedCount"]

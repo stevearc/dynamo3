@@ -27,9 +27,9 @@ class DecayingCapacityStore(object):
 
     def __init__(self, window: int = 1):
         self.window = window
-        self.points: List[Tuple[int, int]] = []
+        self.points: List[Tuple[float, int]] = []
 
-    def add(self, now: int, num: int):
+    def add(self, now: float, num: int) -> None:
         """ Add a timestamp and date to the data """
         if num == 0:
             return
@@ -91,7 +91,7 @@ class RateLimit(object):
         default_read: int = 0,
         default_write: int = 0,
         default: Optional[Capacity] = None,
-        table_caps=None,
+        table_caps: Optional[Dict[str, Capacity]] = None,
         callback: Optional[Callable] = None,
     ):
         if total is not None:
@@ -127,7 +127,7 @@ class RateLimit(object):
         query_kwargs: Dict[str, Any],
         response: Dict[str, Any],
         capacity: ConsumedCapacity,
-    ):
+    ) -> None:
         """ Hook that runs in response to a 'returned capacity' event """
         now = time.time()
         args = (connection, command, query_kwargs, response, capacity)

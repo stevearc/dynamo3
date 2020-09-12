@@ -163,16 +163,18 @@ class Binary(object):
 def encode_set(
     dynamizer: "Dynamizer",
     value: Iterable[Union[int, float, Decimal, str, bytes, "Binary"]],
-):
+) -> EncoderReturn:
     """ Encode a set for the DynamoDB format """
     inner_value = next(iter(value))
     inner_type = dynamizer.raw_encode(inner_value)[0]
-    return inner_type + "S", [dynamizer.raw_encode(v)[1] for v in value]
+    encoded_set: Any = [dynamizer.raw_encode(v)[1] for v in value]
+    set_type: Any = inner_type + "S"
+    return set_type, encoded_set
 
 
-def encode_list(dynamizer: "Dynamizer", value: List[Any]):
+def encode_list(dynamizer: "Dynamizer", value: List[Any]) -> DynamoEncoderList:
     """ Encode a list for the DynamoDB format """
-    encoded_list = []
+    encoded_list: Any = []
     dict(map(dynamizer.raw_encode, value))
     for v in value:
         encoded_type, encoded_value = dynamizer.raw_encode(v)
@@ -184,9 +186,9 @@ def encode_list(dynamizer: "Dynamizer", value: List[Any]):
     return "L", encoded_list
 
 
-def encode_dict(dynamizer: "Dynamizer", value):
+def encode_dict(dynamizer: "Dynamizer", value: Any) -> DynamoEncoderMap:
     """ Encode a dict for the DynamoDB format """
-    encoded_dict = {}
+    encoded_dict: Any = {}
     for k, v in value.items():
         encoded_type, encoded_value = dynamizer.raw_encode(v)
         encoded_dict[k] = {
@@ -224,7 +226,7 @@ class Dynamizer(object):
         self.register_encoder(dict, encode_dict)
         self.register_encoder(type(None), lambda _, v: (NULL, True))
 
-    def register_encoder(self, type: Type, encoder: Callable):
+    def register_encoder(self, type: Type, encoder: Callable) -> None:
         """
         Set an encoder method for a data type
 

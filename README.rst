@@ -35,3 +35,6 @@ DynamoDB features that are not yet supported
 * Table replicas (Global tables version 2019.11.21)
 * Table auto scaling
 * DAX
+
+Note that you can still access these APIs by using ``DynamoDBConnection.call``,
+though you may prefer to go straight to boto3/botocore.

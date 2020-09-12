@@ -76,7 +76,7 @@ class BatchWriter(object):
         if self._unprocessed:
             self.resend_unprocessed()
 
-    def put(self, data: DynamoObject):
+    def put(self, data: DynamoObject) -> None:
         """
         Write an item (will overwrite existing data)
 
@@ -91,7 +91,7 @@ class BatchWriter(object):
         if self.should_flush():
             self.flush()
 
-    def delete(self, kwargs: DynamoObject):
+    def delete(self, kwargs: DynamoObject) -> None:
         """
         Delete an item
 
@@ -110,7 +110,7 @@ class BatchWriter(object):
         """ True if a flush is needed """
         return len(self._to_put) + len(self._to_delete) == MAX_WRITE_BATCH
 
-    def flush(self):
+    def flush(self) -> None:
         """ Flush pending items to Dynamo """
         items = []
 
@@ -123,7 +123,7 @@ class BatchWriter(object):
         self._to_put = []
         self._to_delete = []
 
-    def _write(self, items: List[Dict]):
+    def _write(self, items: List[Dict]) -> Dict[str, Any]:
         """ Perform a batch write and handle the response """
         response = self._batch_write_item(items)
         if "consumed_capacity" in response:
@@ -161,7 +161,7 @@ class BatchWriter(object):
             self._write(to_resend)
             LOG.info("%d unprocessed items left", len(self._unprocessed))
 
-    def _batch_write_item(self, items: List[Dict]):
+    def _batch_write_item(self, items: List[Dict]) -> Dict[str, Any]:
         """ Make a BatchWriteItem call to Dynamo """
         kwargs: Dict[str, Any] = {
             "RequestItems": {
