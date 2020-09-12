@@ -2,11 +2,6 @@
 from mock import MagicMock, call, patch
 
 from dynamo3 import (
-    ALL_NEW,
-    ALL_OLD,
-    NUMBER,
-    STRING,
-    TOTAL,
     CheckFailed,
     DynamoKey,
     GlobalIndex,
@@ -16,6 +11,15 @@ from dynamo3 import (
     Throughput,
 )
 from dynamo3.batch import BatchWriter
+from dynamo3.constants import (
+    ALL_NEW,
+    ALL_OLD,
+    NUMBER,
+    PAY_PER_REQUEST,
+    PROVISIONED,
+    STRING,
+    TOTAL,
+)
 from dynamo3.result import Capacity
 
 from . import BaseSystemTest
@@ -217,6 +221,19 @@ class TestUpdateTable(BaseSystemTest):
         collection = set([IndexUpdate.delete("foo")])
         self.assertIn(IndexUpdate.delete("foo"), collection)
         self.assertNotEqual(IndexUpdate.delete("foo"), IndexUpdate.delete("bar"))
+
+    def test_update_billing_mode(self):
+        """ Update a table billing mode """
+        hash_key = DynamoKey("id", data_type=STRING)
+        table = self.dynamo.create_table(
+            "foobar", hash_key=hash_key, billing_mode=PAY_PER_REQUEST
+        )
+        self.assertEqual(table.billing_mode, PAY_PER_REQUEST)
+        new_table = self.dynamo.update_table(
+            "foobar", billing_mode=PROVISIONED, throughput=(2, 3)
+        )
+        self.assertEqual(new_table.billing_mode, PROVISIONED)
+        self.assertEqual(new_table.throughput, Throughput(2, 3))
 
 
 class TestBatchWrite(BaseSystemTest):

@@ -10,7 +10,6 @@ from botocore.exceptions import ClientError
 from mock import ANY, MagicMock, patch
 
 from dynamo3 import (
-    STRING,
     Binary,
     Dynamizer,
     DynamoDBConnection,
@@ -21,6 +20,7 @@ from dynamo3 import (
     Table,
     ThroughputException,
 )
+from dynamo3.constants import STRING
 from dynamo3.result import Capacity, ConsumedCapacity, Count, ResultSet, add_dicts
 
 

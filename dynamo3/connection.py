@@ -390,7 +390,7 @@ class DynamoDBConnection(object):
         tags: Optional[Dict[str, str]] = None,
         kms_id: Optional[str] = None,
         wait: bool = False,
-    ):
+    ) -> Optional[Table]:
         """
         Create a table
 
@@ -462,7 +462,9 @@ class DynamoDBConnection(object):
         result = self.call("create_table", **kwargs)
         if wait:
             self.client.get_waiter("table_exists").wait(TableName=tablename)
-        return result
+            return self.describe_table(tablename)
+        else:
+            return Table.from_response(result["TableDescription"])
 
     def delete_table(self, tablename: str, wait: bool = False) -> bool:
         """
@@ -1134,7 +1136,8 @@ class DynamoDBConnection(object):
         tablename: str,
         throughput: Optional[ThroughputOrTuple] = None,
         index_updates: Optional[List[IndexUpdate]] = None,
-    ):
+        billing_mode: Optional[BillingModeType] = None,
+    ) -> Table:
         """
         Update the throughput of a table and/or global indexes
 
@@ -1152,6 +1155,8 @@ class DynamoDBConnection(object):
         all_attrs = set()
         if throughput is not None:
             kwargs["ProvisionedThroughput"] = Throughput.normalize(throughput).schema()
+        if billing_mode is not None:
+            kwargs["BillingMode"] = billing_mode
         if index_updates is not None:
             updates = []
             for update in index_updates:
@@ -1161,4 +1166,5 @@ class DynamoDBConnection(object):
         if all_attrs:
             attr_definitions = [attr.definition() for attr in all_attrs]
             kwargs["AttributeDefinitions"] = attr_definitions
-        return self.call("update_table", **kwargs)
+        response = self.call("update_table", **kwargs)
+        return Table.from_response(response["TableDescription"])

@@ -288,7 +288,7 @@ class ResultSet(PagedIterator):
         self.limit = limit.copy()
         self.args = args
         self.kwargs = kwargs
-        self.last_evaluated_key = None
+        self.last_evaluated_key: Optional[dict] = None
         self.consumed_capacity = None
 
     @property
@@ -400,7 +400,7 @@ class TableResultSet(PagedIterator):
         super(TableResultSet, self).__init__()
         self.connection = connection
         self.limit = limit
-        self.last_evaluated_table_name = None
+        self.last_evaluated_table_name: Optional[str] = None
 
     @property
     def can_fetch_more(self) -> bool:
@@ -409,7 +409,7 @@ class TableResultSet(PagedIterator):
         return self.limit is None or self.limit > 0
 
     def _fetch(self) -> Iterator:
-        kwargs = {}
+        kwargs: Dict[str, Any] = {}
         if self.limit is None:
             kwargs["Limit"] = 100
         else:

@@ -2,7 +2,8 @@
 
 from mock import MagicMock
 
-from dynamo3 import NUMBER, STRING, TOTAL, DynamoKey, GlobalIndex, LocalIndex
+from dynamo3 import DynamoKey, GlobalIndex, LocalIndex
+from dynamo3.constants import NUMBER, STRING, TOTAL
 from dynamo3.result import Capacity, ConsumedCapacity, GetResultSet, Limit, Result
 
 from . import BaseSystemTest
