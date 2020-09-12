@@ -11,5 +11,29 @@ Dynamo3
 
 Dynamo3 is a library for querying DynamoDB. It is designed to be higher-level
 than boto (it's built on top of botocore), to make simple operations easier to
-perform and understand. It has some nice features like exponential backoff and
-automatic pagination built in.
+perform and understand.
+
+Features
+--------
+* Mypy-typed API
+* Python object wrappers for most AWS data structures
+* Automatic serialization of built-in types, with hooks for custom types
+* Automatic paging of results
+* Automatic batching for batch_write_item
+* Exponential backoff of requests when throughput is exceeded
+* Throughput limits to self-throttle requests to a certain rate
+* Nose plugin for running DynamoDB Local
+
+DynamoDB features that are not yet supported
+--------------------------------------------
+* update_table - billing mode, SSE, streaming
+* Reading from streams
+* Adding/removing tags on a table
+* TTL
+* Table backups
+* transact get items
+* transact write items
+* Scanning with segments
+* Table replicas (Global tables version 2019.11.21)
+* Table auto scaling
+* DAX
