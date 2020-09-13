@@ -18,7 +18,7 @@ from botocore.client import BaseClient
 from botocore.exceptions import ClientError
 from typing_extensions import Literal, TypedDict
 
-from .batch import BatchWriter
+from .batch import BatchWriter, BatchWriterSingleTable
 from .constants import (
     COUNT,
     INDEXES,
@@ -835,6 +835,7 @@ class DynamoDBConnection(object):
             return Result(self.dynamizer, result, "Attributes")
         return None
 
+    @overload
     def batch_write(
         self,
         tablename: str,
@@ -842,7 +843,28 @@ class DynamoDBConnection(object):
         return_item_collection_metrics: Optional[
             ReturnItemCollectionMetricsType
         ] = None,
+    ) -> BatchWriterSingleTable:
+        ...
+
+    @overload
+    def batch_write(
+        self,
+        *,
+        return_capacity: Optional[ReturnCapacityType] = None,
+        return_item_collection_metrics: Optional[
+            ReturnItemCollectionMetricsType
+        ] = None,
     ) -> BatchWriter:
+        ...
+
+    def batch_write(
+        self,
+        tablename: Optional[str] = None,
+        return_capacity: Optional[ReturnCapacityType] = None,
+        return_item_collection_metrics: Optional[
+            ReturnItemCollectionMetricsType
+        ] = None,
+    ) -> Union[BatchWriter, BatchWriterSingleTable]:
         """
         Perform a batch write on a table
 
@@ -868,12 +890,14 @@ class DynamoDBConnection(object):
 
         """
         return_capacity = self._default_capacity(return_capacity)
-        return BatchWriter(
+        writer = BatchWriter(
             self,
-            tablename,
             return_capacity=return_capacity,
             return_item_collection_metrics=return_item_collection_metrics,
         )
+        if tablename is not None:
+            return BatchWriterSingleTable(tablename, writer)
+        return writer
 
     @overload
     def batch_get(

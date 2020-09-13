@@ -1,6 +1,6 @@
 """ Code for batch processing """
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from .constants import (
     MAX_WRITE_BATCH,
@@ -46,19 +46,17 @@ class BatchWriter(object):
     def __init__(
         self,
         connection: "DynamoDBConnection",
-        tablename: str,
         return_capacity: Optional[ReturnCapacityType] = None,
         return_item_collection_metrics: Optional[
             ReturnItemCollectionMetricsType
         ] = None,
     ):
         self.connection = connection
-        self.tablename = tablename
         self.return_capacity = return_capacity
         self.return_item_collection_metrics = return_item_collection_metrics
-        self._to_put: List[DynamoObject] = []
-        self._to_delete: List[DynamoObject] = []
-        self._unprocessed: List[DynamoObject] = []
+        self._to_put: List[Tuple[str, DynamoObject]] = []
+        self._to_delete: List[Tuple[str, DynamoObject]] = []
+        self._unprocessed: List[Tuple[str, DynamoObject]] = []
         self._attempt = 0
         self.consumed_capacity: Optional[Dict[str, ConsumedCapacity]] = None
 
@@ -77,7 +75,7 @@ class BatchWriter(object):
         if self._unprocessed:
             self.resend_unprocessed()
 
-    def put(self, data: DynamoObject) -> None:
+    def put(self, tablename: str, data: DynamoObject) -> None:
         """
         Write an item (will overwrite existing data)
 
@@ -87,12 +85,12 @@ class BatchWriter(object):
             Item data
 
         """
-        self._to_put.append(data)
+        self._to_put.append((tablename, data))
 
-        if self.should_flush():
+        if self.should_flush:
             self.flush()
 
-    def delete(self, kwargs: DynamoObject) -> None:
+    def delete(self, tablename: str, kwargs: DynamoObject) -> None:
         """
         Delete an item
 
@@ -102,31 +100,56 @@ class BatchWriter(object):
             The primary key of the item to delete
 
         """
-        self._to_delete.append(kwargs)
+        self._to_delete.append((tablename, kwargs))
 
-        if self.should_flush():
+        if self.should_flush:
             self.flush()
 
+    @property
     def should_flush(self) -> bool:
         """ True if a flush is needed """
-        return len(self._to_put) + len(self._to_delete) == MAX_WRITE_BATCH
+        return (
+            len(self._to_put) + len(self._to_delete) + len(self._unprocessed)
+            >= MAX_WRITE_BATCH
+        )
 
     def flush(self) -> None:
         """ Flush pending items to Dynamo """
-        items = []
+        table_map: Dict[str, List[Dict]] = {}
+        count = 0
 
-        for data in self._to_put:
+        for tablename, data in self._unprocessed:
+            items = table_map.setdefault(tablename, [])
+            items.append(data)
+            count += 1
+        self._unprocessed = []
+
+        put_items, self._to_put = (
+            self._to_put[0 : MAX_WRITE_BATCH - count],
+            self._to_put[MAX_WRITE_BATCH - count :],
+        )
+        for tablename, data in put_items:
+            count += 1
+            items = table_map.setdefault(tablename, [])
             items.append(encode_put(self.connection.dynamizer, data))
 
-        for data in self._to_delete:
+        delete_items, self._to_delete = (
+            self._to_delete[0 : MAX_WRITE_BATCH - count],
+            self._to_delete[MAX_WRITE_BATCH - count :],
+        )
+        for tablename, data in delete_items:
+            items = table_map.setdefault(tablename, [])
             items.append(encode_delete(self.connection.dynamizer, data))
-        self._write(items)
-        self._to_put = []
-        self._to_delete = []
+        if table_map:
+            self._write(table_map)
+        # This will only happen if we're getting throttled hard. We shouldn't hit the
+        # recursion limit because we'll be sleeping exponentially
+        if self.should_flush:
+            self.flush()
 
-    def _write(self, items: List[Dict]) -> Dict[str, Any]:
+    def _write(self, table_map: Dict[str, List[Dict]]) -> None:
         """ Perform a batch write and handle the response """
-        response = self._batch_write_item(items)
+        response = self._batch_write_item(table_map)
         if "consumed_capacity" in response:
             self.consumed_capacity = self.consumed_capacity or {}
             for cap in response["consumed_capacity"]:
@@ -134,44 +157,66 @@ class BatchWriter(object):
                     cap.tablename
                 ] = cap + self.consumed_capacity.get(cap.tablename)
 
-        if response.get("UnprocessedItems"):
-            unprocessed = response["UnprocessedItems"].get(self.tablename, [])
-
-            # Some items have not been processed. Stow them for now &
-            # re-attempt processing on ``__exit__``.
-            LOG.info("%d items were unprocessed. Storing for later.", len(unprocessed))
-            self._unprocessed.extend(unprocessed)
-            # Getting UnprocessedItems indicates that we are exceeding our
-            # throughput. So sleep for a bit.
-            self._attempt += 1
-            self.connection.exponential_sleep(self._attempt)
+        if "UnprocessedItems" in response:
+            for tablename, unprocessed in response["UnprocessedItems"].items():
+                # Some items have not been processed. Stow them for now &
+                # re-attempt on the next try
+                LOG.info(
+                    "%d items were unprocessed. Storing for later.", len(unprocessed)
+                )
+                for item in unprocessed:
+                    self._unprocessed.append((tablename, item))
+                # Getting UnprocessedItems indicates that we are exceeding our
+                # throughput. So sleep for a bit.
+                self._attempt += 1
+                self.connection.exponential_sleep(self._attempt)
         else:
             # No UnprocessedItems means our request rate is fine, so we can
             # reset the attempt number.
             self._attempt = 0
-
-        return response
 
     def resend_unprocessed(self):
         """ Resend all unprocessed items """
         LOG.info("Re-sending %d unprocessed items.", len(self._unprocessed))
 
         while self._unprocessed:
-            to_resend = self._unprocessed[:MAX_WRITE_BATCH]
-            self._unprocessed = self._unprocessed[MAX_WRITE_BATCH:]
-            LOG.info("Sending %d items", len(to_resend))
-            self._write(to_resend)
+            self.flush()
             LOG.info("%d unprocessed items left", len(self._unprocessed))
 
-    def _batch_write_item(self, items: List[Dict]) -> Dict[str, Any]:
+    def _batch_write_item(self, table_map: Dict[str, List[Dict]]) -> Dict[str, Any]:
         """ Make a BatchWriteItem call to Dynamo """
-        kwargs: Dict[str, Any] = {
-            "RequestItems": {
-                self.tablename: items,
-            },
-        }
+        kwargs: Dict[str, Any] = {"RequestItems": table_map}
         if self.return_capacity is not None:
             kwargs["ReturnConsumedCapacity"] = self.return_capacity
         if self.return_item_collection_metrics is not None:
             kwargs["ReturnItemCollectionMetrics"] = self.return_item_collection_metrics
         return self.connection.call("batch_write_item", **kwargs)
+
+
+class BatchWriterSingleTable(object):
+    def __init__(self, tablename: str, writer: BatchWriter):
+        self._tablename = tablename
+        self._writer = writer
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self._writer.__exit__(*args)
+
+    def put(self, data: DynamoObject) -> None:
+        self._writer.put(self._tablename, data)
+
+    def delete(self, kwargs: DynamoObject) -> None:
+        self._writer.delete(self._tablename, kwargs)
+
+    def flush(self) -> None:
+        self._writer.flush()
+
+    @property
+    def consumed_capacity(self) -> Optional[ConsumedCapacity]:
+        """ Getter for consumed_capacity """
+        cap_map = self._writer.consumed_capacity
+        if cap_map is None:
+            return None
+        return cap_map[self._tablename]

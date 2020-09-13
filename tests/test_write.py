@@ -353,26 +353,33 @@ class TestBatchWrite(BaseSystemTest):
     def test_handle_unprocessed(self):
         """ Retry all unprocessed items """
         conn = MagicMock()
-        writer = BatchWriter(conn, "foo")
-        key1, key2 = object(), object()
-        unprocessed = [[key1], [key2], []]
-        conn.call.side_effect = lambda *_, **__: {
-            "UnprocessedItems": {
-                "foo": unprocessed.pop(0),
-            }
-        }
+        writer = BatchWriter(conn)
+        action1, action2 = object(), object()
+        unprocessed = [[action1], [action2], None]
+
+        def replace_call(*_, **kwargs):
+            print(kwargs)
+            actions = unprocessed.pop(0)
+            ret = {}
+            if actions is not None:
+                ret["UnprocessedItems"] = {
+                    "foo": actions,
+                }
+            return ret
+
+        conn.call.side_effect = replace_call
         with writer:
-            writer.put({"id": "a"})
+            writer.put("foo", {"id": "a"})
         # Should insert the first item, and then the two sets we marked as
         # unprocessed
         self.assertEqual(len(conn.call.mock_calls), 3)
         kwargs = {
             "RequestItems": {
-                "foo": [key1],
+                "foo": [action1],
             },
         }
         self.assertEqual(conn.call.mock_calls[1], call("batch_write_item", **kwargs))
-        kwargs["RequestItems"]["foo"][0] = key2
+        kwargs["RequestItems"]["foo"][0] = action2
         self.assertEqual(conn.call.mock_calls[2], call("batch_write_item", **kwargs))
 
     def test_exc_aborts(self):
@@ -422,8 +429,7 @@ class TestBatchWrite(BaseSystemTest):
             batch = self.dynamo.batch_write("foobar", return_capacity="INDEXES")
             with batch:
                 batch.put({"id": "a"})
-        assert batch.consumed_capacity is not None
-        cap = batch.consumed_capacity["foobar"]
+        cap = batch.consumed_capacity
         assert cap is not None
         assert cap.table_capacity is not None
         assert cap.local_index_capacity is not None
