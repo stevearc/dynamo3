@@ -9,6 +9,7 @@ from dynamo3 import (
     LocalIndex,
     Table,
     Throughput,
+    TransactionCanceledException,
 )
 from dynamo3.batch import BatchWriter
 from dynamo3.constants import (
@@ -358,7 +359,6 @@ class TestBatchWrite(BaseSystemTest):
         unprocessed = [[action1], [action2], None]
 
         def replace_call(*_, **kwargs):
-            print(kwargs)
             actions = unprocessed.pop(0)
             ret = {}
             if actions is not None:
@@ -691,3 +691,116 @@ class TestDeleteItem2(BaseSystemTest):
             condition="foo < :foo OR NOT attribute_exists(baz)",
             foo=4,
         )
+
+
+class TestTransactWrite(BaseSystemTest):
+
+    """ Test the TransactWriteItems operation """
+
+    def test_put_items(self):
+        """ Can put items """
+        hash_key = DynamoKey("id", data_type=STRING)
+        self.dynamo.create_table("foobar", hash_key=hash_key)
+        with self.dynamo.txn_write() as batch:
+            batch.put("foobar", {"id": "a"})
+        ret = list(self.dynamo.scan("foobar"))
+        self.assertCountEqual(ret, [{"id": "a"}])
+
+    def test_delete_items(self):
+        """ Can delete items from table """
+        hash_key = DynamoKey("id", data_type=STRING)
+        self.dynamo.create_table("foobar", hash_key=hash_key)
+        with self.dynamo.batch_write("foobar") as batch:
+            batch.put({"id": "a"})
+            batch.put({"id": "b"})
+        with self.dynamo.txn_write() as batch:
+            batch.delete("foobar", {"id": "b"})
+        ret = list(self.dynamo.scan("foobar"))
+        self.assertCountEqual(ret, [{"id": "a"}])
+
+    def test_update(self):
+        """ Can update items in table """
+        hash_key = DynamoKey("id", data_type=STRING)
+        self.dynamo.create_table("foobar", hash_key=hash_key)
+        self.dynamo.put_item("foobar", {"id": "a"})
+        with self.dynamo.txn_write() as batch:
+            batch.update("foobar", {"id": "a"}, "SET foo = :bar", bar="bar")
+        item = list(self.dynamo.scan("foobar"))[0]
+        self.assertEqual(item, {"id": "a", "foo": "bar"})
+
+    def test_check(self):
+        """ Will only perform actions if check passes """
+        hash_key = DynamoKey("id", data_type=STRING)
+        self.dynamo.create_table("foobar", hash_key=hash_key)
+        self.dynamo.put_item("foobar", {"id": "a"})
+        with self.assertRaises(TransactionCanceledException):
+            with self.dynamo.txn_write() as batch:
+                batch.update("foobar", {"id": "a"}, "SET foo = :bar", bar="bar")
+                batch.check("foobar", {"id": "b"}, "attribute_exists(id)")
+        item = list(self.dynamo.scan("foobar"))[0]
+        self.assertEqual(item, {"id": "a"})
+
+    def test_fail_if_any_fail(self):
+        """ Transaction fails if any condition fails """
+        hash_key = DynamoKey("id", data_type=STRING)
+        self.dynamo.create_table("foobar", hash_key=hash_key)
+        items = [
+            {"id": "a", "foo": 1},
+            {"id": "b", "foo": 2},
+            {"id": "c", "foo": 3},
+        ]
+        with self.dynamo.txn_write() as batch:
+            for item in items:
+                batch.put("foobar", item)
+        with self.assertRaises(TransactionCanceledException):
+            with self.dynamo.txn_write() as batch:
+                batch.update(
+                    "foobar",
+                    {"id": "a"},
+                    "SET bar = :bar",
+                    "foo < :limit",
+                    bar="bar",
+                    limit=3,
+                )
+                batch.update(
+                    "foobar",
+                    {"id": "b"},
+                    "SET bar = :bar",
+                    "foo < :limit",
+                    bar="bar",
+                    limit=3,
+                )
+                batch.update(
+                    "foobar",
+                    {"id": "c"},
+                    "SET bar = :bar",
+                    "foo < :limit",
+                    bar="bar",
+                    limit=3,
+                )
+        scan_items = list(self.dynamo.scan("foobar"))
+        self.assertCountEqual(scan_items, items)
+
+    def test_idempotent(self):
+        """ If using token, operation is idempotent """
+        hash_key = DynamoKey("id", data_type=STRING)
+        self.dynamo.create_table("foobar", hash_key=hash_key)
+        self.dynamo.put_item("foobar", {"id": "a"})
+        token = "asdf"
+        with self.dynamo.txn_write(token=token) as batch:
+            batch.update("foobar", {"id": "a"}, "ADD foo :bar", bar=1)
+        with self.dynamo.txn_write(token=token) as batch:
+            batch.update("foobar", {"id": "a"}, "ADD foo :bar", bar=1)
+        item = list(self.dynamo.scan("foobar"))[0]
+        self.assertEqual(item, {"id": "a", "foo": 1})
+
+    def test_return_capacity(self):
+        """ Can return consumed capacity """
+        hash_key = DynamoKey("id", data_type=STRING)
+        self.dynamo.create_table("foobar", hash_key=hash_key)
+        self.dynamo.put_item("foobar", {"id": "a"})
+        with self.dynamo.txn_write(return_capacity=TOTAL) as batch:
+            batch.update("foobar", {"id": "a"}, "ADD foo :bar", bar=1)
+        assert batch.consumed_capacity is not None
+        cap = batch.consumed_capacity["foobar"]
+        self.assertTrue(cap.total.write > 0)

@@ -29,7 +29,6 @@ DynamoDB features that are not yet supported
 * Reading from streams
 * Adding/removing tags on a table
 * Table backups
-* transact write items
 * Scanning with segments
 * Table replicas (Global tables version 2019.11.21)
 * Table auto scaling

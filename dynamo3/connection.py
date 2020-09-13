@@ -18,7 +18,7 @@ from botocore.client import BaseClient
 from botocore.exceptions import ClientError
 from typing_extensions import Literal, TypedDict
 
-from .batch import BatchWriter, BatchWriterSingleTable
+from .batch import BatchWriter, BatchWriterSingleTable, TransactionWriter
 from .constants import (
     COUNT,
     INDEXES,
@@ -59,11 +59,11 @@ from .result import (
 from .types import (
     Dynamizer,
     DynamoObject,
-    EncodedDynamoObject,
     EncodedDynamoValue,
     ExpressionAttributeNamesType,
     ExpressionValuesType,
     ExpressionValueType,
+    build_expression_values,
     encode_tags,
     is_null,
 )
@@ -92,21 +92,6 @@ def build_expected(
 
 
 HookType = Literal[Literal["precall"], Literal["postcall"], Literal["capacity"]]
-
-
-def build_expression_values(
-    dynamizer: Dynamizer,
-    expr_values: Optional[ExpressionValuesType],
-    kwargs: ExpressionValueType,
-) -> Optional[EncodedDynamoObject]:
-    """ Build ExpresionAttributeValues from a value or kwargs """
-    if expr_values:
-        values = expr_values
-        return dynamizer.encode_keys(values)
-    elif kwargs:
-        values = dict(((":" + k, v) for k, v in kwargs.items()))
-        return dynamizer.encode_keys(values)
-    return None
 
 
 def build_sse_dict(
@@ -1012,6 +997,19 @@ class DynamoDBConnection(object):
             for key in keys:
                 ret.add_key(tablename, key, attributes, alias)
         return ret
+
+    def txn_write(
+        self,
+        token: Optional[str] = None,
+        return_capacity: Optional[ReturnCapacityType] = None,
+        return_item_collection_metrics: Optional[
+            ReturnItemCollectionMetricsType
+        ] = None,
+    ) -> TransactionWriter:
+        return_capacity = self._default_capacity(return_capacity)
+        return TransactionWriter(
+            self, token, return_capacity, return_item_collection_metrics
+        )
 
     def update_item(
         self,

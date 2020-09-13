@@ -8,7 +8,15 @@ from .constants import (
     ReturnItemCollectionMetricsType,
 )
 from .result import ConsumedCapacity
-from .types import Dynamizer, DynamoObject, is_null
+from .types import (
+    Dynamizer,
+    DynamoObject,
+    ExpressionAttributeNamesType,
+    ExpressionValuesType,
+    ExpressionValueType,
+    build_expression_values,
+    is_null,
+)
 
 if TYPE_CHECKING:
     from .connection import DynamoDBConnection
@@ -220,3 +228,130 @@ class BatchWriterSingleTable(object):
         if cap_map is None:
             return None
         return cap_map[self._tablename]
+
+
+class TransactionWriter(object):
+    def __init__(
+        self,
+        connection: "DynamoDBConnection",
+        token: Optional[str] = None,
+        return_capacity: Optional[ReturnCapacityType] = None,
+        return_item_collection_metrics: Optional[
+            ReturnItemCollectionMetricsType
+        ] = None,
+    ):
+        self._connection = connection
+        self.token = token
+        self._return_capacity = return_capacity
+        self._return_item_collection_metrics = return_item_collection_metrics
+        self._items: List[Dict] = []
+        self.consumed_capacity: Optional[Dict[str, ConsumedCapacity]] = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, *_):
+        # Don't try to flush remaining if we hit an exception
+        if exc_type is not None:
+            return
+        self.execute()
+
+    def _encode_action(
+        self,
+        __item_key: str,
+        tablename: str,
+        key: DynamoObject,
+        condition: Optional[str],
+        expr_values: Optional[ExpressionValuesType] = None,
+        alias: Optional[ExpressionAttributeNamesType] = None,
+        **kwargs: ExpressionValueType,
+    ) -> Dict[str, Any]:
+        action = {
+            "TableName": tablename,
+            __item_key: self._connection.dynamizer.encode_keys(key),
+        }
+        if condition is not None:
+            action["ConditionExpression"] = condition
+        values = build_expression_values(
+            self._connection.dynamizer, expr_values, kwargs
+        )
+        if values:
+            action["ExpressionAttributeValues"] = values
+        if alias:
+            action["ExpressionAttributeNames"] = alias
+        return action
+
+    def check(
+        self,
+        tablename: str,
+        key: DynamoObject,
+        condition: str,
+        expr_values: Optional[ExpressionValuesType] = None,
+        alias: Optional[ExpressionAttributeNamesType] = None,
+        **kwargs: ExpressionValueType,
+    ) -> None:
+        action = self._encode_action(
+            "Key", tablename, key, condition, expr_values, alias, **kwargs
+        )
+        self._items.append({"ConditionCheck": action})
+
+    def delete(
+        self,
+        tablename: str,
+        key: DynamoObject,
+        condition: Optional[str] = None,
+        expr_values: Optional[ExpressionValuesType] = None,
+        alias: Optional[ExpressionAttributeNamesType] = None,
+        **kwargs: ExpressionValueType,
+    ) -> None:
+        action = self._encode_action(
+            "Key", tablename, key, condition, expr_values, alias, **kwargs
+        )
+        self._items.append({"Delete": action})
+
+    def put(
+        self,
+        tablename: str,
+        item: DynamoObject,
+        condition: Optional[str] = None,
+        expr_values: Optional[ExpressionValuesType] = None,
+        alias: Optional[ExpressionAttributeNamesType] = None,
+        **kwargs: ExpressionValueType,
+    ) -> None:
+        action = self._encode_action(
+            "Item", tablename, item, condition, expr_values, alias, **kwargs
+        )
+        self._items.append({"Put": action})
+
+    def update(
+        self,
+        tablename: str,
+        key: DynamoObject,
+        expression: str,
+        condition: Optional[str] = None,
+        expr_values: Optional[ExpressionValuesType] = None,
+        alias: Optional[ExpressionAttributeNamesType] = None,
+        **kwargs: ExpressionValueType,
+    ) -> None:
+        action = self._encode_action(
+            "Key", tablename, key, condition, expr_values, alias, **kwargs
+        )
+        action["UpdateExpression"] = expression
+        self._items.append({"Update": action})
+
+    def execute(self) -> None:
+        kwargs: Dict[str, Any] = {"TransactItems": self._items}
+        if self.token is not None:
+            kwargs["ClientRequestToken"] = self.token
+        if self._return_capacity is not None:
+            kwargs["ReturnConsumedCapacity"] = self._return_capacity
+        if self._return_item_collection_metrics is not None:
+            kwargs["ReturnItemCollectionMetrics"] = self._return_item_collection_metrics
+        response = self._connection.call("transact_write_items", **kwargs)
+
+        if "consumed_capacity" in response:
+            self.consumed_capacity = self.consumed_capacity or {}
+            for cap in response["consumed_capacity"]:
+                self.consumed_capacity[
+                    cap.tablename
+                ] = cap + self.consumed_capacity.get(cap.tablename)

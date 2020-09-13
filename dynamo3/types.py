@@ -209,6 +209,21 @@ def encode_tags(tags: Dict[str, str]) -> List[TagDict]:
     return [{"Key": k, "Value": v} for k, v in tags.items()]
 
 
+def build_expression_values(
+    dynamizer: "Dynamizer",
+    expr_values: Optional[ExpressionValuesType],
+    kwargs: ExpressionValueType,
+) -> Optional[EncodedDynamoObject]:
+    """ Build ExpresionAttributeValues from a value or kwargs """
+    if expr_values:
+        values = expr_values
+        return dynamizer.encode_keys(values)
+    elif kwargs:
+        values = dict(((":" + k, v) for k, v in kwargs.items()))
+        return dynamizer.encode_keys(values)
+    return None
+
+
 class Dynamizer(object):
 
     """ Handles the encoding/decoding of Dynamo values """

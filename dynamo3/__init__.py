@@ -6,6 +6,7 @@ from .exception import (
     DynamoDBError,
     ProvisionedThroughputExceededException,
     ThroughputException,
+    TransactionCanceledException,
 )
 from .fields import DynamoKey, GlobalIndex, IndexUpdate, LocalIndex, Table, Throughput
 from .rate import RateLimit
@@ -13,23 +14,24 @@ from .result import Capacity, Limit
 from .types import Binary, Dynamizer, is_null
 
 __all__ = [
-    "DynamoDBConnection",
+    "Binary",
+    "Capacity",
     "CheckFailed",
     "ConditionalCheckFailedException",
+    "Dynamizer",
+    "DynamoDBConnection",
     "DynamoDBError",
-    "ProvisionedThroughputExceededException",
-    "ThroughputException",
     "DynamoKey",
     "GlobalIndex",
     "IndexUpdate",
+    "Limit",
     "LocalIndex",
+    "ProvisionedThroughputExceededException",
+    "RateLimit",
     "Table",
     "Throughput",
-    "RateLimit",
-    "Capacity",
-    "Limit",
-    "Binary",
-    "Dynamizer",
+    "ThroughputException",
+    "TransactionCanceledException",
     "is_null",
 ]
 

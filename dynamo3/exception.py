@@ -35,6 +35,13 @@ class ConditionalCheckFailedException(DynamoDBError):
 CheckFailed = ConditionalCheckFailedException
 
 
+class TransactionCanceledException(DynamoDBError):
+
+    """ Raised when a transaction fails """
+
+    fmt = "{Code}: {Message}"
+
+
 class ProvisionedThroughputExceededException(DynamoDBError):
 
     """ Raised when an item field value fails the expected value check """
@@ -47,6 +54,7 @@ ThroughputException = ProvisionedThroughputExceededException
 EXC = {
     "ConditionalCheckFailedException": ConditionalCheckFailedException,
     "ProvisionedThroughputExceededException": ThroughputException,
+    "TransactionCanceledException": TransactionCanceledException,
 }
 
 
