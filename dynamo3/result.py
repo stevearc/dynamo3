@@ -395,7 +395,7 @@ class GetResultSet(PagedIterator):
                 self.keymap.pop(tablename, None)
 
         if not self._pending_keys:
-            raise StopIteration
+            return None
         request_items = {}
         for tablename, keys in self._pending_keys.items():
             query: Dict[str, Any] = {"ConsistentRead": self.consistent}
@@ -414,12 +414,13 @@ class GetResultSet(PagedIterator):
     def _fetch(self) -> Iterator:
         """ Fetch a set of items from their keys """
         kwargs = self.build_kwargs()
+        if kwargs is None:
+            return iter([])
         data = self.connection.call("batch_get_item", **kwargs)
         if "UnprocessedKeys" in data:
             for tablename, items in data["UnprocessedKeys"].items():
-                if items["Keys"]:
-                    keys = self._pending_keys.setdefault(tablename, [])
-                    keys.extend(items["Keys"])
+                keys = self._pending_keys.setdefault(tablename, [])
+                keys.extend(items["Keys"])
             # Getting UnprocessedKeys indicates that we are exceeding our
             # throughput. So sleep for a bit.
             self._attempt += 1

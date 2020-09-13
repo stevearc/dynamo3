@@ -1,4 +1,5 @@
 """ Test the read functions of Dynamo """
+from typing import Any, Dict
 
 from mock import MagicMock
 
@@ -628,19 +629,24 @@ class TestBatchGet(BaseSystemTest):
         # Pass responses through dynamizer unchanged
         conn.dynamizer.decode_keys.side_effect = lambda x: x
         key1, key2 = "key1", "key2"
-        unprocessed = [[key1], [key2], []]
+        unprocessed = [[key1], [key2], None]
         val1, val2, val3 = "val1", "val2", "val3"
         values = [[val1], [val2], [val3]]
-        conn.call.side_effect = lambda *_, **__: {
-            "UnprocessedKeys": {
-                "foo": {
-                    "Keys": unprocessed.pop(0),
+
+        def replace_call(*_, **__):
+            keys = unprocessed.pop(0)
+            ret: Dict[str, Any] = {
+                "Responses": {
+                    "foo": values.pop(0),
                 },
-            },
-            "Responses": {
-                "foo": values.pop(0),
-            },
-        }
+            }
+            if keys is not None:
+                ret["UnprocessedKeys"] = {
+                    "foo": {"Keys": keys},
+                }
+            return ret
+
+        conn.call.side_effect = replace_call
         grs = GetResultSet(conn, {"foo": [{"id": "a"}]})
         rs = SingleTableGetResultSet(grs)
         results = list(rs)
