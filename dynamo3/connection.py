@@ -54,6 +54,7 @@ from .result import (
     ResultSet,
     SingleTableGetResultSet,
     TableResultSet,
+    TransactionGet,
 )
 from .types import (
     Dynamizer,
@@ -952,6 +953,40 @@ class DynamoDBConnection(object):
         )
         if single_table:
             return SingleTableGetResultSet(ret)
+        return ret
+
+    @overload
+    def txn_get(
+        self,
+        tablename: str,
+        keys: List[DynamoObject],
+        attributes: Optional[Union[str, List[str]]] = ...,
+        alias: Optional[ExpressionAttributeNamesType] = ...,
+        return_capacity: Optional[ReturnCapacityType] = ...,
+    ) -> TransactionGet:
+        ...
+
+    @overload
+    def txn_get(
+        self,
+        *,
+        return_capacity: Optional[ReturnCapacityType] = ...,
+    ) -> TransactionGet:
+        ...
+
+    def txn_get(
+        self,
+        tablename: str = None,
+        keys: List[DynamoObject] = None,
+        attributes: Optional[Union[str, List[str]]] = None,
+        alias: Optional[ExpressionAttributeNamesType] = None,
+        return_capacity: Optional[ReturnCapacityType] = None,
+    ) -> TransactionGet:
+        return_capacity = self._default_capacity(return_capacity)
+        ret = TransactionGet(self, return_capacity)
+        if tablename is not None and keys is not None:
+            for key in keys:
+                ret.add_key(tablename, key, attributes, alias)
         return ret
 
     def update_item(

@@ -397,18 +397,22 @@ class TestBatchWrite(BaseSystemTest):
             "ConsumedCapacity": [
                 {
                     "TableName": "foobar",
-                    "CapacityUnits": 3,
+                    "ReadCapacityUnits": 6,
+                    "WriteCapacityUnits": 7,
                     "Table": {
-                        "CapacityUnits": 1,
+                        "ReadCapacityUnits": 1,
+                        "WriteCapacityUnits": 2,
                     },
                     "LocalSecondaryIndexes": {
                         "l-index": {
-                            "CapacityUnits": 1,
+                            "ReadCapacityUnits": 2,
+                            "WriteCapacityUnits": 3,
                         },
                     },
                     "GlobalSecondaryIndexes": {
                         "g-index": {
-                            "CapacityUnits": 1,
+                            "ReadCapacityUnits": 3,
+                            "WriteCapacityUnits": 4,
                         },
                     },
                 }
@@ -419,7 +423,15 @@ class TestBatchWrite(BaseSystemTest):
             with batch:
                 batch.put({"id": "a"})
         assert batch.consumed_capacity is not None
-        self.assertEqual(batch.consumed_capacity.total, Capacity(0, 3))
+        cap = batch.consumed_capacity["foobar"]
+        assert cap is not None
+        assert cap.table_capacity is not None
+        assert cap.local_index_capacity is not None
+        assert cap.global_index_capacity is not None
+        self.assertEqual(cap.total, Throughput(6, 7))
+        self.assertEqual(cap.table_capacity, Throughput(1, 2))
+        self.assertEqual(cap.local_index_capacity["l-index"], Throughput(2, 3))
+        self.assertEqual(cap.global_index_capacity["g-index"], Throughput(3, 4))
 
 
 class TestUpdateItem2(BaseSystemTest):

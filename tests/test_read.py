@@ -1,9 +1,9 @@
 """ Test the read functions of Dynamo """
 from typing import Any, Dict
 
-from mock import MagicMock
+from mock import MagicMock, patch
 
-from dynamo3 import DynamoKey, GlobalIndex, LocalIndex
+from dynamo3 import DynamoKey, GlobalIndex, LocalIndex, Throughput
 from dynamo3.constants import NUMBER, STRING, TOTAL
 from dynamo3.result import (
     Capacity,
@@ -681,17 +681,116 @@ class TestBatchGet(BaseSystemTest):
         capacity = ConsumedCapacity.from_response(response_cap, True)
         response["consumed_capacity"] = [capacity]
         conn.call.return_value = response
-        rs = GetResultSet(conn, {"foo": [{"id": "a"}]})
+        rs = GetResultSet(conn, {"foobar": [{"id": "a"}]})
         list(rs)
         assert rs.consumed_capacity is not None
-        assert rs.consumed_capacity.table_capacity is not None
-        assert rs.consumed_capacity.local_index_capacity is not None
-        assert rs.consumed_capacity.global_index_capacity is not None
-        self.assertEqual(rs.consumed_capacity.total.read, 6)
-        self.assertEqual(rs.consumed_capacity.table_capacity.read, 1)
-        self.assertEqual(rs.consumed_capacity.local_index_capacity["l-index"].read, 2)
-        self.assertEqual(rs.consumed_capacity.global_index_capacity["g-index"].read, 3)
-        self.assertEqual(rs.consumed_capacity, capacity)
+        cap = rs.consumed_capacity["foobar"]
+        assert cap is not None
+        assert cap.table_capacity is not None
+        assert cap.local_index_capacity is not None
+        assert cap.global_index_capacity is not None
+        self.assertEqual(cap.total, (6, 0))
+        self.assertEqual(cap.table_capacity, (1, 0))
+        self.assertEqual(cap.local_index_capacity["l-index"], (2, 0))
+        self.assertEqual(cap.global_index_capacity["g-index"], (3, 0))
+
+
+class TestTransactionGet(BaseSystemTest):
+
+    """ Tests for the TransactGetItems call """
+
+    def test_get_items(self):
+        """ Can get multiple items """
+        hash_key = DynamoKey("id")
+        self.dynamo.create_table("foobar", hash_key=hash_key)
+        keys = [{"id": "a"}, {"id": "b"}]
+        self.dynamo.put_item("foobar", keys[0])
+        self.dynamo.put_item("foobar", keys[1])
+        getter = self.dynamo.txn_get("foobar", keys=keys)
+        self.assertCountEqual(getter, keys)
+
+    def test_get_multiple_tables(self):
+        """ Can get items from multiple tables """
+        hash_key = DynamoKey("id")
+        self.dynamo.create_table("foo", hash_key=hash_key)
+        self.dynamo.create_table("bar", hash_key=hash_key)
+        fookeys = [{"id": str(i)} for i in range(5)]
+        barkeys = [{"id": str(i)} for i in range(5, 10)]
+        with self.dynamo.batch_write("foo") as batch:
+            for key in fookeys:
+                batch.put(key)
+        with self.dynamo.batch_write("bar") as batch:
+            for key in barkeys:
+                batch.put(key)
+        getter = self.dynamo.txn_get()
+        for key in fookeys:
+            getter.add_key("foo", key)
+        for key in barkeys:
+            getter.add_key("bar", key)
+        self.assertCountEqual(getter, fookeys + barkeys)
+
+    def test_attributes(self):
+        """ Can limit fetch to specific attributes """
+        hash_key = DynamoKey("id")
+        self.dynamo.create_table("foobar", hash_key=hash_key)
+        self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
+        ret = self.dynamo.txn_get("foobar", [{"id": "a"}], attributes=["id"])
+        self.assertCountEqual(ret, [{"id": "a"}])
+
+    def test_alias_attributes(self):
+        """ Can alias the names of certain attributes """
+        hash_key = DynamoKey("id")
+        self.dynamo.create_table("foobar", hash_key=hash_key)
+        self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
+        ret = self.dynamo.txn_get(
+            "foobar", [{"id": "a"}], attributes=["#f"], alias={"#f": "id"}
+        )
+        self.assertCountEqual(ret, [{"id": "a"}])
+
+    def test_capacity(self):
+        """ Can return consumed capacity """
+        conn = MagicMock()
+        response_cap = {
+            "TableName": "foobar",
+            "ReadCapacityUnits": 6,
+            "WriteCapacityUnits": 7,
+            "Table": {
+                "ReadCapacityUnits": 1,
+                "WriteCapacityUnits": 2,
+            },
+            "LocalSecondaryIndexes": {
+                "l-index": {
+                    "ReadCapacityUnits": 2,
+                    "WriteCapacityUnits": 3,
+                },
+            },
+            "GlobalSecondaryIndexes": {
+                "g-index": {
+                    "ReadCapacityUnits": 3,
+                    "WriteCapacityUnits": 4,
+                },
+            },
+        }
+        response = {
+            "Responses": [],
+            "ConsumedCapacity": [response_cap],
+        }
+        capacity = ConsumedCapacity.from_response(response_cap)
+        response["consumed_capacity"] = [capacity]
+        with patch.object(self.dynamo, "client") as client:
+            client.transact_get_items.return_value = response
+            ret = self.dynamo.txn_get("foobar", [{"id": "a"}])
+            list(ret)
+        assert ret.consumed_capacity is not None
+        cap = ret.consumed_capacity["foobar"]
+        assert cap is not None
+        assert cap.table_capacity is not None
+        assert cap.local_index_capacity is not None
+        assert cap.global_index_capacity is not None
+        self.assertEqual(cap.total, Throughput(6, 7))
+        self.assertEqual(cap.table_capacity, Throughput(1, 2))
+        self.assertEqual(cap.local_index_capacity["l-index"], Throughput(2, 3))
+        self.assertEqual(cap.global_index_capacity["g-index"], Throughput(3, 4))
 
 
 class TestGetItem2(BaseSystemTest):
@@ -742,7 +841,8 @@ class TestGetItem2(BaseSystemTest):
         self.dynamo.put_item("foobar", {"id": "a"})
         ret = self.dynamo.get_item("foobar", {"id": "a"}, return_capacity=TOTAL)
         assert ret.consumed_capacity is not None
-        self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
+        self.assertTrue(ret.consumed_capacity.total.read > 0)
+        self.assertTrue(ret.consumed_capacity.total.write == 0)
 
     def test_result_repr(self):
         """ Result repr should not be the same as a dict """

@@ -12,7 +12,9 @@ from typing import (
     List,
     Optional,
     Tuple,
+    Union,
     ValuesView,
+    overload,
 )
 
 from .constants import MAX_GET_BATCH, ReturnCapacityType
@@ -100,19 +102,31 @@ class Count(int):
 class Capacity(object):
     """ Wrapper for the capacity of a table or index """
 
-    def __init__(self, read: int, write: int):
+    def __init__(self, read: float, write: float):
         self._read = read
         self._write = write
 
     @property
-    def read(self) -> int:
+    def read(self) -> float:
         """ The read capacity """
         return self._read
 
     @property
-    def write(self) -> int:
+    def write(self) -> float:
         """ The write capacity """
         return self._write
+
+    @classmethod
+    def from_response(
+        cls, response: Dict[str, Any], is_read: Optional[bool]
+    ) -> "Capacity":
+        read = response.get("ReadCapacityUnits")
+        if read is None:
+            read = response["CapacityUnits"] if is_read else 0
+        write = response.get("WriteCapacityUnits")
+        if write is None:
+            write = 0 if is_read else response["CapacityUnits"]
+        return cls(read, write)
 
     def __getitem__(self, key):
         return getattr(self, key)
@@ -120,20 +134,12 @@ class Capacity(object):
     def __contains__(self, key):
         return key in ["read", "write"]
 
-    @classmethod
-    def create_read(cls, value: Dict[str, Any]) -> "Capacity":
-        """ Create a new read capacity from a response """
-        return cls(value["CapacityUnits"], 0)
-
-    @classmethod
-    def create_write(cls, value: Dict[str, Any]) -> "Capacity":
-        """ Create a new write capacity from a response """
-        return cls(0, value["CapacityUnits"])
-
     def __hash__(self):
         return self._read + self._write
 
     def __eq__(self, other):
+        if isinstance(other, tuple):
+            return self.read == other[0] and self.write == other[1]
         return self.read == getattr(other, "read", None) and self.write == getattr(
             other, "write", None
         )
@@ -142,7 +148,12 @@ class Capacity(object):
         return not self.__eq__(other)
 
     def __add__(self, other):
+        if isinstance(other, tuple):
+            return Capacity(self.read + other[0], self.write + other[1])
         return Capacity(self.read + other.read, self.write + other.write)
+
+    def __radd__(self, other):
+        return self.__add__(other)
 
     def __str__(self):
         pieces = []
@@ -174,38 +185,33 @@ class ConsumedCapacity(object):
 
     @classmethod
     def build_indexes(
-        cls,
-        response: Dict[str, Dict[str, Any]],
-        key: str,
-        capacity_factory: Callable[[Dict[str, Any]], Capacity],
+        cls, response: Dict[str, Dict[str, Any]], key: str, is_read: Optional[bool]
     ) -> Optional[Dict[str, Capacity]]:
         """ Construct index capacity map from a request fragment """
         if key not in response:
             return None
         indexes = {}
         for key, val in response[key].items():
-            indexes[key] = capacity_factory(val)
+            indexes[key] = Capacity.from_response(val, is_read)
         return indexes
 
     @classmethod
     def from_response(
-        cls, response: Dict[str, Any], is_read: bool
+        cls, response: Dict[str, Any], is_read: Optional[bool] = None
     ) -> "ConsumedCapacity":
         """ Factory method for ConsumedCapacity from a response object """
-        if is_read:
-            cap = Capacity.create_read
-        else:
-            cap = Capacity.create_write
         kwargs = {
             "tablename": response["TableName"],
-            "total": cap(response),
+            "total": Capacity.from_response(response, is_read),
         }
-        local = cls.build_indexes(response, "LocalSecondaryIndexes", cap)
+        local = cls.build_indexes(response, "LocalSecondaryIndexes", is_read)
         kwargs["local_index_capacity"] = local
-        gindex = cls.build_indexes(response, "GlobalSecondaryIndexes", cap)
+        gindex = cls.build_indexes(response, "GlobalSecondaryIndexes", is_read)
         kwargs["global_index_capacity"] = gindex
         if "Table" in response:
-            kwargs["table_capacity"] = cap(response["Table"])
+            kwargs["table_capacity"] = Capacity.from_response(
+                response["Table"], is_read
+            )
         return cls(**kwargs)
 
     def __hash__(self):
@@ -367,7 +373,7 @@ class GetResultSet(PagedIterator):
         self.return_capacity = return_capacity
         self._pending_keys: Dict[str, List[EncodedDynamoObject]] = {}
         self._attempt = 0
-        self.consumed_capacity: Optional[ConsumedCapacity] = None
+        self.consumed_capacity: Optional[Dict[str, ConsumedCapacity]] = None
         self._cached_dict: Optional[Dict[str, List[DynamoObject]]] = None
         self._started_iterator = False
 
@@ -430,10 +436,11 @@ class GetResultSet(PagedIterator):
             # reset the attempt number.
             self._attempt = 0
         if "consumed_capacity" in data:
-            # Comes back as a list from BatchWriteItem
-            self.consumed_capacity = sum(
-                data["consumed_capacity"], self.consumed_capacity
-            )
+            self.consumed_capacity = self.consumed_capacity or {}
+            for cap in data["consumed_capacity"]:
+                self.consumed_capacity[
+                    cap.tablename
+                ] = cap + self.consumed_capacity.get(cap.tablename)
         for tablename, items in data["Responses"].items():
             for item in items:
                 yield tablename, item
@@ -473,9 +480,12 @@ class SingleTableGetResultSet(object):
         self.result_set = result_set
 
     @property
-    def consumed_capacity(self):
+    def consumed_capacity(self) -> Optional[ConsumedCapacity]:
         """ Getter for consumed_capacity """
-        return self.result_set.consumed_capacity
+        cap_map = self.result_set.consumed_capacity
+        if cap_map is None:
+            return None
+        return next(iter(cap_map.values()))
 
     def __iter__(self):
         return self
@@ -638,3 +648,89 @@ class Limit(object):
             elif self.strict:
                 return False
         return accept
+
+
+class TransactionGet(object):
+    def __init__(
+        self,
+        connection: "DynamoDBConnection",
+        return_capacity: Optional[ReturnCapacityType] = None,
+    ):
+        self._connection = connection
+        self._return_capacity = return_capacity
+        self._cached_list: Optional[List[DynamoObject]] = None
+        self.consumed_capacity: Optional[Dict[str, ConsumedCapacity]] = None
+        self._items: List[
+            Tuple[
+                str,
+                DynamoObject,
+                Optional[Union[str, List[str]]],
+                Optional[ExpressionAttributeNamesType],
+            ]
+        ] = []
+
+    def add_key(
+        self,
+        tablename: str,
+        key: DynamoObject,
+        attributes: Optional[Union[str, List[str]]] = None,
+        alias: Optional[ExpressionAttributeNamesType] = None,
+    ) -> None:
+        self._items.append((tablename, key, attributes, alias))
+
+    def __iter__(self):
+        return iter(self.aslist())
+
+    @overload
+    def __getitem__(self, index: int) -> DynamoObject:
+        ...
+
+    @overload
+    def __getitem__(self, index: slice) -> List[DynamoObject]:
+        ...
+
+    def __getitem__(
+        self, index: Union[int, slice]
+    ) -> Union[DynamoObject, List[DynamoObject]]:
+        return self.aslist()[index]
+
+    def __len__(self):
+        return len(self.aslist())
+
+    def _fetch(self) -> List[DynamoObject]:
+        if self._cached_list is not None or not self._items:
+            return self._cached_list or []
+        transact_items = []
+        for (tablename, key, attributes, alias) in self._items:
+            item = {
+                "TableName": tablename,
+                "Key": self._connection.dynamizer.encode_keys(key),
+            }
+            if isinstance(attributes, list):
+                attributes = ", ".join(attributes)
+            if attributes is not None:
+                item["ProjectionExpression"] = attributes
+            if alias is not None:
+                item["ExpressionAttributeNames"] = alias
+            transact_items.append({"Get": item})
+        kwargs: Dict[str, Any] = {"TransactItems": transact_items}
+        if self._return_capacity is not None:
+            kwargs["ReturnConsumedCapacity"] = self._return_capacity
+        response = self._connection.call("transact_get_items", **kwargs)
+        if "consumed_capacity" in response:
+            self.consumed_capacity = self.consumed_capacity or {}
+            for cap in response["consumed_capacity"]:
+                self.consumed_capacity[
+                    cap.tablename
+                ] = cap + self.consumed_capacity.get(cap.tablename)
+        decoded = []
+        for response_item in response["Responses"]:
+            decoded.append(
+                self._connection.dynamizer.decode_keys(response_item["Item"])
+            )
+        return decoded
+
+    def aslist(self) -> List[DynamoObject]:
+        if self._cached_list is None:
+            self._cached_list = self._fetch()
+        return self._cached_list

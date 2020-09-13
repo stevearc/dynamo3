@@ -60,7 +60,7 @@ class BatchWriter(object):
         self._to_delete: List[DynamoObject] = []
         self._unprocessed: List[DynamoObject] = []
         self._attempt = 0
-        self.consumed_capacity: Optional[ConsumedCapacity] = None
+        self.consumed_capacity: Optional[Dict[str, ConsumedCapacity]] = None
 
     def __enter__(self):
         return self
@@ -128,10 +128,11 @@ class BatchWriter(object):
         """ Perform a batch write and handle the response """
         response = self._batch_write_item(items)
         if "consumed_capacity" in response:
-            # Comes back as a list from BatchWriteItem
-            self.consumed_capacity = sum(
-                response["consumed_capacity"], self.consumed_capacity
-            )
+            self.consumed_capacity = self.consumed_capacity or {}
+            for cap in response["consumed_capacity"]:
+                self.consumed_capacity[
+                    cap.tablename
+                ] = cap + self.consumed_capacity.get(cap.tablename)
 
         if response.get("UnprocessedItems"):
             unprocessed = response["UnprocessedItems"].get(self.tablename, [])

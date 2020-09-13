@@ -100,7 +100,7 @@ MAX_GET_BATCH: Final[Literal[100]] = 100
 MAX_WRITE_BATCH: Final[Literal[25]] = 25
 
 READ_COMMANDS: Final[FrozenSet[str]] = frozenset(
-    ["batch_get_item", "get_item", "query", "scan"]
+    ["batch_get_item", "get_item", "query", "scan", "transact_get_items"]
 )
 
 # Last fetched on 2015-11-10

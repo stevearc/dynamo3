@@ -473,7 +473,7 @@ class TestResultModels(unittest.TestCase):
 
     def test_count_add_none_capacity(self):
         """ Count addition with one None consumed_capacity """
-        cap = Capacity.create_read({"CapacityUnits": 3})
+        cap = Capacity(3, 0)
         count = Count(4, 2)
         count2 = Count(5, 3, cap)
         ret = count + count2
@@ -483,22 +483,12 @@ class TestResultModels(unittest.TestCase):
 
     def test_count_add_capacity(self):
         """ Count addition with consumed_capacity """
-        count = Count(4, 2, Capacity.create_read({"CapacityUnits": 3}))
-        count2 = Count(5, 3, Capacity.create_read({"CapacityUnits": 2}))
+        count = Count(4, 2, Capacity(3, 0))
+        count2 = Count(5, 3, Capacity(2, 0))
         ret = count + count2
         self.assertEqual(ret, 9)
         self.assertEqual(ret.scanned_count, 5)
         self.assertEqual(ret.consumed_capacity.read, 5)
-
-    def test_capacity_factories(self):
-        """ Capacity.create_(read|write) factories """
-        cap = Capacity.create_read({"CapacityUnits": 3})
-        self.assertEqual(cap.read, 3)
-        self.assertEqual(cap.write, 0)
-
-        cap = Capacity.create_write({"CapacityUnits": 3})
-        self.assertEqual(cap.write, 3)
-        self.assertEqual(cap.read, 0)
 
     def test_capacity_math(self):
         """ Capacity addition and equality """
@@ -519,10 +509,11 @@ class TestResultModels(unittest.TestCase):
         """ ConsumedCapacity can parse results with only Total """
         response = {
             "TableName": "foobar",
-            "CapacityUnits": 4,
+            "ReadCapacityUnits": 4,
+            "WriteCapacityUnits": 5,
         }
-        cap = ConsumedCapacity.from_response(response, True)
-        self.assertEqual(cap.total.read, 4)
+        cap = ConsumedCapacity.from_response(response)
+        self.assertEqual(cap.total, (4, 5))
         self.assertIsNone(cap.table_capacity)
 
     def test_consumed_capacity_equality(self):
@@ -661,7 +652,7 @@ class TestHooks(BaseSystemTest):
                 "Items": [],
                 "ConsumedCapacity": {
                     "TableName": "foobar",
-                    "CapacityUnits": 4,
+                    "ReadCapacityUnits": 4,
                 },
             }
             rs = self.dynamo.scan("foobar")
