@@ -4,7 +4,14 @@ from mock import MagicMock
 
 from dynamo3 import DynamoKey, GlobalIndex, LocalIndex
 from dynamo3.constants import NUMBER, STRING, TOTAL
-from dynamo3.result import Capacity, ConsumedCapacity, GetResultSet, Limit, Result
+from dynamo3.result import (
+    Capacity,
+    ConsumedCapacity,
+    GetResultSet,
+    Limit,
+    Result,
+    SingleTableGetResultSet,
+)
 
 from . import BaseSystemTest
 
@@ -576,12 +583,28 @@ class TestBatchGet(BaseSystemTest):
     def test_get_many(self):
         """ Can get many items via paging """
         self.make_table()
-        keys = [{"id": str(i)} for i in range(50)]
+        keys = [{"id": str(i)} for i in range(150)]
         with self.dynamo.batch_write("foobar") as batch:
             for key in keys:
                 batch.put(key)
         ret = list(self.dynamo.batch_get("foobar", keys))
         self.assertCountEqual(ret, keys)
+
+    def test_get_multiple_tables(self):
+        """ Can get items from multiple tables """
+        hash_key = DynamoKey("id")
+        self.dynamo.create_table("foo", hash_key=hash_key)
+        self.dynamo.create_table("bar", hash_key=hash_key)
+        keys = [{"id": str(i)} for i in range(150)]
+        with self.dynamo.batch_write("foo") as batch:
+            for key in keys:
+                batch.put(key)
+        with self.dynamo.batch_write("bar") as batch:
+            for key in keys:
+                batch.put(key)
+        result = self.dynamo.batch_get({"foo": keys, "bar": keys})
+        self.assertCountEqual(result["foo"], keys)
+        self.assertCountEqual(result["bar"], keys)
 
     def test_attributes(self):
         """ Can limit fetch to specific attributes """
@@ -604,21 +627,24 @@ class TestBatchGet(BaseSystemTest):
         conn = MagicMock()
         # Pass responses through dynamizer unchanged
         conn.dynamizer.decode_keys.side_effect = lambda x: x
-        key1, key2 = object(), object()
+        key1, key2 = "key1", "key2"
         unprocessed = [[key1], [key2], []]
+        val1, val2, val3 = "val1", "val2", "val3"
+        values = [[val1], [val2], [val3]]
         conn.call.side_effect = lambda *_, **__: {
             "UnprocessedKeys": {
                 "foo": {
-                    "Keys": unprocessed[0],
+                    "Keys": unprocessed.pop(0),
                 },
             },
             "Responses": {
-                "foo": unprocessed.pop(0),
+                "foo": values.pop(0),
             },
         }
-        rs = GetResultSet(conn, "foo", [{"id": "a"}])
+        grs = GetResultSet(conn, {"foo": [{"id": "a"}]})
+        rs = SingleTableGetResultSet(grs)
         results = list(rs)
-        self.assertEqual(results, [key1, key2])
+        self.assertEqual(results, [val1, val2, val3])
 
     def test_capacity(self):
         """ Can return consumed capacity """
@@ -649,7 +675,7 @@ class TestBatchGet(BaseSystemTest):
         capacity = ConsumedCapacity.from_response(response_cap, True)
         response["consumed_capacity"] = [capacity]
         conn.call.return_value = response
-        rs = GetResultSet(conn, "foo", [{"id": "a"}])
+        rs = GetResultSet(conn, {"foo": [{"id": "a"}]})
         list(rs)
         assert rs.consumed_capacity is not None
         assert rs.consumed_capacity.table_capacity is not None

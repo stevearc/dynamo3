@@ -96,6 +96,11 @@ EncoderReturn = Union[
 # An object in python that can be stored to DynamoDB
 DynamoObject = Dict[str, Any]
 
+# Expression types
+ExpressionValueType = Any
+ExpressionValuesType = Dict[str, ExpressionValueType]
+ExpressionAttributeNamesType = Dict[str, str]
+
 
 def float_to_decimal(f: float) -> Decimal:
     """ Convert a float to a 38-precision Decimal """

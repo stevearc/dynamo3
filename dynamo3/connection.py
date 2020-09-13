@@ -52,6 +52,7 @@ from .result import (
     Limit,
     Result,
     ResultSet,
+    SingleTableGetResultSet,
     TableResultSet,
 )
 from .types import (
@@ -59,6 +60,9 @@ from .types import (
     DynamoObject,
     EncodedDynamoObject,
     EncodedDynamoValue,
+    ExpressionAttributeNamesType,
+    ExpressionValuesType,
+    ExpressionValueType,
     encode_tags,
     is_null,
 )
@@ -86,9 +90,6 @@ def build_expected(
     return ret
 
 
-ExpressionValueType = Any
-ExpressionValuesType = Dict[str, ExpressionValueType]
-ExpressionAttributeNamesType = Dict[str, str]
 HookType = Literal[Literal["precall"], Literal["postcall"], Literal["capacity"]]
 
 
@@ -596,7 +597,7 @@ class DynamoDBConnection(object):
         return_capacity: Optional[ReturnCapacityType] = ...,
         return_item_collection_metrics: Optional[ReturnItemCollectionMetricsType] = ...,
         returns: Union[None, Literal["NONE"]] = ...,
-        **kwargs: ExpressionValueType
+        **kwargs: ExpressionValueType,
     ) -> None:
         ...
 
@@ -612,7 +613,7 @@ class DynamoDBConnection(object):
         return_item_collection_metrics: Optional[ReturnItemCollectionMetricsType] = ...,
         *,
         returns: Literal["ALL_OLD"],
-        **kwargs: ExpressionValueType
+        **kwargs: ExpressionValueType,
     ) -> Result:
         ...
 
@@ -628,7 +629,7 @@ class DynamoDBConnection(object):
             ReturnItemCollectionMetricsType
         ] = None,
         returns: Optional[Literal[Literal["NONE"], Literal["ALL_OLD"]]] = None,
-        **kwargs: ExpressionValueType
+        **kwargs: ExpressionValueType,
     ) -> Optional[Result]:
         """
         Put a new item into a table
@@ -743,7 +744,7 @@ class DynamoDBConnection(object):
         return_capacity: Optional[ReturnCapacityType] = ...,
         return_item_collection_metrics: Optional[ReturnItemCollectionMetricsType] = ...,
         returns: Optional[Literal["NONE"]] = ...,
-        **kwargs: ExpressionValueType
+        **kwargs: ExpressionValueType,
     ) -> None:
         ...
 
@@ -759,7 +760,7 @@ class DynamoDBConnection(object):
         return_item_collection_metrics: Optional[ReturnItemCollectionMetricsType] = ...,
         *,
         returns: Literal["ALL_OLD"],
-        **kwargs: ExpressionValueType
+        **kwargs: ExpressionValueType,
     ) -> Result:
         ...
 
@@ -775,7 +776,7 @@ class DynamoDBConnection(object):
             ReturnItemCollectionMetricsType
         ] = None,
         returns: Optional[Literal[Literal["NONE"], Literal["ALL_OLD"]]] = None,
-        **kwargs: ExpressionValueType
+        **kwargs: ExpressionValueType,
     ) -> Optional[Result]:
         """
         Delete an item from a table
@@ -873,15 +874,40 @@ class DynamoDBConnection(object):
             return_item_collection_metrics=return_item_collection_metrics,
         )
 
+    @overload
     def batch_get(
         self,
-        tablename: str,
+        tablename_or_map: Dict[str, Iterable[DynamoObject]],
+        *,
+        attributes: Optional[Union[str, List[str]]] = ...,
+        alias: Optional[ExpressionAttributeNamesType] = ...,
+        consistent: bool = ...,
+        return_capacity: Optional[ReturnCapacityType] = ...,
+    ) -> GetResultSet:
+        ...
+
+    @overload
+    def batch_get(
+        self,
+        tablename_or_map: str,
         keys: Iterable[DynamoObject],
+        *,
+        attributes: Optional[Union[str, List[str]]] = ...,
+        alias: Optional[ExpressionAttributeNamesType] = ...,
+        consistent: bool = ...,
+        return_capacity: Optional[ReturnCapacityType] = ...,
+    ) -> SingleTableGetResultSet:
+        ...
+
+    def batch_get(
+        self,
+        tablename_or_map: Union[str, Dict[str, Iterable[DynamoObject]]],
+        keys: Iterable[DynamoObject] = None,
         attributes: Optional[Union[str, List[str]]] = None,
         alias: Optional[ExpressionAttributeNamesType] = None,
         consistent: bool = False,
         return_capacity: Optional[ReturnCapacityType] = None,
-    ) -> GetResultSet:
+    ) -> Union[GetResultSet, SingleTableGetResultSet]:
         """
         Perform a batch get of many items in a table
 
@@ -905,17 +931,27 @@ class DynamoDBConnection(object):
             (default NONE)
 
         """
-        keys = [self.dynamizer.encode_keys(k) for k in keys]
+        if isinstance(attributes, list):
+            attributes = ", ".join(attributes)
         return_capacity = self._default_capacity(return_capacity)
+        single_table = False
+        if isinstance(tablename_or_map, str):
+            if keys is None:
+                raise ValueError(
+                    "When tablename_or_map is a str, keys must be non-None"
+                )
+            single_table = True
+            tablename_or_map = {tablename_or_map: keys}
         ret = GetResultSet(
             self,
-            tablename,
-            keys,
+            tablename_or_map,
             consistent=consistent,
             attributes=attributes,
             alias=alias,
             return_capacity=return_capacity,
         )
+        if single_table:
+            return SingleTableGetResultSet(ret)
         return ret
 
     def update_item(
@@ -939,7 +975,7 @@ class DynamoDBConnection(object):
         return_item_collection_metrics: Optional[
             ReturnItemCollectionMetricsType
         ] = None,
-        **kwargs: ExpressionValueType
+        **kwargs: ExpressionValueType,
     ) -> Optional[Result]:
         """
         Update a single item in a table
@@ -1017,7 +1053,7 @@ class DynamoDBConnection(object):
         exclusive_start_key: Optional[DynamoObject] = ...,
         *,
         select: Literal["COUNT"],
-        **kwargs: ExpressionValueType
+        **kwargs: ExpressionValueType,
     ) -> Count:
         ...
 
@@ -1037,7 +1073,7 @@ class DynamoDBConnection(object):
         total_segments: Optional[int] = ...,
         exclusive_start_key: Optional[DynamoObject] = ...,
         select: Optional[NonCountSelectType] = ...,
-        **kwargs: ExpressionValueType
+        **kwargs: ExpressionValueType,
     ) -> ResultSet:
         ...
 
@@ -1056,7 +1092,7 @@ class DynamoDBConnection(object):
         total_segments: Optional[int] = None,
         exclusive_start_key: Optional[DynamoObject] = None,
         select: Optional[SelectType] = None,
-        **kwargs: ExpressionValueType
+        **kwargs: ExpressionValueType,
     ) -> Union[Count, ResultSet]:
         """
         Perform a full-table scan
@@ -1164,7 +1200,7 @@ class DynamoDBConnection(object):
         exclusive_start_key: Optional[DynamoObject] = ...,
         *,
         select: Literal["COUNT"],
-        **kwargs: ExpressionValueType
+        **kwargs: ExpressionValueType,
     ) -> Count:
         ...
 
@@ -1184,7 +1220,7 @@ class DynamoDBConnection(object):
         filter: Optional[str] = ...,
         exclusive_start_key: Optional[DynamoObject] = ...,
         select: Optional[NonCountSelectType] = ...,
-        **kwargs: ExpressionValueType
+        **kwargs: ExpressionValueType,
     ) -> ResultSet:
         ...
 
@@ -1203,7 +1239,7 @@ class DynamoDBConnection(object):
         filter: Optional[str] = None,
         exclusive_start_key: Optional[DynamoObject] = None,
         select: Optional[SelectType] = None,
-        **kwargs: ExpressionValueType
+        **kwargs: ExpressionValueType,
     ) -> Union[Count, ResultSet]:
         """
         Perform an index query on a table

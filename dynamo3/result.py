@@ -1,9 +1,27 @@
 """ Wrappers for result objects and iterators """
 from abc import ABC, abstractmethod, abstractproperty
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, Optional
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    ItemsView,
+    Iterable,
+    Iterator,
+    KeysView,
+    List,
+    Optional,
+    Tuple,
+    ValuesView,
+)
 
-from .constants import MAX_GET_BATCH, NONE
-from .types import Dynamizer, DynamoObject
+from .constants import MAX_GET_BATCH, ReturnCapacityType
+from .types import (
+    Dynamizer,
+    DynamoObject,
+    EncodedDynamoObject,
+    ExpressionAttributeNamesType,
+)
 
 if TYPE_CHECKING:
     from .connection import DynamoDBConnection
@@ -331,45 +349,65 @@ class GetResultSet(PagedIterator):
 
     def __init__(
         self,
-        connection,
-        tablename,
-        keys,
-        consistent=False,
-        attributes=None,
-        alias=None,
-        return_capacity=NONE,
+        connection: "DynamoDBConnection",
+        keymap: Dict[str, Iterable[DynamoObject]],
+        consistent: bool = False,
+        attributes: Optional[str] = None,
+        alias: Optional[ExpressionAttributeNamesType] = None,
+        return_capacity: Optional[ReturnCapacityType] = None,
     ):
         super(GetResultSet, self).__init__()
         self.connection = connection
-        self.tablename = tablename
-        self.keys = keys
+        self.keymap: Dict[str, Iterator[DynamoObject]] = {
+            t: iter(keys) for t, keys in keymap.items()
+        }
         self.consistent = consistent
-        if attributes is not None:
-            if not isinstance(attributes, str):
-                attributes = ", ".join(attributes)
         self.attributes = attributes
         self.alias = alias
         self.return_capacity = return_capacity
+        self._pending_keys: Dict[str, List[EncodedDynamoObject]] = {}
         self._attempt = 0
         self.consumed_capacity: Optional[ConsumedCapacity] = None
+        self._cached_dict: Optional[Dict[str, List[DynamoObject]]] = None
+        self._started_iterator = False
 
     @property
     def can_fetch_more(self) -> bool:
-        return bool(self.keys)
+        return bool(self.keymap) or bool(self._pending_keys)
 
     def build_kwargs(self):
         """ Construct the kwargs to pass to batch_get_item """
-        keys, self.keys = self.keys[:MAX_GET_BATCH], self.keys[MAX_GET_BATCH:]
-        query = {"ConsistentRead": self.consistent}
-        if self.attributes is not None:
-            query["ProjectionExpression"] = self.attributes
-        if self.alias:
-            query["ExpressionAttributeNames"] = self.alias
-        query["Keys"] = keys
+        num_pending = sum([len(v) for v in self._pending_keys.values()])
+        if num_pending < MAX_GET_BATCH:
+            tablenames_to_remove = []
+            for tablename, key_iter in self.keymap.items():
+                for key in key_iter:
+                    pending_keys = self._pending_keys.setdefault(tablename, [])
+                    pending_keys.append(self.connection.dynamizer.encode_keys(key))
+                    num_pending += 1
+                    if num_pending == MAX_GET_BATCH:
+                        break
+                else:
+                    tablenames_to_remove.append(tablename)
+                if num_pending == MAX_GET_BATCH:
+                    break
+            for tablename in tablenames_to_remove:
+                self.keymap.pop(tablename, None)
+
+        if not self._pending_keys:
+            raise StopIteration
+        request_items = {}
+        for tablename, keys in self._pending_keys.items():
+            query: Dict[str, Any] = {"ConsistentRead": self.consistent}
+            if self.attributes is not None:
+                query["ProjectionExpression"] = self.attributes
+            if self.alias:
+                query["ExpressionAttributeNames"] = self.alias
+            query["Keys"] = keys
+            request_items[tablename] = query
+        self._pending_keys = {}
         return {
-            "RequestItems": {
-                self.tablename: query,
-            },
+            "RequestItems": request_items,
             "ReturnConsumedCapacity": self.return_capacity,
         }
 
@@ -378,8 +416,10 @@ class GetResultSet(PagedIterator):
         kwargs = self.build_kwargs()
         data = self.connection.call("batch_get_item", **kwargs)
         if "UnprocessedKeys" in data:
-            for items in data["UnprocessedKeys"].values():
-                self.keys.extend(items["Keys"])
+            for tablename, items in data["UnprocessedKeys"].items():
+                if items["Keys"]:
+                    keys = self._pending_keys.setdefault(tablename, [])
+                    keys.extend(items["Keys"])
             # Getting UnprocessedKeys indicates that we are exceeding our
             # throughput. So sleep for a bit.
             self._attempt += 1
@@ -393,11 +433,54 @@ class GetResultSet(PagedIterator):
             self.consumed_capacity = sum(
                 data["consumed_capacity"], self.consumed_capacity
             )
-        return iter(data["Responses"][self.tablename])
+        for tablename, items in data["Responses"].items():
+            for item in items:
+                yield tablename, item
+
+    def __getitem__(self, key: str) -> List[DynamoObject]:
+        return self.asdict()[key]
+
+    def items(self) -> ItemsView[str, List[DynamoObject]]:
+        return self.asdict().items()
+
+    def keys(self) -> KeysView[str]:
+        return self.asdict().keys()
+
+    def values(self) -> ValuesView[List[DynamoObject]]:
+        return self.asdict().values()
+
+    def __next__(self) -> Tuple[str, DynamoObject]:
+        self._started_iterator = True
+        tablename, result = super().__next__()
+        return tablename, self.connection.dynamizer.decode_keys(result)
+
+    def asdict(self) -> Dict[str, List[DynamoObject]]:
+        if self._cached_dict is None:
+            if self._started_iterator:
+                raise ValueError(
+                    "Cannot use asdict if also using GetResultSet as an iterator"
+                )
+            self._cached_dict = {}
+            for tablename, item in self:
+                items = self._cached_dict.setdefault(tablename, [])
+                items.append(item)
+        return self._cached_dict
+
+
+class SingleTableGetResultSet(object):
+    def __init__(self, result_set: GetResultSet):
+        self.result_set = result_set
+
+    @property
+    def consumed_capacity(self):
+        """ Getter for consumed_capacity """
+        return self.result_set.consumed_capacity
+
+    def __iter__(self):
+        return self
 
     def __next__(self) -> DynamoObject:
-        result = super(GetResultSet, self).__next__()
-        return self.connection.dynamizer.decode_keys(result)
+        return next(self.result_set)[1]
 
 
 class TableResultSet(PagedIterator):
