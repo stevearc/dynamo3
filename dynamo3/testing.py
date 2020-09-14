@@ -16,6 +16,7 @@ The 'dynamo' object will be detected and replaced by the nose plugin at
 runtime.
 
 """
+import argparse
 import inspect
 import locale
 import logging
@@ -24,7 +25,7 @@ import subprocess
 import tarfile
 import tempfile
 from contextlib import closing
-from typing import Optional
+from typing import List, Optional
 from urllib.request import urlretrieve
 
 import nose
@@ -112,25 +113,7 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
                 # Connect to live DynamoDB Region
                 self._dynamo = DynamoDBConnection.connect(self.region)
             else:
-                # Download DynamoDB Local
-                if not os.path.exists(self.path):
-                    tarball = urlretrieve(self.link)[0]
-                    with closing(tarfile.open(tarball, "r:gz")) as archive:
-                        archive.extractall(self.path)
-                    os.unlink(tarball)
-
-                # Run the jar
-                lib_path = os.path.join(self.path, "DynamoDBLocal_lib")
-                jar_path = os.path.join(self.path, "DynamoDBLocal.jar")
-                cmd = [
-                    "java",
-                    "-Djava.library.path=" + lib_path,
-                    "-jar",
-                    jar_path,
-                    "--port",
-                    str(self.port),
-                    "--inMemory",
-                ]
+                cmd = _dynamo_local_cmd(self.path, self.link, self.port, in_memory=True)
                 self._dynamo_local = subprocess.Popen(
                     cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
                 )
@@ -161,3 +144,112 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
                 encoding = locale.getdefaultlocale()[1] or "utf-8"
                 print("DynamoDB Local output:")
                 print(output.decode(encoding))
+
+
+def run_dynamo_local(argv=None):
+    """ Run DynamoDB Local """
+    parser = argparse.ArgumentParser(description=run_dynamo_local.__doc__)
+    default_path = os.path.join(tempfile.gettempdir(), "dynamolocal")
+    parser.add_argument(
+        "--path",
+        help="Path to download DynamoDB local (default %(default)s)",
+        default=default_path,
+    )
+    parser.add_argument(
+        "--link",
+        help="URL to use to download DynamoDB local (default %(default)s)",
+        default=DYNAMO_LOCAL,
+    )
+    parser.add_argument(
+        "-p",
+        "--port",
+        type=int,
+        help="Port to listen on (default %(default)d)",
+        default=DEFAULT_PORT,
+    )
+    parser.add_argument(
+        "--inMemory",
+        action="store_true",
+        help="When specified, DynamoDB Local will run in memory.",
+    )
+    parser.add_argument(
+        "--cors",
+        help="Enable CORS support for javascript against a specific allow-list list the domains separated by , use '*' for public access (default is '*')",
+    )
+    parser.add_argument(
+        "--dbPath",
+        help="Specify the location of your database file.  Default is the current directory",
+    )
+    parser.add_argument(
+        "--optimizeDbBeforeStartup",
+        action="store_true",
+        help="Optimize the underlying backing store database tables before starting up the server",
+    )
+    parser.add_argument(
+        "--sharedDb",
+        action="store_true",
+        help="When specified, DynamoDB Local will use a single database instead of separate databases for each credential and region. As a result, all clients will interact with the same set of tables, regardless of their region and credential configuration. (Useful for interacting with Local through the JS Shell in addition to other SDKs)",
+    )
+    parser.add_argument(
+        "--delayTransientStatuses",
+        action="store_true",
+        help="When specified, DynamoDB Local will introduce delays to hold various transient table and index statuses so that it simulates actual service more closely.",
+    )
+
+    args = parser.parse_args(argv)
+    cmd = _dynamo_local_cmd(
+        args.path,
+        args.link,
+        args.port,
+        args.inMemory,
+        args.cors,
+        args.dbPath,
+        args.optimizeDbBeforeStartup,
+        args.delayTransientStatuses,
+        args.sharedDb,
+    )
+    subprocess.call(cmd)
+
+
+def _dynamo_local_cmd(
+    path: str,
+    link: str,
+    port: int,
+    in_memory: bool = False,
+    cors: Optional[str] = None,
+    db_path: Optional[str] = None,
+    optimize_before_startup: bool = False,
+    delay_transient_statuses: bool = False,
+    shared_db: bool = False,
+) -> List[str]:
+    # Download DynamoDB Local
+    if not os.path.exists(path):
+        tarball = urlretrieve(link)[0]
+        with closing(tarfile.open(tarball, "r:gz")) as archive:
+            archive.extractall(path)
+        os.unlink(tarball)
+
+    # Run the jar
+    lib_path = os.path.join(path, "DynamoDBLocal_lib")
+    jar_path = os.path.join(path, "DynamoDBLocal.jar")
+    cmd = [
+        "java",
+        "-Djava.library.path=" + lib_path,
+        "-jar",
+        jar_path,
+        "--port",
+        str(port),
+    ]
+    if in_memory:
+        cmd.append("-inMemory")
+    if cors is not None:
+        cmd.extend(["-cors", cors])
+    if db_path is not None:
+        cmd.extend(["-dbPath", db_path])
+    if optimize_before_startup:
+        cmd.append("-optimizeDbBeforeStartup")
+    if delay_transient_statuses:
+        cmd.append("-delayTransientStatuses")
+    if shared_db:
+        cmd.append("-sharedDb")
+    return cmd

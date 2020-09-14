@@ -43,6 +43,9 @@ if __name__ == "__main__":
         packages=find_packages(exclude=("tests",)),
         license="MIT",
         entry_points={
+            "console_scripts": [
+                "dynamodb-local = dynamo3.testing:run_dynamo_local",
+            ],
             "nose.plugins": [
                 "dynamolocal=dynamo3.testing:DynamoLocalPlugin",
             ],
