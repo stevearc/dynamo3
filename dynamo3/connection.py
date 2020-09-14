@@ -1,4 +1,5 @@
 """ Connection class for DynamoDB """
+import logging
 import time
 from contextlib import contextmanager
 from typing import (
@@ -67,6 +68,8 @@ from .types import (
     encode_tags,
     is_null,
 )
+
+LOG = logging.getLogger(__name__)
 
 ExpectedDict = TypedDict(
     "ExpectedDict", {"Exists": bool, "Value": EncodedDynamoValue}, total=False
@@ -253,6 +256,7 @@ class DynamoDBConnection(object):
         data : dict
 
         """
+        LOG.debug("Calling %s with arguments %s", command, kwargs)
         for hook in self._hooks["precall"]:
             hook(self, command, kwargs)
         op = getattr(self.client, command)
@@ -512,13 +516,16 @@ class DynamoDBConnection(object):
             "KeySchema": key_schema,
         }
         if throughput is not None:
-            kwargs["ProvisionedThroughput"] = Throughput.normalize(throughput).schema()
+            throughput = Throughput.normalize(throughput)
+            kwargs["ProvisionedThroughput"] = throughput.schema()
         if billing_mode is not None:
             kwargs["BillingMode"] = billing_mode
         else:
-            kwargs["BillingMode"] = (
-                PAY_PER_REQUEST if throughput is None else PROVISIONED
-            )
+            if throughput is None or (throughput.read == 0 and throughput.write == 0):
+                kwargs.pop("ProvisionedThroughput", None)
+                kwargs["BillingMode"] = PAY_PER_REQUEST
+            else:
+                kwargs["BillingMode"] = PROVISIONED
         kwargs.update(build_stream_dict(stream))
         if indexes:
             kwargs["LocalSecondaryIndexes"] = [idx.schema(hash_key) for idx in indexes]
@@ -676,7 +683,7 @@ class DynamoDBConnection(object):
         self,
         tablename: str,
         key: DynamoObject,
-        attributes: Optional[Union[str, List[str]]] = None,
+        attributes: Optional[Union[str, Iterable[str]]] = None,
         alias: Optional[ExpressionAttributeNamesType] = None,
         consistent: bool = False,
         return_capacity: Optional[ReturnCapacityType] = None,
@@ -889,7 +896,7 @@ class DynamoDBConnection(object):
         self,
         tablename_or_map: Dict[str, Iterable[DynamoObject]],
         *,
-        attributes: Optional[Union[str, List[str]]] = ...,
+        attributes: Optional[Union[str, Iterable[str]]] = ...,
         alias: Optional[ExpressionAttributeNamesType] = ...,
         consistent: bool = ...,
         return_capacity: Optional[ReturnCapacityType] = ...,
@@ -902,7 +909,7 @@ class DynamoDBConnection(object):
         tablename_or_map: str,
         keys: Iterable[DynamoObject],
         *,
-        attributes: Optional[Union[str, List[str]]] = ...,
+        attributes: Optional[Union[str, Iterable[str]]] = ...,
         alias: Optional[ExpressionAttributeNamesType] = ...,
         consistent: bool = ...,
         return_capacity: Optional[ReturnCapacityType] = ...,
@@ -913,7 +920,7 @@ class DynamoDBConnection(object):
         self,
         tablename_or_map: Union[str, Dict[str, Iterable[DynamoObject]]],
         keys: Iterable[DynamoObject] = None,
-        attributes: Optional[Union[str, List[str]]] = None,
+        attributes: Optional[Union[str, Iterable[str]]] = None,
         alias: Optional[ExpressionAttributeNamesType] = None,
         consistent: bool = False,
         return_capacity: Optional[ReturnCapacityType] = None,
@@ -941,7 +948,7 @@ class DynamoDBConnection(object):
             (default NONE)
 
         """
-        if isinstance(attributes, list):
+        if attributes is not None and not isinstance(attributes, str):
             attributes = ", ".join(attributes)
         return_capacity = self._default_capacity(return_capacity)
         single_table = False
@@ -969,7 +976,7 @@ class DynamoDBConnection(object):
         self,
         tablename: str,
         keys: List[DynamoObject],
-        attributes: Optional[Union[str, List[str]]] = ...,
+        attributes: Optional[Union[str, Iterable[str]]] = ...,
         alias: Optional[ExpressionAttributeNamesType] = ...,
         return_capacity: Optional[ReturnCapacityType] = ...,
     ) -> TransactionGet:
@@ -987,7 +994,7 @@ class DynamoDBConnection(object):
         self,
         tablename: str = None,
         keys: List[DynamoObject] = None,
-        attributes: Optional[Union[str, List[str]]] = None,
+        attributes: Optional[Union[str, Iterable[str]]] = None,
         alias: Optional[ExpressionAttributeNamesType] = None,
         return_capacity: Optional[ReturnCapacityType] = None,
     ) -> TransactionGet:
@@ -1099,7 +1106,7 @@ class DynamoDBConnection(object):
         tablename: str,
         expr_values: Optional[ExpressionValuesType] = ...,
         alias: Optional[ExpressionAttributeNamesType] = ...,
-        attributes: Optional[Union[str, List[str]]] = ...,
+        attributes: Optional[Union[str, Iterable[str]]] = ...,
         consistent: bool = ...,
         index: Optional[str] = ...,
         limit: Optional[Union[Limit, int]] = ...,
@@ -1120,7 +1127,7 @@ class DynamoDBConnection(object):
         tablename: str,
         expr_values: Optional[ExpressionValuesType] = ...,
         alias: Optional[ExpressionAttributeNamesType] = ...,
-        attributes: Optional[Union[str, List[str]]] = ...,
+        attributes: Optional[Union[str, Iterable[str]]] = ...,
         consistent: bool = ...,
         index: Optional[str] = ...,
         limit: Optional[Union[Limit, int]] = ...,
@@ -1139,7 +1146,7 @@ class DynamoDBConnection(object):
         tablename: str,
         expr_values: Optional[ExpressionValuesType] = None,
         alias: Optional[ExpressionAttributeNamesType] = None,
-        attributes: Optional[Union[str, List[str]]] = None,
+        attributes: Optional[Union[str, Iterable[str]]] = None,
         consistent: bool = False,
         index: Optional[str] = None,
         limit: Optional[Union[Limit, int]] = None,
@@ -1247,7 +1254,7 @@ class DynamoDBConnection(object):
         key_condition_expr: str,
         expr_values: Optional[DynamoObject] = ...,
         alias: Optional[ExpressionAttributeNamesType] = ...,
-        attributes: Optional[Union[str, List[str]]] = ...,
+        attributes: Optional[Union[str, Iterable[str]]] = ...,
         consistent: bool = ...,
         index: Optional[str] = ...,
         limit: Optional[Union[int, Limit]] = ...,
@@ -1268,7 +1275,7 @@ class DynamoDBConnection(object):
         key_condition_expr: str,
         expr_values: Optional[DynamoObject] = ...,
         alias: Optional[ExpressionAttributeNamesType] = ...,
-        attributes: Optional[Union[str, List[str]]] = ...,
+        attributes: Optional[Union[str, Iterable[str]]] = ...,
         consistent: bool = ...,
         index: Optional[str] = ...,
         limit: Optional[Union[int, Limit]] = ...,
@@ -1287,7 +1294,7 @@ class DynamoDBConnection(object):
         key_condition_expr: str,
         expr_values: Optional[DynamoObject] = None,
         alias: Optional[ExpressionAttributeNamesType] = None,
-        attributes: Optional[Union[str, List[str]]] = None,
+        attributes: Optional[Union[str, Iterable[str]]] = None,
         consistent: bool = False,
         index: Optional[str] = None,
         limit: Optional[Union[int, Limit]] = None,

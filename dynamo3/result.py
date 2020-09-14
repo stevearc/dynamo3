@@ -664,7 +664,7 @@ class TransactionGet(object):
             Tuple[
                 str,
                 DynamoObject,
-                Optional[Union[str, List[str]]],
+                Optional[Union[str, Iterable[str]]],
                 Optional[ExpressionAttributeNamesType],
             ]
         ] = []
@@ -673,7 +673,7 @@ class TransactionGet(object):
         self,
         tablename: str,
         key: DynamoObject,
-        attributes: Optional[Union[str, List[str]]] = None,
+        attributes: Optional[Union[str, Iterable[str]]] = None,
         alias: Optional[ExpressionAttributeNamesType] = None,
     ) -> None:
         self._items.append((tablename, key, attributes, alias))
@@ -706,9 +706,9 @@ class TransactionGet(object):
                 "TableName": tablename,
                 "Key": self._connection.dynamizer.encode_keys(key),
             }
-            if isinstance(attributes, list):
-                attributes = ", ".join(attributes)
             if attributes is not None:
+                if not isinstance(attributes, str):
+                    attributes = ", ".join(attributes)
                 item["ProjectionExpression"] = attributes
             if alias is not None:
                 item["ExpressionAttributeNames"] = alias

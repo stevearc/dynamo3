@@ -1,6 +1,6 @@
 """ Objects for defining fields and indexes """
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple, Union
 
 from typing_extensions import Final, Literal
 
@@ -78,7 +78,11 @@ class DynamoKey(object):
         return hash(self.name)
 
     def __eq__(self, other):
-        return self.name == getattr(other, "name", None)
+        return (
+            isinstance(other, DynamoKey)
+            and self.name == other.name
+            and self.data_type == other.data_type
+        )
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -178,6 +182,9 @@ class BaseIndex(object):
     def __getitem__(self, key: str) -> Any:
         return self.response[key]
 
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.response.get(key, default)
+
     def __contains__(self, key: str) -> bool:
         return key in self.response
 
@@ -269,10 +276,16 @@ class LocalIndex(BaseIndex):
     ) -> "LocalIndex":
         """ Create an index from returned Dynamo data """
         proj = response["Projection"]
+        range_key = None
+        for key_schema in response["KeySchema"]:
+            if key_schema["KeyType"] == "RANGE":
+                range_key = attrs[key_schema["AttributeName"]]
+        if range_key is None:
+            raise ValueError("No range key in local index definition")
         index = cls(
             proj["ProjectionType"],
             response["IndexName"],
-            attrs[response["KeySchema"][1]["AttributeName"]],
+            range_key,
             proj.get("NonKeyAttributes"),
         )
         index.response = response
@@ -316,6 +329,9 @@ class GlobalIndex(BaseIndex):
         includes: Optional[List[str]] = None,
         throughput: Optional[ThroughputOrTuple] = None,
         status: Optional[IndexStatusType] = None,
+        backfilling: bool = False,
+        item_count: int = 0,
+        size: int = 0,
     ):
         super(GlobalIndex, self).__init__(projection_type, name, range_key, includes)
         self.hash_key = hash_key
@@ -375,10 +391,14 @@ class GlobalIndex(BaseIndex):
     ) -> "GlobalIndex":
         """ Create an index from returned Dynamo data """
         proj = response["Projection"]
-        hash_key = attrs.get(response["KeySchema"][0]["AttributeName"])
+        hash_key = None
         range_key = None
-        if len(response["KeySchema"]) > 1:
-            range_key = attrs[response["KeySchema"][1]["AttributeName"]]
+        for key_schema in response["KeySchema"]:
+            key_attr = attrs.get(key_schema["AttributeName"])
+            if key_schema["KeyType"] == "HASH":
+                hash_key = key_attr
+            if key_schema["KeyType"] == "RANGE":
+                range_key = key_attr
         throughput = None
         if "ProvisionedThroughput" in response:
             throughput = Throughput.from_response(response["ProvisionedThroughput"])
@@ -390,6 +410,9 @@ class GlobalIndex(BaseIndex):
             proj.get("NonKeyAttributes"),
             throughput,
             response["IndexStatus"],
+            response.get("Backfilling", False),
+            response.get("ItemCount", 0),
+            response.get("IndexSizeBytes", 0),
         )
         index.response = response
         return index
@@ -494,6 +517,7 @@ class Table(object):
         stream_type: Optional[StreamViewType] = None,
         restore_summary: Optional[RestoreSummary] = None,
         sse_description: Optional[SSEDescription] = None,
+        decreases_today: Optional[int] = None,
         item_count: int = 0,
         size: int = 0,
     ):
@@ -509,13 +533,34 @@ class Table(object):
         self.stream_type = stream_type
         self.restore_summary = restore_summary or RestoreSummary.default()
         self.sse_description = sse_description or SSEDescription.default()
+        self.decreases_today = decreases_today
         self.item_count = item_count
         self.size = size
         self.response: Dict[str, Any] = {}
         self.ttl: Optional[TTL] = None
 
+    @property
+    def attribute_definitions(self) -> Set[DynamoKey]:
+        """ Getter for attribute_definitions """
+        attrs = set()
+        if self.hash_key is not None:
+            attrs.add(self.hash_key)
+        if self.range_key is not None:
+            attrs.add(self.range_key)
+        for index in self.indexes:
+            attrs.add(index.range_key)
+        for gindex in self.global_indexes:
+            if gindex.hash_key is not None:
+                attrs.add(gindex.hash_key)
+            if gindex.range_key is not None:
+                attrs.add(gindex.range_key)
+        return attrs
+
     def __getitem__(self, key: str) -> Any:
         return self.response[key]
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.response.get(key, default)
 
     def __contains__(self, key: str) -> bool:
         return key in self.response
@@ -536,9 +581,12 @@ class Table(object):
                     for d in response["AttributeDefinitions"]
                 )
             )
-            hash_key = attrs[response["KeySchema"][0]["AttributeName"]]
-            if len(response["KeySchema"]) > 1:
-                range_key = attrs[response["KeySchema"][1]["AttributeName"]]
+            for key_schema in response["KeySchema"]:
+                key_attr = attrs[key_schema["AttributeName"]]
+                if key_schema["KeyType"] == "HASH":
+                    hash_key = key_attr
+                if key_schema["KeyType"] == "RANGE":
+                    range_key = key_attr
 
         indexes = []
         for idx in response.get("LocalSecondaryIndexes", []):
@@ -547,8 +595,12 @@ class Table(object):
         for idx in response.get("GlobalSecondaryIndexes", []):
             global_indexes.append(GlobalIndex.from_response(idx, attrs))
         throughput = None
+        decreases_today = None
         if "ProvisionedThroughput" in response:
             throughput = Throughput.from_response(response["ProvisionedThroughput"])
+            decreases_today = response["ProvisionedThroughput"][
+                "NumberOfDecreasesToday"
+            ]
         stream_type = None
         if (
             "StreamSpecification" in response
@@ -571,6 +623,7 @@ class Table(object):
             stream_type=stream_type,
             restore_summary=RestoreSummary.from_response(response),
             sse_description=SSEDescription.from_response(response),
+            decreases_today=decreases_today,
             item_count=response["ItemCount"],
             size=response["TableSizeBytes"],
         )
