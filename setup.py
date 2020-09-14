@@ -47,6 +47,7 @@ if __name__ == "__main__":
                 "dynamolocal=dynamo3.testing:DynamoLocalPlugin",
             ],
         },
+        python_requires=">=3.6",
         install_requires=REQUIREMENTS,
         tests_require=REQUIREMENTS + REQUIREMENTS_TEST,
     )
