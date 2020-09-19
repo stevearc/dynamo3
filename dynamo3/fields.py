@@ -337,6 +337,9 @@ class GlobalIndex(BaseIndex):
         self.hash_key = hash_key
         self.throughput = Throughput.normalize(throughput)
         self.status: Optional[IndexStatusType] = status
+        self.backfilling = backfilling
+        self.item_count = item_count
+        self.size = size
 
     @classmethod
     def all(
