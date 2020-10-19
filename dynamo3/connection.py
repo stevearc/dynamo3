@@ -137,6 +137,15 @@ def build_stream_dict(
         }
 
 
+def add_projection_expression(
+    keywords: Dict, attributes: Optional[Union[str, Iterable[str]]]
+) -> None:
+    if attributes:
+        if not isinstance(attributes, str):
+            attributes = ", ".join(attributes)
+        keywords["ProjectionExpression"] = attributes
+
+
 class DynamoDBConnection(object):
 
     """
@@ -717,10 +726,7 @@ class DynamoDBConnection(object):
             "ConsistentRead": consistent,
             "ReturnConsumedCapacity": self._default_capacity(return_capacity),
         }
-        if attributes is not None:
-            if not isinstance(attributes, str):
-                attributes = ", ".join(attributes)
-            kwargs["ProjectionExpression"] = attributes
+        add_projection_expression(kwargs, attributes)
         if alias:
             kwargs["ExpressionAttributeNames"] = alias
         data = self.call("get_item", **kwargs)
@@ -949,7 +955,7 @@ class DynamoDBConnection(object):
 
         """
         if attributes is not None and not isinstance(attributes, str):
-            attributes = ", ".join(attributes)
+            attributes = ", ".join(attributes) or None
         return_capacity = self._default_capacity(return_capacity)
         single_table = False
         if isinstance(tablename_or_map, str):
@@ -1219,10 +1225,7 @@ class DynamoDBConnection(object):
         values = build_expression_values(self.dynamizer, expr_values, kwargs)
         if values:
             keywords["ExpressionAttributeValues"] = values
-        if attributes is not None:
-            if not isinstance(attributes, str):
-                attributes = ", ".join(attributes)
-            keywords["ProjectionExpression"] = attributes
+        add_projection_expression(keywords, attributes)
         if index is not None:
             keywords["IndexName"] = index
         if alias:
@@ -1365,10 +1368,7 @@ class DynamoDBConnection(object):
             "ExpressionAttributeValues": values,
             "ScanIndexForward": not desc,
         }
-        if attributes is not None:
-            if not isinstance(attributes, str):
-                attributes = ", ".join(attributes)
-            keywords["ProjectionExpression"] = attributes
+        add_projection_expression(keywords, attributes)
         if index is not None:
             keywords["IndexName"] = index
         if alias:

@@ -104,6 +104,30 @@ class TestQuery2(BaseSystemTest):
         results = self.dynamo.query("foobar", "id = :id", attributes=["id"], id="a")
         self.assertCountEqual(list(results), [{"id": "a"}])
 
+    def test_empty_attributes(self):
+        """ Passing in empty string to attributes selects all """
+        hash_key = DynamoKey("id")
+        self.dynamo.create_table("foobar", hash_key)
+        item = {
+            "id": "a",
+            "foo": "bar",
+        }
+        self.dynamo.put_item("foobar", item)
+        results = self.dynamo.query("foobar", "id = :id", attributes="", id="a")
+        self.assertCountEqual(list(results), [{"id": "a", "foo": "bar"}])
+
+    def test_empty_attributes_list(self):
+        """ Passing in empty list to attributes selects all """
+        hash_key = DynamoKey("id")
+        self.dynamo.create_table("foobar", hash_key)
+        item = {
+            "id": "a",
+            "foo": "bar",
+        }
+        self.dynamo.put_item("foobar", item)
+        results = self.dynamo.query("foobar", "id = :id", attributes=[], id="a")
+        self.assertCountEqual(list(results), [{"id": "a", "foo": "bar"}])
+
     def test_order_desc(self):
         """ Can sort the results in descending order """
         self.make_table()

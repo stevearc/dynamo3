@@ -405,7 +405,7 @@ class GetResultSet(PagedIterator):
         request_items = {}
         for tablename, keys in self._pending_keys.items():
             query: Dict[str, Any] = {"ConsistentRead": self.consistent}
-            if self.attributes is not None:
+            if self.attributes:
                 query["ProjectionExpression"] = self.attributes
             if self.alias:
                 query["ExpressionAttributeNames"] = self.alias
@@ -706,7 +706,7 @@ class TransactionGet(object):
                 "TableName": tablename,
                 "Key": self._connection.dynamizer.encode_keys(key),
             }
-            if attributes is not None:
+            if attributes:
                 if not isinstance(attributes, str):
                     attributes = ", ".join(attributes)
                 item["ProjectionExpression"] = attributes
