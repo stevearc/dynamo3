@@ -7,7 +7,7 @@ import botocore
 
 class DynamoDBError(botocore.exceptions.BotoCoreError):
 
-    """ Base error that we get back from Dynamo """
+    """Base error that we get back from Dynamo"""
 
     fmt = "{Code}: {Message}\nArgs: {args}"
 
@@ -17,7 +17,7 @@ class DynamoDBError(botocore.exceptions.BotoCoreError):
         super(DynamoDBError, self).__init__(**kwargs)
 
     def re_raise(self):
-        """ Raise this exception with the original traceback """
+        """Raise this exception with the original traceback"""
         if self.exc_info is not None:
             traceback = self.exc_info[2]
             if self.__traceback__ != traceback:
@@ -27,7 +27,7 @@ class DynamoDBError(botocore.exceptions.BotoCoreError):
 
 class ConditionalCheckFailedException(DynamoDBError):
 
-    """ Raised when an item field value fails the expected value check """
+    """Raised when an item field value fails the expected value check"""
 
     fmt = "{Code}: {Message}"
 
@@ -37,14 +37,14 @@ CheckFailed = ConditionalCheckFailedException
 
 class TransactionCanceledException(DynamoDBError):
 
-    """ Raised when a transaction fails """
+    """Raised when a transaction fails"""
 
     fmt = "{Code}: {Message}"
 
 
 class ProvisionedThroughputExceededException(DynamoDBError):
 
-    """ Raised when an item field value fails the expected value check """
+    """Raised when an item field value fails the expected value check"""
 
     fmt = "{Code}: {Message}"
 
@@ -59,7 +59,7 @@ EXC = {
 
 
 def translate_exception(exc, kwargs):
-    """ Translate a botocore.exceptions.ClientError into a dynamo3 error """
+    """Translate a botocore.exceptions.ClientError into a dynamo3 error"""
     error = exc.response["Error"]
     error.setdefault("Message", "")
     err_class = EXC.get(error["Code"], DynamoDBError)

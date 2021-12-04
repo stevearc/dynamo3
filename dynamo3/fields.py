@@ -45,24 +45,24 @@ class DynamoKey(object):
         self.data_type = data_type
 
     def definition(self) -> Dict[str, str]:
-        """ Returns the attribute definition """
+        """Returns the attribute definition"""
         return {
             "AttributeName": self.name,
             "AttributeType": self.data_type,
         }
 
     def hash_schema(self):
-        """ Get the schema definition with this field as a hash key """
+        """Get the schema definition with this field as a hash key"""
         return self._schema("HASH")
 
     def range_schema(self):
-        """ Get the schema definition with this field as a range key """
+        """Get the schema definition with this field as a range key"""
         return self._schema("RANGE")
 
     def _schema(
         self, key_type: Literal[Literal["HASH"], Literal["RANGE"]]
     ) -> Dict[str, str]:
-        """ Construct the schema definition for this table """
+        """Construct the schema definition for this table"""
         return {
             "AttributeName": self.name,
             "KeyType": key_type,
@@ -119,7 +119,7 @@ class Throughput(object):
         return bool(self.read and self.write)
 
     def schema(self) -> Dict[str, int]:
-        """ Construct the schema definition for the throughput """
+        """Construct the schema definition for the throughput"""
         return {
             "ReadCapacityUnits": self.read,
             "WriteCapacityUnits": self.write,
@@ -135,7 +135,7 @@ class Throughput(object):
 
     @classmethod
     def from_response(cls, response: Dict[str, int]) -> "Throughput":
-        """ Create Throughput from returned Dynamo data """
+        """Create Throughput from returned Dynamo data"""
         return cls(
             response["ReadCapacityUnits"],
             response["WriteCapacityUnits"],
@@ -160,7 +160,7 @@ ProjectionType = Literal[Literal["ALL"], Literal["KEYS_ONLY"], Literal["INCLUDE"
 
 class BaseIndex(object):
 
-    """ Base class for indexes """
+    """Base class for indexes"""
 
     ALL: Final[Literal["ALL"]] = "ALL"
     KEYS: Final[Literal["KEYS_ONLY"]] = "KEYS_ONLY"
@@ -252,19 +252,19 @@ class LocalIndex(BaseIndex):
 
     @classmethod
     def all(cls, name: str, range_key: DynamoKey) -> "LocalIndex":
-        """ Create an index that projects all attributes """
+        """Create an index that projects all attributes"""
         return cls(cls.ALL, name, range_key)
 
     @classmethod
     def keys(cls, name: str, range_key: DynamoKey) -> "LocalIndex":
-        """ Create an index that projects only key attributes """
+        """Create an index that projects only key attributes"""
         return cls(cls.KEYS, name, range_key)
 
     @classmethod
     def include(
         cls, name: str, range_key: DynamoKey, includes: List[str]
     ) -> "LocalIndex":
-        """ Create an index that projects key attributes plus some others """
+        """Create an index that projects key attributes plus some others"""
         return cls(cls.INCLUDE, name, range_key, includes)
 
     def schema(self, hash_key: DynamoKey) -> Dict[str, Any]:
@@ -274,7 +274,7 @@ class LocalIndex(BaseIndex):
     def from_response(
         cls, response: Dict[str, Any], attrs: Dict[Any, Any]
     ) -> "LocalIndex":
-        """ Create an index from returned Dynamo data """
+        """Create an index from returned Dynamo data"""
         proj = response["Projection"]
         range_key = None
         for key_schema in response["KeySchema"]:
@@ -349,7 +349,7 @@ class GlobalIndex(BaseIndex):
         range_key: Optional[DynamoKey] = None,
         throughput: Optional[ThroughputOrTuple] = None,
     ) -> "GlobalIndex":
-        """ Create an index that projects all attributes """
+        """Create an index that projects all attributes"""
         return cls(cls.ALL, name, hash_key, range_key, throughput=throughput)
 
     @classmethod
@@ -360,7 +360,7 @@ class GlobalIndex(BaseIndex):
         range_key: Optional[DynamoKey] = None,
         throughput: Optional[ThroughputOrTuple] = None,
     ) -> "GlobalIndex":
-        """ Create an index that projects only key attributes """
+        """Create an index that projects only key attributes"""
         return cls(cls.KEYS, name, hash_key, range_key, throughput=throughput)
 
     @classmethod
@@ -372,13 +372,13 @@ class GlobalIndex(BaseIndex):
         includes: Optional[List[str]] = None,
         throughput: Optional[ThroughputOrTuple] = None,
     ) -> "GlobalIndex":
-        """ Create an index that projects key attributes plus some others """
+        """Create an index that projects key attributes plus some others"""
         return cls(
             cls.INCLUDE, name, hash_key, range_key, includes, throughput=throughput
         )
 
     def schema(self) -> Dict[str, Any]:
-        """ Construct the schema definition for this index """
+        """Construct the schema definition for this index"""
         if self.hash_key is None:
             raise ValueError(
                 "Cannot construct schema for index %r. Missing hash key" % self.name
@@ -392,7 +392,7 @@ class GlobalIndex(BaseIndex):
     def from_response(
         cls, response: Dict[str, Any], attrs: Dict[str, Any]
     ) -> "GlobalIndex":
-        """ Create an index from returned Dynamo data """
+        """Create an index from returned Dynamo data"""
         proj = response["Projection"]
         hash_key = None
         range_key = None
@@ -503,7 +503,7 @@ class SSEDescription(NamedTuple):
 
 class Table(object):
 
-    """ Representation of a DynamoDB table """
+    """Representation of a DynamoDB table"""
 
     def __init__(
         self,
@@ -544,7 +544,7 @@ class Table(object):
 
     @property
     def attribute_definitions(self) -> Set[DynamoKey]:
-        """ Getter for attribute_definitions """
+        """Getter for attribute_definitions"""
         attrs = set()
         if self.hash_key is not None:
             attrs.add(self.hash_key)
@@ -570,7 +570,7 @@ class Table(object):
 
     @classmethod
     def from_response(cls, response: Dict[str, Any]) -> "Table":
-        """ Create a Table from returned Dynamo data """
+        """Create a Table from returned Dynamo data"""
         hash_key = None
         range_key = None
         # KeySchema may not be in the response if the TableStatus is DELETING.
@@ -635,7 +635,7 @@ class Table(object):
 
     @property
     def is_on_demand(self):
-        """ Getter for is_on_demand """
+        """Getter for is_on_demand"""
         return self.billing_mode == PAY_PER_REQUEST
 
     def __str__(self):
@@ -694,25 +694,25 @@ class IndexUpdate(ABC):
 
     @staticmethod
     def update(index_name: str, throughput: ThroughputOrTuple) -> "IndexUpdateUpdate":
-        """ Update the throughput on the index """
+        """Update the throughput on the index"""
         return IndexUpdateUpdate(index_name, throughput)
 
     @staticmethod
     def create(index: GlobalIndex) -> "IndexUpdateCreate":
-        """ Create a new index """
+        """Create a new index"""
         return IndexUpdateCreate(index)
 
     @staticmethod
     def delete(index_name: str) -> "IndexUpdateDelete":
-        """ Delete an index """
+        """Delete an index"""
         return IndexUpdateDelete(index_name)
 
     @abstractmethod
     def get_attrs(self) -> List[DynamoKey]:
-        """ Get all attrs necessary for the update (empty unless Create) """
+        """Get all attrs necessary for the update (empty unless Create)"""
 
     def serialize(self) -> Dict[str, Any]:
-        """ Get the serialized Dynamo format for the update """
+        """Get the serialized Dynamo format for the update"""
         return {self.action: self._get_schema()}
 
     @abstractmethod

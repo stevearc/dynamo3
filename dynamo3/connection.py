@@ -79,7 +79,7 @@ ExpectedDict = TypedDict(
 def build_expected(
     dynamizer: Dynamizer, expected: DynamoObject
 ) -> Dict[str, ExpectedDict]:
-    """ Build the Expected parameters from a dict """
+    """Build the Expected parameters from a dict"""
     ret: Dict[str, ExpectedDict] = {}
     for k, v in expected.items():
         if is_null(v):
@@ -189,12 +189,12 @@ class DynamoDBConnection(object):
 
     @property
     def host(self) -> str:
-        """ The address of the endpoint """
+        """The address of the endpoint"""
         return self.client.meta.endpoint_url
 
     @property
     def region(self) -> str:
-        """ The name of the current connected region """
+        """The name of the current connected region"""
         return self.client.meta.region_name
 
     @classmethod
@@ -306,7 +306,7 @@ class DynamoDBConnection(object):
         return data
 
     def exponential_sleep(self, attempt: int) -> None:
-        """ Sleep with exponential backoff """
+        """Sleep with exponential backoff"""
         if attempt > 1:
             time.sleep(0.1 * 2 ** attempt)
 
@@ -328,25 +328,25 @@ class DynamoDBConnection(object):
             self._hooks[event].append(hook)
 
     def unsubscribe(self, event: HookType, hook: Callable) -> None:
-        """ Unsubscribe a hook from an event """
+        """Unsubscribe a hook from an event"""
         if hook in self._hooks[event]:
             self._hooks[event].remove(hook)
 
     def add_rate_limit(self, limiter: RateLimit) -> None:
-        """ Add a RateLimit to the connection """
+        """Add a RateLimit to the connection"""
         if limiter not in self.rate_limiters:
             self.subscribe("capacity", limiter.on_capacity)
             self.rate_limiters.append(limiter)
 
     def remove_rate_limit(self, limiter: RateLimit) -> None:
-        """ Remove a RateLimit from the connection """
+        """Remove a RateLimit from the connection"""
         if limiter in self.rate_limiters:
             self.unsubscribe("capacity", limiter.on_capacity)
             self.rate_limiters.remove(limiter)
 
     @contextmanager
     def limit(self, limiter: RateLimit) -> Iterator[None]:
-        """ Context manager that applies a RateLimit to the connection """
+        """Context manager that applies a RateLimit to the connection"""
         self.add_rate_limit(limiter)
         try:
             yield
@@ -354,7 +354,7 @@ class DynamoDBConnection(object):
             self.remove_rate_limit(limiter)
 
     def clear_hooks(self):
-        """ Remove all hooks from all events """
+        """Remove all hooks from all events"""
         self._hooks = {
             "precall": [],
             "postcall": [],
@@ -364,7 +364,7 @@ class DynamoDBConnection(object):
     def _default_capacity(
         self, value: Optional[ReturnCapacityType]
     ) -> ReturnCapacityType:
-        """ Get the value for ReturnConsumedCapacity from provided value """
+        """Get the value for ReturnConsumedCapacity from provided value"""
         if value is not None:
             return value
         if self.default_return_capacity or self.rate_limiters:
@@ -372,7 +372,7 @@ class DynamoDBConnection(object):
         return NONE
 
     def _count(self, method: str, limit: Limit, keywords: Dict[str, Any]) -> Count:
-        """ Do a scan or query and aggregate the results into a Count """
+        """Do a scan or query and aggregate the results into a Count"""
         # The limit will be mutated, so copy it and leave the original intact
         limit = limit.copy()
         has_more = True

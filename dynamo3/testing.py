@@ -107,7 +107,7 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
 
     @property
     def dynamo(self):
-        """ Lazy loading of the dynamo connection """
+        """Lazy loading of the dynamo connection"""
         if self._dynamo is None:
             if self.live:  # pragma: no cover
                 # Connect to live DynamoDB Region
@@ -128,13 +128,13 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
         return self._dynamo
 
     def startContext(self, context):  # pylint: disable=C0103
-        """ Called at the beginning of modules and TestCases """
+        """Called at the beginning of modules and TestCases"""
         # If this is a TestCase, dynamically set the dynamo connection
         if inspect.isclass(context) and hasattr(context, "dynamo"):
             context.dynamo = self.dynamo
 
     def finalize(self, result):
-        """ terminate the dynamo local service """
+        """terminate the dynamo local service"""
         if self._dynamo_local is not None:
             self._dynamo_local.terminate()
             if (
@@ -147,7 +147,7 @@ class DynamoLocalPlugin(nose.plugins.Plugin):
 
 
 def run_dynamo_local(argv=None):
-    """ Run DynamoDB Local """
+    """Run DynamoDB Local"""
     parser = argparse.ArgumentParser(description=run_dynamo_local.__doc__)
     default_path = os.path.join(tempfile.gettempdir(), "dynamolocal")
     parser.add_argument(

@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 
 def add_dicts(d1, d2):
-    """ Merge two dicts of addable values """
+    """Merge two dicts of addable values"""
     if d1 is None:
         return d2
     if d2 is None:
@@ -52,7 +52,7 @@ def add_dicts(d1, d2):
 
 class Count(int):
 
-    """ Wrapper for response to query with Select=COUNT """
+    """Wrapper for response to query with Select=COUNT"""
 
     count: int
     scanned_count: int
@@ -72,7 +72,7 @@ class Count(int):
 
     @classmethod
     def from_response(cls, response: Dict[str, Any]) -> "Count":
-        """ Factory method """
+        """Factory method"""
         return cls(
             response["Count"],
             response["ScannedCount"],
@@ -100,7 +100,7 @@ class Count(int):
 
 
 class Capacity(object):
-    """ Wrapper for the capacity of a table or index """
+    """Wrapper for the capacity of a table or index"""
 
     def __init__(self, read: float, write: float):
         self._read = read
@@ -108,12 +108,12 @@ class Capacity(object):
 
     @property
     def read(self) -> float:
-        """ The read capacity """
+        """The read capacity"""
         return self._read
 
     @property
     def write(self) -> float:
-        """ The write capacity """
+        """The write capacity"""
         return self._write
 
     @classmethod
@@ -167,7 +167,7 @@ class Capacity(object):
 
 
 class ConsumedCapacity(object):
-    """ Record of the consumed capacity of a request """
+    """Record of the consumed capacity of a request"""
 
     def __init__(
         self,
@@ -187,7 +187,7 @@ class ConsumedCapacity(object):
     def build_indexes(
         cls, response: Dict[str, Dict[str, Any]], key: str, is_read: Optional[bool]
     ) -> Optional[Dict[str, Capacity]]:
-        """ Construct index capacity map from a request fragment """
+        """Construct index capacity map from a request fragment"""
         if key not in response:
             return None
         indexes = {}
@@ -199,7 +199,7 @@ class ConsumedCapacity(object):
     def from_response(
         cls, response: Dict[str, Any], is_read: Optional[bool] = None
     ) -> "ConsumedCapacity":
-        """ Factory method for ConsumedCapacity from a response object """
+        """Factory method for ConsumedCapacity from a response object"""
         kwargs = {
             "tablename": response["TableName"],
             "total": Capacity.from_response(response, is_read),
@@ -272,19 +272,19 @@ class ConsumedCapacity(object):
 
 class PagedIterator(ABC):
 
-    """ An iterator that iterates over paged results from Dynamo """
+    """An iterator that iterates over paged results from Dynamo"""
 
     def __init__(self):
         self.iterator = None
 
     @abstractproperty
     def can_fetch_more(self) -> bool:  # pragma: no cover
-        """ Return True if more results can be fetched from the server """
+        """Return True if more results can be fetched from the server"""
         raise NotImplementedError
 
     @abstractmethod
     def _fetch(self) -> Iterator:  # pragma: no cover
-        """ Fetch additional results from the server and return an iterator """
+        """Fetch additional results from the server and return an iterator"""
         raise NotImplementedError
 
     def __iter__(self):
@@ -305,7 +305,7 @@ class PagedIterator(ABC):
 
 class ResultSet(PagedIterator):
 
-    """ Iterator that pages results from Dynamo """
+    """Iterator that pages results from Dynamo"""
 
     def __init__(
         self,
@@ -325,11 +325,11 @@ class ResultSet(PagedIterator):
 
     @property
     def can_fetch_more(self) -> bool:
-        """ True if there are more results on the server """
+        """True if there are more results on the server"""
         return self.last_evaluated_key is not None and not self.limit.complete
 
     def _fetch(self) -> Iterator:
-        """ Fetch more results from Dynamo """
+        """Fetch more results from Dynamo"""
         self.limit.set_request_args(self.kwargs)
         data = self.connection.call(*self.args, **self.kwargs)
         self.limit.post_fetch(data)
@@ -351,7 +351,7 @@ class ResultSet(PagedIterator):
 
 class GetResultSet(PagedIterator):
 
-    """ Iterator that pages the results of a BatchGetItem """
+    """Iterator that pages the results of a BatchGetItem"""
 
     def __init__(
         self,
@@ -382,7 +382,7 @@ class GetResultSet(PagedIterator):
         return bool(self.keymap) or bool(self._pending_keys)
 
     def build_kwargs(self):
-        """ Construct the kwargs to pass to batch_get_item """
+        """Construct the kwargs to pass to batch_get_item"""
         num_pending = sum([len(v) for v in self._pending_keys.values()])
         if num_pending < MAX_GET_BATCH:
             tablenames_to_remove = []
@@ -418,7 +418,7 @@ class GetResultSet(PagedIterator):
         }
 
     def _fetch(self) -> Iterator:
-        """ Fetch a set of items from their keys """
+        """Fetch a set of items from their keys"""
         kwargs = self.build_kwargs()
         if kwargs is None:
             return iter([])
@@ -481,7 +481,7 @@ class SingleTableGetResultSet(object):
 
     @property
     def consumed_capacity(self) -> Optional[ConsumedCapacity]:
-        """ Getter for consumed_capacity """
+        """Getter for consumed_capacity"""
         cap_map = self.result_set.consumed_capacity
         if cap_map is None:
             return None
@@ -496,7 +496,7 @@ class SingleTableGetResultSet(object):
 
 class TableResultSet(PagedIterator):
 
-    """ Iterator that pages table names from ListTables """
+    """Iterator that pages table names from ListTables"""
 
     def __init__(self, connection: "DynamoDBConnection", limit: Optional[int] = None):
         super(TableResultSet, self).__init__()
@@ -607,7 +607,7 @@ class Limit(object):
         self.filter = filter
 
     def copy(self) -> "Limit":
-        """ Return a copy of the limit """
+        """Return a copy of the limit"""
         return Limit(
             self.scan_limit,
             self.item_limit,
@@ -617,7 +617,7 @@ class Limit(object):
         )
 
     def set_request_args(self, args: Dict[str, Any]) -> None:
-        """ Set the Limit parameter into the request args """
+        """Set the Limit parameter into the request args"""
         if self.scan_limit is not None:
             args["Limit"] = self.scan_limit
         elif self.item_limit is not None:
@@ -627,7 +627,7 @@ class Limit(object):
 
     @property
     def complete(self) -> bool:
-        """ Return True if the limit has been reached """
+        """Return True if the limit has been reached"""
         if self.scan_limit is not None and self.scan_limit == 0:
             return True
         if self.item_limit is not None and self.item_limit == 0:
@@ -635,12 +635,12 @@ class Limit(object):
         return False
 
     def post_fetch(self, response: Dict[str, Any]) -> None:
-        """ Called after a fetch. Updates the ScannedCount """
+        """Called after a fetch. Updates the ScannedCount"""
         if self.scan_limit is not None:
             self.scan_limit -= response["ScannedCount"]
 
     def accept(self, item: DynamoObject) -> bool:
-        """ Apply the filter and item_limit, and return True to accept """
+        """Apply the filter and item_limit, and return True to accept"""
         accept = self.filter(item)
         if accept and self.item_limit is not None:
             if self.item_limit > 0:

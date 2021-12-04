@@ -27,7 +27,7 @@ LOG = logging.getLogger(__name__)
 def _encode_write(
     dynamizer: Dynamizer, data: DynamoObject, action: str, key: str
 ) -> Dict:
-    """ Encode an item write command """
+    """Encode an item write command"""
     # Strip null values out of data
     data = dict(((k, dynamizer.encode(v)) for k, v in data.items() if not is_null(v)))
     return {
@@ -38,18 +38,18 @@ def _encode_write(
 
 
 def encode_put(dynamizer: Dynamizer, data: DynamoObject) -> Dict:
-    """ Encode an item put command """
+    """Encode an item put command"""
     return _encode_write(dynamizer, data, "PutRequest", "Item")
 
 
 def encode_delete(dynamizer: Dynamizer, data: DynamoObject) -> Dict:
-    """ Encode an item delete command """
+    """Encode an item delete command"""
     return _encode_write(dynamizer, data, "DeleteRequest", "Key")
 
 
 class BatchWriter(object):
 
-    """ Context manager for writing a large number of items to a table """
+    """Context manager for writing a large number of items to a table"""
 
     def __init__(
         self,
@@ -115,14 +115,14 @@ class BatchWriter(object):
 
     @property
     def should_flush(self) -> bool:
-        """ True if a flush is needed """
+        """True if a flush is needed"""
         return (
             len(self._to_put) + len(self._to_delete) + len(self._unprocessed)
             >= MAX_WRITE_BATCH
         )
 
     def flush(self) -> None:
-        """ Flush pending items to Dynamo """
+        """Flush pending items to Dynamo"""
         table_map: Dict[str, List[Dict]] = {}
         count = 0
 
@@ -156,7 +156,7 @@ class BatchWriter(object):
             self.flush()
 
     def _write(self, table_map: Dict[str, List[Dict]]) -> None:
-        """ Perform a batch write and handle the response """
+        """Perform a batch write and handle the response"""
         response = self._batch_write_item(table_map)
         if "consumed_capacity" in response:
             self.consumed_capacity = self.consumed_capacity or {}
@@ -184,7 +184,7 @@ class BatchWriter(object):
             self._attempt = 0
 
     def resend_unprocessed(self):
-        """ Resend all unprocessed items """
+        """Resend all unprocessed items"""
         LOG.info("Re-sending %d unprocessed items.", len(self._unprocessed))
 
         while self._unprocessed:
@@ -192,7 +192,7 @@ class BatchWriter(object):
             LOG.info("%d unprocessed items left", len(self._unprocessed))
 
     def _batch_write_item(self, table_map: Dict[str, List[Dict]]) -> Dict[str, Any]:
-        """ Make a BatchWriteItem call to Dynamo """
+        """Make a BatchWriteItem call to Dynamo"""
         kwargs: Dict[str, Any] = {"RequestItems": table_map}
         if self.return_capacity is not None:
             kwargs["ReturnConsumedCapacity"] = self.return_capacity
@@ -223,7 +223,7 @@ class BatchWriterSingleTable(object):
 
     @property
     def consumed_capacity(self) -> Optional[ConsumedCapacity]:
-        """ Getter for consumed_capacity """
+        """Getter for consumed_capacity"""
         cap_map = self._writer.consumed_capacity
         if cap_map is None:
             return None

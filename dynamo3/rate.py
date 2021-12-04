@@ -30,14 +30,14 @@ class DecayingCapacityStore(object):
         self.points: List[Tuple[float, int]] = []
 
     def add(self, now: float, num: int) -> None:
-        """ Add a timestamp and date to the data """
+        """Add a timestamp and date to the data"""
         if num == 0:
             return
         self.points.append((now, num))
 
     @property
     def value(self) -> int:
-        """ Get the summation of all non-expired points """
+        """Get the summation of all non-expired points"""
         now = time.time()
         cutoff = now - self.window
         while self.points and self.points[0][0] < cutoff:
@@ -112,7 +112,7 @@ class RateLimit(object):
         self.callback = callback
 
     def get_consumed(self, key: str) -> RemainingCapacity:
-        """ Getter for a consumed capacity storage dict """
+        """Getter for a consumed capacity storage dict"""
         if key not in self._consumed:
             self._consumed[key] = {
                 "read": DecayingCapacityStore(),
@@ -128,7 +128,7 @@ class RateLimit(object):
         response: Dict[str, Any],
         capacity: ConsumedCapacity,
     ) -> None:
-        """ Hook that runs in response to a 'returned capacity' event """
+        """Hook that runs in response to a 'returned capacity' event"""
         now = time.time()
         args = (connection, command, query_kwargs, response, capacity)
         # Check total against the total_cap
@@ -165,7 +165,7 @@ class RateLimit(object):
                 self._wait(args, now, index_cap, consumed_history, consumed)
 
     def _wait(self, args, now, cap, consumed_history, consumed_capacity):
-        """ Check the consumed capacity against the limit and sleep """
+        """Check the consumed capacity against the limit and sleep"""
         for key in ["read", "write"]:
             if key in cap and cap[key] > 0:
                 consumed_history[key].add(now, consumed_capacity[key])

@@ -30,10 +30,10 @@ from . import BaseSystemTest
 
 class TestCreate(BaseSystemTest):
 
-    """ Test creating a table """
+    """Test creating a table"""
 
     def test_create_hash_table(self):
-        """ Create a table with just a hash key """
+        """Create a table with just a hash key"""
         hash_key = DynamoKey("id", data_type=STRING)
         table = Table("foobar", hash_key)
         self.dynamo.create_table("foobar", hash_key=hash_key)
@@ -41,7 +41,7 @@ class TestCreate(BaseSystemTest):
         self.assertEqual(desc, table)
 
     def test_create_hash_range_table(self):
-        """ Create a table with a hash and range key """
+        """Create a table with a hash and range key"""
         hash_key = DynamoKey("id", data_type=STRING)
         range_key = DynamoKey("num", data_type=NUMBER)
         table = Table("foobar", hash_key, range_key)
@@ -50,7 +50,7 @@ class TestCreate(BaseSystemTest):
         self.assertEqual(desc, table)
 
     def test_create_local_index(self):
-        """ Create a table with a local index """
+        """Create a table with a local index"""
         hash_key = DynamoKey("id", data_type=STRING)
         range_key = DynamoKey("num", data_type=NUMBER)
         index_field = DynamoKey("name")
@@ -61,7 +61,7 @@ class TestCreate(BaseSystemTest):
         self.assertEqual(desc, table)
 
     def test_create_local_keys_index(self):
-        """ Create a table with a local KeysOnly index """
+        """Create a table with a local KeysOnly index"""
         hash_key = DynamoKey("id", data_type=STRING)
         range_key = DynamoKey("num", data_type=NUMBER)
         index_field = DynamoKey("name")
@@ -72,7 +72,7 @@ class TestCreate(BaseSystemTest):
         self.assertEqual(desc, table)
 
     def test_create_local_includes_index(self):
-        """ Create a table with a local Includes index """
+        """Create a table with a local Includes index"""
         hash_key = DynamoKey("id", data_type=STRING)
         range_key = DynamoKey("num", data_type=NUMBER)
         index_field = DynamoKey("name")
@@ -83,7 +83,7 @@ class TestCreate(BaseSystemTest):
         self.assertEqual(desc, table)
 
     def test_create_global_index(self):
-        """ Create a table with a global index """
+        """Create a table with a global index"""
         hash_key = DynamoKey("id", data_type=STRING)
         index_field = DynamoKey("name")
         index = GlobalIndex.all("name-index", index_field)
@@ -93,7 +93,7 @@ class TestCreate(BaseSystemTest):
         self.assertEqual(desc, table)
 
     def test_create_global_keys_index(self):
-        """ Create a table with a global KeysOnly index """
+        """Create a table with a global KeysOnly index"""
         hash_key = DynamoKey("id", data_type=STRING)
         index_field = DynamoKey("name")
         index = GlobalIndex.keys("name-index", index_field)
@@ -103,7 +103,7 @@ class TestCreate(BaseSystemTest):
         self.assertEqual(desc, table)
 
     def test_create_global_includes_index(self):
-        """ Create a table with a global Includes index """
+        """Create a table with a global Includes index"""
         hash_key = DynamoKey("id", data_type=STRING)
         index_field = DynamoKey("name")
         index = GlobalIndex.include("name-index", index_field, includes=["foo", "bar"])
@@ -113,7 +113,7 @@ class TestCreate(BaseSystemTest):
         self.assertEqual(desc, table)
 
     def test_create_global_hash_range_index(self):
-        """ Create a global index with a hash and range key """
+        """Create a global index with a hash and range key"""
         hash_key = DynamoKey("id", data_type=STRING)
         index_hash = DynamoKey("foo")
         index_range = DynamoKey("bar")
@@ -124,7 +124,7 @@ class TestCreate(BaseSystemTest):
         self.assertEqual(desc, table)
 
     def test_create_table_throughput(self):
-        """ Create a table and set throughput """
+        """Create a table and set throughput"""
         hash_key = DynamoKey("id", data_type=STRING)
         throughput = Throughput(8, 2)
         table = Table("foobar", hash_key, throughput=throughput)
@@ -133,7 +133,7 @@ class TestCreate(BaseSystemTest):
         self.assertEqual(desc, table)
 
     def test_create_global_index_throughput(self):
-        """ Create a table and set throughput on global index """
+        """Create a table and set throughput on global index"""
         hash_key = DynamoKey("id", data_type=STRING)
         throughput = Throughput(8, 2)
         index_field = DynamoKey("name")
@@ -148,10 +148,10 @@ class TestCreate(BaseSystemTest):
 
 class TestUpdateTable(BaseSystemTest):
 
-    """ Test updating table/index throughput """
+    """Test updating table/index throughput"""
 
     def test_update_table_throughput(self):
-        """ Update the table throughput """
+        """Update the table throughput"""
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key, throughput=(1, 1))
         tp = Throughput(3, 4)
@@ -161,7 +161,7 @@ class TestUpdateTable(BaseSystemTest):
         self.assertEqual(table.throughput, tp)
 
     def test_update_multiple_throughputs(self):
-        """ Update table and global index throughputs """
+        """Update table and global index throughputs"""
         hash_key = DynamoKey("id", data_type=STRING)
         index_field = DynamoKey("name")
         index = GlobalIndex.all("name-index", index_field, throughput=(2, 3))
@@ -183,7 +183,7 @@ class TestUpdateTable(BaseSystemTest):
         self.assertEqual(table.global_indexes[0].throughput, tp)
 
     def test_update_index_throughput(self):
-        """ Update the throughput on a global index """
+        """Update the throughput on a global index"""
         hash_key = DynamoKey("id", data_type=STRING)
         index_field = DynamoKey("name")
         index = GlobalIndex.all("name-index", index_field)
@@ -197,7 +197,7 @@ class TestUpdateTable(BaseSystemTest):
         self.assertEqual(table.global_indexes[0].throughput, tp)
 
     def test_delete_index(self):
-        """ Delete a global index """
+        """Delete a global index"""
         hash_key = DynamoKey("id", data_type=STRING)
         index_field = DynamoKey("name")
         index = GlobalIndex.all("name-index", index_field)
@@ -213,7 +213,7 @@ class TestUpdateTable(BaseSystemTest):
         )
 
     def test_create_index(self):
-        """ Create a global index """
+        """Create a global index"""
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         index_field = DynamoKey("name")
@@ -224,14 +224,14 @@ class TestUpdateTable(BaseSystemTest):
         self.assertEqual(len(table.global_indexes), 1)
 
     def test_index_update_equality(self):
-        """ IndexUpdates should have sane == behavior """
+        """IndexUpdates should have sane == behavior"""
         self.assertEqual(IndexUpdate.delete("foo"), IndexUpdate.delete("foo"))
         collection = set([IndexUpdate.delete("foo")])
         self.assertIn(IndexUpdate.delete("foo"), collection)
         self.assertNotEqual(IndexUpdate.delete("foo"), IndexUpdate.delete("bar"))
 
     def test_update_billing_mode(self):
-        """ Update a table billing mode """
+        """Update a table billing mode"""
         hash_key = DynamoKey("id", data_type=STRING)
         table = self.dynamo.create_table(
             "foobar", hash_key=hash_key, billing_mode=PAY_PER_REQUEST
@@ -246,7 +246,7 @@ class TestUpdateTable(BaseSystemTest):
         self.assertEqual(new_table.throughput, Throughput(2, 3))
 
     def test_update_streams(self):
-        """ Update a table streams """
+        """Update a table streams"""
         hash_key = DynamoKey("id", data_type=STRING)
         table = self.dynamo.create_table(
             "foobar",
@@ -264,22 +264,22 @@ class TestUpdateTable(BaseSystemTest):
 
 class TestTTL(BaseSystemTest):
 
-    """ Test the TTL features """
+    """Test the TTL features"""
 
     def test_missing_ttl(self):
-        """ If no table, TTL should be None """
+        """If no table, TTL should be None"""
         ttl = self.dynamo.describe_ttl("foobar")
         self.assertIsNone(ttl)
 
     def test_default_ttl(self):
-        """ If no TTL configured, should be default value (disabled) """
+        """If no TTL configured, should be default value (disabled)"""
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         ttl = self.dynamo.describe_ttl("foobar")
         self.assertEqual(ttl, TTL.default())
 
     def test_set_ttl(self):
-        """ Can set the TTL for a table """
+        """Can set the TTL for a table"""
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         self.dynamo.update_ttl("foobar", "expire", True)
@@ -290,7 +290,7 @@ class TestTTL(BaseSystemTest):
         self.assertEqual(ttl, TTL.default())
 
     def test_describe_table_ttl(self):
-        """ Can make describe_table include the TTL """
+        """Can make describe_table include the TTL"""
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         table = self.dynamo.describe_table("foobar")
@@ -303,10 +303,10 @@ class TestTTL(BaseSystemTest):
 
 class TestBatchWrite(BaseSystemTest):
 
-    """ Test the batch write operation """
+    """Test the batch write operation"""
 
     def test_write_items(self):
-        """ Batch write items to table """
+        """Batch write items to table"""
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         with self.dynamo.batch_write("foobar") as batch:
@@ -315,7 +315,7 @@ class TestBatchWrite(BaseSystemTest):
         self.assertCountEqual(ret, [{"id": "a"}])
 
     def test_delete_items(self):
-        """ Batch write can delete items from table """
+        """Batch write can delete items from table"""
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         with self.dynamo.batch_write("foobar") as batch:
@@ -327,7 +327,7 @@ class TestBatchWrite(BaseSystemTest):
         self.assertCountEqual(ret, [{"id": "a"}])
 
     def test_write_many(self):
-        """ Can batch write arbitrary numbers of items """
+        """Can batch write arbitrary numbers of items"""
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         with self.dynamo.batch_write("foobar") as batch:
@@ -342,7 +342,7 @@ class TestBatchWrite(BaseSystemTest):
         self.assertEqual(count, 0)
 
     def test_write_converts_none(self):
-        """ Write operation converts None values to a DELETE """
+        """Write operation converts None values to a DELETE"""
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
@@ -352,7 +352,7 @@ class TestBatchWrite(BaseSystemTest):
         self.assertCountEqual(ret, [{"id": "a"}])
 
     def test_handle_unprocessed(self):
-        """ Retry all unprocessed items """
+        """Retry all unprocessed items"""
         conn = MagicMock()
         writer = BatchWriter(conn)
         action1, action2 = object(), object()
@@ -383,7 +383,7 @@ class TestBatchWrite(BaseSystemTest):
         self.assertEqual(conn.call.mock_calls[2], call("batch_write_item", **kwargs))
 
     def test_exc_aborts(self):
-        """ Exception during a write will not flush data """
+        """Exception during a write will not flush data"""
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         try:
@@ -396,7 +396,7 @@ class TestBatchWrite(BaseSystemTest):
         self.assertEqual(len(ret), 0)
 
     def test_capacity(self):
-        """ Can return consumed capacity """
+        """Can return consumed capacity"""
         ret = {
             "Responses": {
                 "foo": [],
@@ -442,15 +442,15 @@ class TestBatchWrite(BaseSystemTest):
 
 class TestUpdateItem2(BaseSystemTest):
 
-    """ Test the new UpdateItem API """
+    """Test the new UpdateItem API"""
 
     def make_table(self):
-        """ Convenience method for creating a table """
+        """Convenience method for creating a table"""
         hash_key = DynamoKey("id")
         self.dynamo.create_table("foobar", hash_key=hash_key)
 
     def test_update_field(self):
-        """ Update an item field """
+        """Update an item field"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a"})
         self.dynamo.update_item("foobar", {"id": "a"}, "SET foo = :bar", bar="bar")
@@ -458,7 +458,7 @@ class TestUpdateItem2(BaseSystemTest):
         self.assertEqual(item, {"id": "a", "foo": "bar"})
 
     def test_atomic_add_num(self):
-        """ Update can atomically add to a number """
+        """Update can atomically add to a number"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a"})
         self.dynamo.update_item("foobar", {"id": "a"}, "ADD foo :foo", foo=1)
@@ -467,7 +467,7 @@ class TestUpdateItem2(BaseSystemTest):
         self.assertEqual(item, {"id": "a", "foo": 3})
 
     def test_atomic_add_set(self):
-        """ Update can atomically add to a set """
+        """Update can atomically add to a set"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a"})
         self.dynamo.update_item("foobar", {"id": "a"}, "ADD foo :foo", foo=set([1]))
@@ -476,7 +476,7 @@ class TestUpdateItem2(BaseSystemTest):
         self.assertEqual(item, {"id": "a", "foo": set([1, 2])})
 
     def test_delete_field(self):
-        """ Update can delete fields from an item """
+        """Update can delete fields from an item"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
         self.dynamo.update_item("foobar", {"id": "a"}, "REMOVE foo")
@@ -484,7 +484,7 @@ class TestUpdateItem2(BaseSystemTest):
         self.assertEqual(item, {"id": "a"})
 
     def test_return_item(self):
-        """ Update can return the updated item """
+        """Update can return the updated item"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a"})
         ret = self.dynamo.update_item(
@@ -493,7 +493,7 @@ class TestUpdateItem2(BaseSystemTest):
         self.assertEqual(ret, {"id": "a", "foo": "bar"})
 
     def test_return_metadata(self):
-        """ The Update return value contains capacity metadata """
+        """The Update return value contains capacity metadata"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a"})
         ret = self.dynamo.update_item(
@@ -509,7 +509,7 @@ class TestUpdateItem2(BaseSystemTest):
         self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
 
     def test_expect_condition(self):
-        """ Update can expect a field to meet a condition """
+        """Update can expect a field to meet a condition"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a", "foo": 5})
         with self.assertRaises(CheckFailed):
@@ -523,7 +523,7 @@ class TestUpdateItem2(BaseSystemTest):
             )
 
     def test_expect_condition_or(self):
-        """ Expected conditionals can be OR'd together """
+        """Expected conditionals can be OR'd together"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a", "foo": 5})
         self.dynamo.update_item(
@@ -536,7 +536,7 @@ class TestUpdateItem2(BaseSystemTest):
         )
 
     def test_expression_values(self):
-        """ Can pass in expression values directly """
+        """Can pass in expression values directly"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a", "foo": 5})
         self.dynamo.update_item(
@@ -552,22 +552,22 @@ class TestUpdateItem2(BaseSystemTest):
 
 class TestPutItem2(BaseSystemTest):
 
-    """ Tests for new PutItem API """
+    """Tests for new PutItem API"""
 
     def make_table(self):
-        """ Convenience method for creating a table """
+        """Convenience method for creating a table"""
         hash_key = DynamoKey("id")
         self.dynamo.create_table("foobar", hash_key=hash_key)
 
     def test_new_item(self):
-        """ Can Put new item into table """
+        """Can Put new item into table"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a"})
         ret = list(self.dynamo.scan("foobar"))[0]
         self.assertEqual(ret, {"id": "a"})
 
     def test_overwrite_item(self):
-        """ Can overwrite an existing item """
+        """Can overwrite an existing item"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
         self.dynamo.put_item("foobar", {"id": "a", "foo": "baz"})
@@ -575,7 +575,7 @@ class TestPutItem2(BaseSystemTest):
         self.assertEqual(ret, {"id": "a", "foo": "baz"})
 
     def test_expect_condition(self):
-        """ Put can expect a field to meet a condition """
+        """Put can expect a field to meet a condition"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a", "foo": 5})
         with self.assertRaises(CheckFailed):
@@ -588,7 +588,7 @@ class TestPutItem2(BaseSystemTest):
             )
 
     def test_expect_condition_or(self):
-        """ Expected conditionals can be OR'd together """
+        """Expected conditionals can be OR'd together"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a", "foo": 5})
         self.dynamo.put_item(
@@ -599,14 +599,14 @@ class TestPutItem2(BaseSystemTest):
         )
 
     def test_return_item(self):
-        """ PutItem can return the item that was Put """
+        """PutItem can return the item that was Put"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a"})
         ret = self.dynamo.put_item("foobar", {"id": "a"}, returns=ALL_OLD)
         self.assertEqual(ret, {"id": "a"})
 
     def test_return_capacity(self):
-        """ PutItem can return the consumed capacity """
+        """PutItem can return the consumed capacity"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a"})
         ret = self.dynamo.put_item(
@@ -618,15 +618,15 @@ class TestPutItem2(BaseSystemTest):
 
 class TestDeleteItem2(BaseSystemTest):
 
-    """ Tests for the new DeleteItem API """
+    """Tests for the new DeleteItem API"""
 
     def make_table(self):
-        """ Convenience method for creating a table """
+        """Convenience method for creating a table"""
         hash_key = DynamoKey("id")
         self.dynamo.create_table("foobar", hash_key=hash_key)
 
     def test_delete(self):
-        """ Delete an item """
+        """Delete an item"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a"})
         self.dynamo.delete_item("foobar", {"id": "a"})
@@ -634,14 +634,14 @@ class TestDeleteItem2(BaseSystemTest):
         self.assertEqual(num, 0)
 
     def test_return_item(self):
-        """ Delete can return the deleted item """
+        """Delete can return the deleted item"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
         ret = self.dynamo.delete_item("foobar", {"id": "a"}, returns=ALL_OLD)
         self.assertEqual(ret, {"id": "a", "foo": "bar"})
 
     def test_return_metadata(self):
-        """ The Delete return value contains capacity metadata """
+        """The Delete return value contains capacity metadata"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a"})
         ret = self.dynamo.delete_item(
@@ -651,7 +651,7 @@ class TestDeleteItem2(BaseSystemTest):
         self.assertTrue(isinstance(ret.consumed_capacity.total, Capacity))
 
     def test_expect_not_exists(self):
-        """ Delete can expect a field to not exist """
+        """Delete can expect a field to not exist"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
         with self.assertRaises(CheckFailed):
@@ -660,7 +660,7 @@ class TestDeleteItem2(BaseSystemTest):
             )
 
     def test_expect_field(self):
-        """ Delete can expect a field to have a value """
+        """Delete can expect a field to have a value"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a", "foo": "bar"})
         with self.assertRaises(CheckFailed):
@@ -673,7 +673,7 @@ class TestDeleteItem2(BaseSystemTest):
             )
 
     def test_expect_condition(self):
-        """ Delete can expect a field to meet a condition """
+        """Delete can expect a field to meet a condition"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a", "foo": 5})
         with self.assertRaises(CheckFailed):
@@ -682,7 +682,7 @@ class TestDeleteItem2(BaseSystemTest):
             )
 
     def test_expect_condition_or(self):
-        """ Expected conditionals can be OR'd together """
+        """Expected conditionals can be OR'd together"""
         self.make_table()
         self.dynamo.put_item("foobar", {"id": "a", "foo": 5})
         self.dynamo.delete_item(
@@ -695,10 +695,10 @@ class TestDeleteItem2(BaseSystemTest):
 
 class TestTransactWrite(BaseSystemTest):
 
-    """ Test the TransactWriteItems operation """
+    """Test the TransactWriteItems operation"""
 
     def test_put_items(self):
-        """ Can put items """
+        """Can put items"""
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         with self.dynamo.txn_write() as batch:
@@ -707,7 +707,7 @@ class TestTransactWrite(BaseSystemTest):
         self.assertCountEqual(ret, [{"id": "a"}])
 
     def test_delete_items(self):
-        """ Can delete items from table """
+        """Can delete items from table"""
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         with self.dynamo.batch_write("foobar") as batch:
@@ -719,7 +719,7 @@ class TestTransactWrite(BaseSystemTest):
         self.assertCountEqual(ret, [{"id": "a"}])
 
     def test_update(self):
-        """ Can update items in table """
+        """Can update items in table"""
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         self.dynamo.put_item("foobar", {"id": "a"})
@@ -729,7 +729,7 @@ class TestTransactWrite(BaseSystemTest):
         self.assertEqual(item, {"id": "a", "foo": "bar"})
 
     def test_check(self):
-        """ Will only perform actions if check passes """
+        """Will only perform actions if check passes"""
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         self.dynamo.put_item("foobar", {"id": "a"})
@@ -741,7 +741,7 @@ class TestTransactWrite(BaseSystemTest):
         self.assertEqual(item, {"id": "a"})
 
     def test_fail_if_any_fail(self):
-        """ Transaction fails if any condition fails """
+        """Transaction fails if any condition fails"""
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         items = [
@@ -782,7 +782,7 @@ class TestTransactWrite(BaseSystemTest):
         self.assertCountEqual(scan_items, items)
 
     def test_idempotent(self):
-        """ If using token, operation is idempotent """
+        """If using token, operation is idempotent"""
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         self.dynamo.put_item("foobar", {"id": "a"})
@@ -795,7 +795,7 @@ class TestTransactWrite(BaseSystemTest):
         self.assertEqual(item, {"id": "a", "foo": 1})
 
     def test_return_capacity(self):
-        """ Can return consumed capacity """
+        """Can return consumed capacity"""
         hash_key = DynamoKey("id", data_type=STRING)
         self.dynamo.create_table("foobar", hash_key=hash_key)
         self.dynamo.put_item("foobar", {"id": "a"})

@@ -103,7 +103,7 @@ ExpressionAttributeNamesType = Dict[str, str]
 
 
 def float_to_decimal(f: float) -> Decimal:
-    """ Convert a float to a 38-precision Decimal """
+    """Convert a float to a 38-precision Decimal"""
     n, d = f.as_integer_ratio()
     numerator, denominator = Decimal(n), Decimal(d)
     return DECIMAL_CONTEXT.divide(numerator, denominator)
@@ -125,7 +125,7 @@ TYPES_REV = dict(((v, k) for k, v in TYPES.items()))
 
 
 def is_dynamo_value(value: Any) -> bool:
-    """ Returns True if the value is a Dynamo-formatted value """
+    """Returns True if the value is a Dynamo-formatted value"""
     if not isinstance(value, dict) or len(value) != 1:
         return False
     subkey = next(iter(value.keys()))
@@ -133,13 +133,13 @@ def is_dynamo_value(value: Any) -> bool:
 
 
 def is_null(value: Any) -> bool:
-    """ Check if a value is equivalent to null in Dynamo """
+    """Check if a value is equivalent to null in Dynamo"""
     return value is None or (isinstance(value, (set, frozenset)) and len(value) == 0)
 
 
 class Binary(object):
 
-    """ Wrap a binary string """
+    """Wrap a binary string"""
 
     def __init__(self, value: Union[str, bytes]):
         if isinstance(value, str):
@@ -169,7 +169,7 @@ def encode_set(
     dynamizer: "Dynamizer",
     value: Iterable[Union[int, float, Decimal, str, bytes, "Binary"]],
 ) -> EncoderReturn:
-    """ Encode a set for the DynamoDB format """
+    """Encode a set for the DynamoDB format"""
     inner_value = next(iter(value))
     inner_type = dynamizer.raw_encode(inner_value)[0]
     encoded_set: Any = [dynamizer.raw_encode(v)[1] for v in value]
@@ -178,7 +178,7 @@ def encode_set(
 
 
 def encode_list(dynamizer: "Dynamizer", value: List[Any]) -> DynamoEncoderList:
-    """ Encode a list for the DynamoDB format """
+    """Encode a list for the DynamoDB format"""
     encoded_list: Any = []
     dict(map(dynamizer.raw_encode, value))
     for v in value:
@@ -192,7 +192,7 @@ def encode_list(dynamizer: "Dynamizer", value: List[Any]) -> DynamoEncoderList:
 
 
 def encode_dict(dynamizer: "Dynamizer", value: Any) -> DynamoEncoderMap:
-    """ Encode a dict for the DynamoDB format """
+    """Encode a dict for the DynamoDB format"""
     encoded_dict: Any = {}
     for k, v in value.items():
         encoded_type, encoded_value = dynamizer.raw_encode(v)
@@ -214,7 +214,7 @@ def build_expression_values(
     expr_values: Optional[ExpressionValuesType],
     kwargs: ExpressionValueType,
 ) -> Optional[EncodedDynamoObject]:
-    """ Build ExpresionAttributeValues from a value or kwargs """
+    """Build ExpresionAttributeValues from a value or kwargs"""
     if expr_values:
         values = expr_values
         return dynamizer.encode_keys(values)
@@ -226,7 +226,7 @@ def build_expression_values(
 
 class Dynamizer(object):
 
-    """ Handles the encoding/decoding of Dynamo values """
+    """Handles the encoding/decoding of Dynamo values"""
 
     def __init__(self):
         self.encoders = {}
@@ -262,7 +262,7 @@ class Dynamizer(object):
         self.encoders[type] = encoder
 
     def raw_encode(self, value: Any) -> EncoderReturn:
-        """ Run the encoder on a value """
+        """Run the encoder on a value"""
         if type(value) in self.encoders:
             encoder = self.encoders[type(value)]
             return encoder(self, value)
@@ -271,13 +271,13 @@ class Dynamizer(object):
         )
 
     def encode_keys(self, keys: DynamoObject) -> EncodedDynamoObject:
-        """ Run the encoder on a dict of values """
+        """Run the encoder on a dict of values"""
         return dict(((k, self.encode(v)) for k, v in keys.items() if not is_null(v)))
 
     def maybe_encode_keys(
         self, keys: Union[DynamoObject, EncodedDynamoObject]
     ) -> EncodedDynamoObject:
-        """ Same as encode_keys but a no-op if already in Dynamo format """
+        """Same as encode_keys but a no-op if already in Dynamo format"""
         ret = {}
         for k, v in keys.items():
             if is_dynamo_value(v):
@@ -287,15 +287,15 @@ class Dynamizer(object):
         return ret
 
     def encode(self, value: Any) -> EncodedDynamoValue:
-        """ Encode a value into the Dynamo dict format """
+        """Encode a value into the Dynamo dict format"""
         return dict([self.raw_encode(value)])  # type: ignore
 
     def decode_keys(self, keys: dict) -> DynamoObject:
-        """ Run the decoder on a dict of values """
+        """Run the decoder on a dict of values"""
         return {k: self.decode(v) for k, v in keys.items()}
 
     def decode(self, dynamo_value: dict) -> Optional[Any]:
-        """ Decode a dynamo value into a python value """
+        """Decode a dynamo value into a python value"""
         # mypy can't do the type refinement needed here :(
         type, value = next(iter(dynamo_value.items()))
         if type == STRING:
