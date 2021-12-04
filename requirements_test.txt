@@ -5,3 +5,4 @@ mock
 mypy
 nose
 pylint==2.7.1
+types-mock

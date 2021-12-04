@@ -64,7 +64,7 @@ class Count(int):
         scanned_count: int,
         consumed_capacity: Optional["Capacity"] = None,
     ) -> "Count":
-        ret = super(Count, cls).__new__(cls, count)  # type: ignore
+        ret = super(Count, cls).__new__(cls, count)
         ret.count = count
         ret.scanned_count = scanned_count
         ret.consumed_capacity = consumed_capacity
