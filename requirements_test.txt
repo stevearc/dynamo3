@@ -1,7 +1,7 @@
 black
 docutils
-isort>=4.2.5,<5
+isort
 mock
 mypy
 nose
-pylint==2.3.1
+pylint==2.7.1

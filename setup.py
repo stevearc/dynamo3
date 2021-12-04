@@ -1,6 +1,5 @@
 """ Setup file """
 import os
-import sys
 
 from setuptools import find_packages, setup
 
@@ -34,6 +33,7 @@ if __name__ == "__main__":
             "Programming Language :: Python :: 3.6",
             "Programming Language :: Python :: 3.7",
             "Programming Language :: Python :: 3.8",
+            "Programming Language :: Python :: 3.9",
         ],
         author="Steven Arcangeli",
         author_email="stevearc@stevearc.com",
