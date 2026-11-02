@@ -4,5 +4,5 @@ isort
 mock
 mypy
 nose
-pylint==2.7.1
+pylint==4.0.9
 types-mock
